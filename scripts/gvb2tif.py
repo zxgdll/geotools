@@ -106,6 +106,9 @@ with open(src, 'rb') as f:
 	rows = int((header['N_LAT']-header['S_LAT']) / header['LAT_INC'] + 1)
 	cols = int((header['W_LON']-header['E_LON']) / header['LON_INC'] + 1)
 
+	print header
+	print rows, cols
+	#sys.exit(1)
 	# Initialize velocity and accuracy arrays.
 	rowX = np.zeros((rows, cols), dtype=np.float32)
 	rowY = np.zeros((rows, cols), dtype=np.float32)
@@ -115,21 +118,24 @@ with open(src, 'rb') as f:
 	rowZA = np.zeros((rows, cols), dtype=np.float32)
 
 	# Read the rcords into the band arrays.
-	for i in range(rows * cols):
-		cel = read_rec(f)
-		rowY.itemset(i, cel[0])
-		rowX.itemset(i, cel[1])
-		rowZ.itemset(i, cel[2])
-		rowYA.itemset(i, cel[3])
-		rowXA.itemset(i, cel[4])
-		rowZA.itemset(i, cel[5])
+	#for i in range(rows * cols):
+	for r in range(rows - 1, -1, -1):
+		for c in range(cols - 1, -1, -1):
+			i = r * cols + c
+			cel = read_rec(f)
+			rowY.itemset(i, cel[0])
+			rowX.itemset(i, cel[1])
+			rowZ.itemset(i, cel[2])
+			rowYA.itemset(i, cel[3])
+			rowXA.itemset(i, cel[4])
+			rowZA.itemset(i, cel[5])
 
 	# Create the TIF.
 	drv = gdal.GetDriverByName('GTiff')
 	ds = drv.Create(dst, cols, rows, 6, gdal.GDT_Float32)
 
 	# Set Transform. The coordinates are given in arcsec.
-	trans = [-header['W_LON'] / 3600.0, 0.25, 0, header['N_LAT'] / 3600.0, 0, -0.25]
+	trans = [-header['W_LON'] / 3600.0, header['LON_INC'] / 3600.0, 0, header['N_LAT'] / 3600.0, 0, -header['LAT_INC'] / 3600.0]
 	ds.SetGeoTransform(trans)
 
 	# Set SRS
