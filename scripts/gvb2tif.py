@@ -106,10 +106,6 @@ with open(src, 'rb') as f:
 	rows = int((header['N_LAT']-header['S_LAT']) / header['LAT_INC'] + 1)
 	cols = int((header['W_LON']-header['E_LON']) / header['LON_INC'] + 1)
 
-	print header
-	print rows, cols
-	#sys.exit(1)
-	# Initialize velocity and accuracy arrays.
 	rowX = np.zeros((rows, cols), dtype=np.float32)
 	rowY = np.zeros((rows, cols), dtype=np.float32)
 	rowZ = np.zeros((rows, cols), dtype=np.float32)
@@ -118,7 +114,6 @@ with open(src, 'rb') as f:
 	rowZA = np.zeros((rows, cols), dtype=np.float32)
 
 	# Read the rcords into the band arrays.
-	#for i in range(rows * cols):
 	for r in range(rows - 1, -1, -1):
 		for c in range(cols - 1, -1, -1):
 			i = r * cols + c
