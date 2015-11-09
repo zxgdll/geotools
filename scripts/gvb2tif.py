@@ -106,24 +106,9 @@ with open(src, 'rb') as f:
 	rows = int((header['N_LAT']-header['S_LAT']) / header['LAT_INC'] + 1)
 	cols = int((header['W_LON']-header['E_LON']) / header['LON_INC'] + 1)
 
-	rowX = np.zeros((rows, cols), dtype=np.float32)
-	rowY = np.zeros((rows, cols), dtype=np.float32)
-	rowZ = np.zeros((rows, cols), dtype=np.float32)
-	rowXA = np.zeros((rows, cols), dtype=np.float32)
-	rowYA = np.zeros((rows, cols), dtype=np.float32)
-	rowZA = np.zeros((rows, cols), dtype=np.float32)
-
-	# Read the rcords into the band arrays.
-	for r in range(rows - 1, -1, -1):
-		for c in range(cols - 1, -1, -1):
-			i = r * cols + c
-			cel = read_rec(f)
-			rowY.itemset(i, cel[0])
-			rowX.itemset(i, cel[1])
-			rowZ.itemset(i, cel[2])
-			rowYA.itemset(i, cel[3])
-			rowXA.itemset(i, cel[4])
-			rowZA.itemset(i, cel[5])
+	# Load the data -- it's unformatted fortran, so this is eash. But it
+	# needs to be reshaped and mirrored
+	data = np.fliplr(np.flipud(np.reshape(np.fromfile(f, dtype = np.float32, count = rows * cols * 6), (rows, cols, 6))))
 
 	# Create the TIF.
 	drv = gdal.GetDriverByName('GTiff')
@@ -136,15 +121,16 @@ with open(src, 'rb') as f:
 	# Set SRS
 	srs = osr.SpatialReference()
 	srs.ImportFromEPSG(4326)
+	ds.SetProjection(srs.ExportToWkt())
 
-	# Write bands.
-	ds.SetProjection( srs.ExportToWkt() )
-	ds.GetRasterBand(1).WriteArray(rowX)
-	ds.GetRasterBand(2).WriteArray(rowY)
-	ds.GetRasterBand(3).WriteArray(rowZ)
-	ds.GetRasterBand(4).WriteArray(rowXA)
-	ds.GetRasterBand(5).WriteArray(rowYA)
-	ds.GetRasterBand(6).WriteArray(rowZA)
+	# Write value bands.
+	ds.GetRasterBand(1).WriteArray(data[...,1]) # Note order of x and y bands. Simple prejudice in play.
+	ds.GetRasterBand(2).WriteArray(data[...,0])
+	ds.GetRasterBand(3).WriteArray(data[...,2])
+	# Write accuracy bands.
+	ds.GetRasterBand(4).WriteArray(data[...,4])
+	ds.GetRasterBand(5).WriteArray(data[...,3])
+	ds.GetRasterBand(6).WriteArray(data[...,5])
 
 print 'Done'
 
