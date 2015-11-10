@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 '''
@@ -178,6 +178,7 @@ def get_shifts(x, y, efrom, eto):
 	efrom 	-- The start epoch.
 	eto 	-- The end epoch.
 	'''
+	global shift_funcs
 	if not shift_funcs:
 		# Load the raster and create interpolation functions
 		# if they do not already exist.
