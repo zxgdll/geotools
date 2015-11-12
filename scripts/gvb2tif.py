@@ -81,12 +81,6 @@ def read_dhead(f, h):
 	value = struct.unpack('d' * 2, f.read(16))
 	h[name] = value[0]
 
-def read_rec(f):
-	'''
-	Read a coordinate record. Returns a six-element array containg floats.
-	'''
-	return struct.unpack('f' * 6, f.read(24))
-
 with open(src, 'rb') as f:
 
 	# Read the headers. Not really doing anything with the result.
