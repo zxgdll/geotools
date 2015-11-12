@@ -49,121 +49,32 @@ import numpy as np
 from scipy.interpolate import interp2d
 from pprint import pprint
 
-# tx, ty, tz, scale, rx, ry, rz
-# m, m, m, ppm, sec, sec, sec
-# rates are /yr.
-helmert_params = {}
+try:
+	DS
+except:
+	DS = {}
 
 def load_helmert():
 	'''
 	Loads the Helmert parameters from the local file.
 	'''
-	def remap_params():
-		'''
-		This method modifies the helmert param dict to provide reverse parameters
-		between frames that aren't represented.
-		'''
-		def reverse(item):
-			item = list(item)
-			item[0] = tuple([-x for x in item[0]])
-			item[1] = tuple([-x for x in item[1]])
-			return tuple(item)
-
-		for k0, v0 in list(helmert_params.iteritems()):
-			# from, to
-			for k1, v1 in v0.iteritems():
-				# to, epoch
-				d0 = helmert_params.get(k1, None)
-				if not d0:
-					d0 = helmert_params[k1] = {}
-				d1 = helmert_params[k1].get(k0, None)
-				if not d1:
-					d1 = helmert_params[k1][k0] = {}
-				for k2, v2 in v1.iteritems():
-					#print k2, v2
-					# epoch, params					
-					if not d1.get(k2, None):
-						d1[k2] = reverse(v2)
-
-	with open('itrf.csv', 'rU') as f:
-		f.readline()
-		line = f.readline()
-		while line:
-			try:
-				cols = map(str.strip, line.split(','))
-				frm, to = map(str.lower, cols[:2])
-				epoch, tx, ty, tz, d, rx, ry, rz, dtx, dty, dtz, dd, drx, dry, drz = map(float, cols[2:])
-				if not helmert_params.get(frm, None):
-					helmert_params[frm] = {}
-				if not helmert_params[frm].get(to, None):
-					helmert_params[frm][to] = {}
-				helmert_params[frm][to][epoch] = ((tx, ty, tz, d, rx, ry, rz), (dtx, dty, dtz, dd, drx, dry, drz))
-			except Exception, e:
-				print 'error', e
-				print line
+	helmert_params = DS.get('helmert_params')
+	if not helmert_params:
+		helmert_params = {}
+		with open('itrf.csv', 'rU') as f:
+			f.readline()
 			line = f.readline()
-
-	remap_params()
-
-def get_params(ffrom, efrom):
-	'''
-	Returns the transformation parameters for transformations between reference 
-	frames at specific epochs.
-
-	ffrom 	-- The starting reference frame (e.g. 'ITRF92')
-	efrom 	-- The starting epoch in decimal years (e.g. 1995.2)
-	'''
-	# Search for the transformation path
-	fto = 'itrf96'
-	t = dict(helmert_params)
-	n = t[ffrom]
-	n['_parent'] = None
-	n['_name'] = ffrom
-	path = [n]
-	found = False
-	visited = set([ffrom])
-	while path and not found:
-		n = path.pop()
-		for k, v in [x for x in t[n['_name']].iteritems() if not x[0].startswith('_') and not x[0] in visited]:
-			visited.add(k)
-			v = t[k]
-			v['_parent'] = n
-			v['_name'] = k
-			path.append(v)
-			if k == fto:
-				found = True
-				break
-
-	n = helmert_params[k]
-	path = []
-	while n:
-		path.append(n['_name'])
-		n = n['_parent']
-	path = path[::-1]
-
-	epoch = efrom
-	result = [0.] * 7
-	for i in range(len(path)-1):
-		a = path[i]
-		b = path[i+1]
-		t = helmert_params[a][b].keys()[0]
-		params, rates = helmert_params[a][b][t]
-		#print a, b, t, epoch, params, rates
-		for j in range(7):
-			result[j] = result[j] + params[j] + rates[j] * (epoch - t)
-		epoch = t
-
-	a = 'itrf96'
-	b = 'nad83csrs'
-	t = helmert_params[a][b].keys()[0]
-	params, rates = helmert_params[a][b][t]
-	#print a, b, t, params, rates
-	for j in range(7):
-		result[j] = result[j] + params[j]
-
-	return tuple(result)
-
-shift_funcs = None
+			while line:
+				try:
+					cols = map(str.strip, line.split(','))
+					frm, to = map(str.lower, cols[:2])
+					epoch, tx, ty, tz, rx, ry, rz, ds, dtx, dty, dtz, drx, dry, drz, dds = map(float, cols[2:])
+					helmert_params[frm] = (epoch, (tx, ty, tz, rx, ry, rz, ds), (dtx, dty, dtz, drx, dry, drz, dds))
+				except Exception, e:
+					pass
+				line = f.readline()
+		DS['params'] = helmert_params
+	return helmert_params
 
 def get_shifts(x, y, efrom, eto):
 	'''
@@ -178,7 +89,7 @@ def get_shifts(x, y, efrom, eto):
 	efrom 	-- The start epoch.
 	eto 	-- The end epoch.
 	'''
-	global shift_funcs
+	shift_funcs = DS.get('shift_funcs', None)
 	if not shift_funcs:
 		# Load the raster and create interpolation functions
 		# if they do not already exist.
@@ -193,18 +104,54 @@ def get_shifts(x, y, efrom, eto):
 		fy = interp2d(xx, yy, zz1, kind = 'cubic', bounds_error = True)
 		zz2 = ds.GetRasterBand(3).ReadAsArray()
 		fz = interp2d(xx, yy, zz2, kind = 'cubic', bounds_error = True)
-		shift_funcs = (fx, fy, fz)
-	
+		shift_funcs = DS['shift_funcs'] = (fx, fy, fz)
 	fx, fy, fz = shift_funcs
 	dt = (eto - efrom)
 	c = int((x - trans[0]) / trans[1])
 	r = int((y - trans[3]) / trans[5])
-	
+	print 'shifts %0.9f %0.9f %0.9f' % (fx(x, y), fy(x, y), fz(x, y))
 	return (fx(x, y) / 1000. * dt, fy(x, y) / 1000. * dt, fz(x, y) / 1000. * dt)
 
-def to_nad83csrs(x, y, z, sfrom, ffrom, efrom, eto):
+def transform(x, y, z, params, epoch):
 	'''
-	Transforms a coordinate from one reference frame to another using the proj library.
+	Transform the coordinate using the procedure listed in Craymer (2006).
+
+	x 		-- 	The x coordinate.
+	y 		-- 	The y coordinate.
+	z 		-- 	The z coordinate.
+	params 	-- 	The transformation parameters -- a tuple containing two tuples. One 
+				containing the shift parameters (tx, ty, tz, ds) and one containing 
+				the rates (dtx, dty, dtz, dds).
+	epoch 	-- 	The epoch of the original coordinates.
+	'''
+	dt = epoch - params[0]
+	tx, ty, tz, rx, ry, rz, d = params[1]
+	dtx, dty, dtz, drx, dry, drz, dd = params[2]
+	d = d / 1000000000. # Listed as ppb.
+	dd = dd / 1000000000.
+	a = np.matrix([[tx + dtx * dt], [ty + dty * dt], [tz + dtz * dt]])
+	#print 'params %0.9f %0.9f %0.9f %0.9f %0.9f %0.9f %0.9f' % (tx + dtx * dt, ty + dty * dt, tz + dtz * dt, d + dd * dt, rx + drx * dt, ry + dry * dt, rz + drz * dt)
+	b = np.matrix([
+		[1 + d + dd * dt, 		-rad(rz + drz * dt), 	rad(ry + dry * dt)],
+		[rad(rz + drz * dt), 	1 + d + dd * dt, 		-rad(rx + drx * dt)],
+		[-rad(ry + dry * dt), 	rad(rx + drx * dt),		1 + d + dd * dt]
+	])
+	c = np.matrix([[x], [y], [z]])
+	d = np.add(a, np.dot(b, c))
+	return (d[0,0], d[1,0], d[2,0])
+
+def rad(arcsec):
+	'''
+	Convert the argument from arcseconds to radians.
+	'''
+	return arcsec * 4.84813681 / 1000000000.
+
+def deg(arcsec):
+	return arcsec * 0.0166667
+
+def to_nad83csrs(x, y, z, ffrom, efrom, eto):
+	'''
+	Transforms a coordinate from one available reference frame to NAD83(CSRS).
 	x 		-- The x coordinate.
 	y 		-- The y coordinate.
 	z 		-- The z coordinate.
@@ -213,29 +160,36 @@ def to_nad83csrs(x, y, z, sfrom, ffrom, efrom, eto):
 	efrom 	-- The starting epoch in decimal years (e.g. 1995.2)
 	eto 	-- The ending epoch in decimal years (e.g. 2013.8)
 	'''	
-	# Load the transform table
-	load_helmert()
+	# Load the transform table and get the transformation params for the ref frames/epochs.
+	helmert_params = load_helmert()
+	params = helmert_params[ffrom]
 
-	# Get the transformation params for the ref frames/epochs.
-	params = get_params(ffrom, efrom)
-	# Reproject from the source coords to the target ref frame lat/lon.
-	p1 = pyproj.Proj('+init=EPSG:%u +towgs84=%f,%f,%f,%f,%f,%f,%f' % tuple([sfrom] + list(params)))
-	p2 = pyproj.Proj('+init=EPSG:4326')
+	# Reproject from the source coords to 3D Cartesian.
+	p1 = pyproj.Proj('+init=EPSG:32612')
+	p2 = pyproj.Proj('+init=EPSG:4978')
 	x0, y0, z0 = pyproj.transform(p1, p2, x, y, z)
+	#print '3D %0.9f %0.9f %0.9f' % (x0, y0, z0)
 
+	# Transform using Helmert params.	
+	x1, y1, z1 = transform(x0, y0, z0, params, efrom)
+	#print 'trans %0.9f %0.9f %0.9f' % (x1, y1, z1,)
 	# Only use the grid shift if the epoch changes.
 	if efrom != eto:
-		dx, dy, dz = get_shifts(x0, y0, efrom, eto)
+		p4 = pyproj.Proj('+init=EPSG:4326')
+		x3, y3, z3 = pyproj.transform(p2, p4, x1, y1, z1)
+		dx, dy, dz = get_shifts(x3, y3, 1997., eto)
 	else:
 		dx, dy, dz = (0., 0., 0.)
+	#print 'grid %0.9f %0.9f %0.9f' % (dx, dy, dz,)
 
 	# Reproject to the dest coordinates and add the shifts.
-	p3 = pyproj.Proj('+init=EPSG:2956')
-	x1, y1, z1 = pyproj.transform(p1, p3, x, y, z)
+	p3 = pyproj.Proj('+init=EPSG:32612')
+	x2, y2, z2 = pyproj.transform(p2, p3, x1, y1, z1)
+	#print 'final %0.9f %0.9f %0.9f' % (x2, y2, z2,)
 
 	# Return the shifted coordinate.	
-	return (x1 + dx, y1 + dy, z1 + dz)
+	return (x2 + dx, y2 + dy, z2 + dz)
 
 print (470000., 6520000., 200.)
-print to_nad83csrs(470000., 6520000., 200., 26912, 'itrf90', 1995., 2015.)
+print to_nad83csrs(470000., 6520000., 200., 'itrf90', 1990., 2015.)
 
