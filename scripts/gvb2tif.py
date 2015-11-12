@@ -83,7 +83,7 @@ def read_dhead(f, h):
 
 def read_rec(f):
 	'''
-	Read a coordinate record. Returns a six-element array containg doubles.
+	Read a coordinate record. Returns a six-element array containg floats.
 	'''
 	return struct.unpack('f' * 6, f.read(24))
 
