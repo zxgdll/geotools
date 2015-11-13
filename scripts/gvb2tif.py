@@ -118,12 +118,12 @@ with open(src, 'rb') as f:
 	ds.SetProjection(srs.ExportToWkt())
 
 	# Write value bands.
-	ds.GetRasterBand(1).WriteArray(data[...,1]) # Note order of x and y bands. Simple prejudice in play.
-	ds.GetRasterBand(2).WriteArray(data[...,0])
+	ds.GetRasterBand(1).WriteArray(data[...,0])
+	ds.GetRasterBand(2).WriteArray(data[...,1])
 	ds.GetRasterBand(3).WriteArray(data[...,2])
 	# Write accuracy bands.
-	ds.GetRasterBand(4).WriteArray(data[...,4])
-	ds.GetRasterBand(5).WriteArray(data[...,3])
+	ds.GetRasterBand(4).WriteArray(data[...,3])
+	ds.GetRasterBand(5).WriteArray(data[...,4])
 	ds.GetRasterBand(6).WriteArray(data[...,5])
 
 print 'Done'
