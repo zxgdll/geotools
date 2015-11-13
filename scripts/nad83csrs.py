@@ -47,41 +47,72 @@ import pyproj
 import sys
 import numpy as np
 from scipy.interpolate import interp2d
-from pprint import pprint
+from osgeo import gdal
 
-try:
-	DS
-except:
-	DS = {}
+'''
+This is the default path to the shift file. It can be overridden.
+'''
+SHIFT_FILE = 'NAD83v6VG.tif'
+
+'''
+This is the default path to the ITRF transform parameter file.
+'''
+ITRF_FILE = 'itrf.csv'
+
+'''
+This is the local datastore. In a database script, this will be replaced with 
+a reference to DS.
+'''
+DATA = {}
+
+def get_helmert():
+	'''
+	Returns the Helmert parameters dict from the data store.
+	'''
+	return DATA['helmert_params']
+
 
 def load_helmert():
 	'''
-	Loads the Helmert parameters from the local file.
+	Loads the Helmert parameters from the local file into the data store.
 	'''
-	helmert_params = DS.get('helmert_params')
-	if not helmert_params:
-		helmert_params = {}
-		with open('itrf.csv', 'rU') as f:
-			f.readline()
+	helmert_params = {}
+	with open(ITRF_FILE, 'rU') as f:
+		f.readline()
+		line = f.readline()
+		while line:
+			try:
+				cols = map(str.strip, line.split(','))
+				frm, to = map(str.lower, cols[:2])
+				epoch, tx, ty, tz, rx, ry, rz, ds, dtx, dty, dtz, drx, dry, drz, dds = map(float, cols[2:])
+				helmert_params[frm] = (epoch, (tx, ty, tz, rx, ry, rz, ds), (dtx, dty, dtz, drx, dry, drz, dds))
+			except Exception, e:
+				pass
 			line = f.readline()
-			while line:
-				try:
-					cols = map(str.strip, line.split(','))
-					frm, to = map(str.lower, cols[:2])
-					epoch, tx, ty, tz, rx, ry, rz, ds, dtx, dty, dtz, drx, dry, drz, dds = map(float, cols[2:])
-					helmert_params[frm] = (epoch, (tx, ty, tz, rx, ry, rz, ds), (dtx, dty, dtz, drx, dry, drz, dds))
-				except Exception, e:
-					pass
-				line = f.readline()
-		DS['params'] = helmert_params
-	return helmert_params
+	DATA['helmert_params'] = helmert_params
+
+def load_shifts():
+	'''
+	Loads the shifts from the 3d shift grid, and initializes a set
+	of interpolation functions for each dimension. These are stored
+	in the data store.
+	'''	
+	ds = gdal.Open(SHIFT_FILE)
+	trans = ds.GetGeoTransform()
+	xx = np.arange(trans[0], trans[0] + ds.RasterXSize * trans[1], trans[1])
+	yy = np.arange(trans[3], trans[3] + ds.RasterYSize * trans[5], trans[5])
+	zz0 = ds.GetRasterBand(1).ReadAsArray()
+	fx = interp2d(xx, yy, zz0, kind = 'cubic', bounds_error = True)
+	zz1 = ds.GetRasterBand(2).ReadAsArray()
+	fy = interp2d(xx, yy, zz1, kind = 'cubic', bounds_error = True)
+	zz2 = ds.GetRasterBand(3).ReadAsArray()
+	fz = interp2d(xx, yy, zz2, kind = 'cubic', bounds_error = True)
+	DATA['shift_funcs'] = (fx, fy, fz)
+	DATA['shift_trans'] = trans
 
 def get_shifts(x, y, efrom, eto):
 	'''
-	Loads the shifts from the 3d shift grid, and initializes a set
-	of interpolation functions for each dimension.
-
-	Returns the delta in each dimension (in m) for the given range of 
+	Returns the delta in each dimension (in mm) for the given range of 
 	epochs.
 
 	x 		-- The x coordinate.
@@ -89,28 +120,26 @@ def get_shifts(x, y, efrom, eto):
 	efrom 	-- The start epoch.
 	eto 	-- The end epoch.
 	'''
-	shift_funcs = DS.get('shift_funcs', None)
-	if not shift_funcs:
-		# Load the raster and create interpolation functions
-		# if they do not already exist.
-		from osgeo import gdal
-		ds = gdal.Open('NAD83v6VG.tif')
-		trans = ds.GetGeoTransform()
-		xx = np.arange(trans[0], trans[0] + ds.RasterXSize * trans[1], trans[1])
-		yy = np.arange(trans[3], trans[3] + ds.RasterYSize * trans[5], trans[5])
-		zz0 = ds.GetRasterBand(1).ReadAsArray()
-		fx = interp2d(xx, yy, zz0, kind = 'cubic', bounds_error = True)
-		zz1 = ds.GetRasterBand(2).ReadAsArray()
-		fy = interp2d(xx, yy, zz1, kind = 'cubic', bounds_error = True)
-		zz2 = ds.GetRasterBand(3).ReadAsArray()
-		fz = interp2d(xx, yy, zz2, kind = 'cubic', bounds_error = True)
-		shift_funcs = DS['shift_funcs'] = (fx, fy, fz)
-	fx, fy, fz = shift_funcs
+	fx, fy, fz = DATA['shift_funcs']
+	trans = DATA['shift_trans']
 	dt = (eto - efrom)
 	c = int((x - trans[0]) / trans[1])
 	r = int((y - trans[3]) / trans[5])
-	print 'shifts %0.9f %0.9f %0.9f' % (fx(x, y), fy(x, y), fz(x, y))
+	#print 'shifts %f %0.9f %0.9f %0.9f' % (dt, fx(x, y), fy(x, y), fz(x, y))
 	return (fx(x, y) / 1000. * dt, fy(x, y) / 1000. * dt, fz(x, y) / 1000. * dt)
+
+def init():
+	'''
+	Initializes the data required for transformations.
+	If cleanup is not called after, this creates a memory leak.
+	'''
+	load_helmert()
+	load_shifts()
+
+def cleanup():
+	DATA['helmert_params'] = None
+	DATA['shift_funcs'] = None
+	DATA['shift_trans'] = None
 
 def transform(x, y, z, params, epoch):
 	'''
@@ -160,36 +189,38 @@ def to_nad83csrs(x, y, z, ffrom, efrom, eto):
 	efrom 	-- The starting epoch in decimal years (e.g. 1995.2)
 	eto 	-- The ending epoch in decimal years (e.g. 2013.8)
 	'''	
-	# Load the transform table and get the transformation params for the ref frames/epochs.
-	helmert_params = load_helmert()
-	params = helmert_params[ffrom]
+	# Get the transformation params for the ref frames/epochs.
+	params = get_helmert()[ffrom]
 
 	# Reproject from the source coords to 3D Cartesian.
 	p1 = pyproj.Proj('+init=EPSG:32612')
 	p2 = pyproj.Proj('+init=EPSG:4978')
 	x0, y0, z0 = pyproj.transform(p1, p2, x, y, z)
-	#print '3D %0.9f %0.9f %0.9f' % (x0, y0, z0)
+	print '3D %0.9f %0.9f %0.9f' % (x0, y0, z0)
 
 	# Transform using Helmert params.	
 	x1, y1, z1 = transform(x0, y0, z0, params, efrom)
-	#print 'trans %0.9f %0.9f %0.9f' % (x1, y1, z1,)
+	print 'trans %0.9f %0.9f %0.9f' % (x1, y1, z1,)
+	
 	# Only use the grid shift if the epoch changes.
 	if efrom != eto:
 		p4 = pyproj.Proj('+init=EPSG:4326')
 		x3, y3, z3 = pyproj.transform(p2, p4, x1, y1, z1)
-		dx, dy, dz = get_shifts(x3, y3, 1997., eto)
+		dx, dy, dz = get_shifts(x3, y3, efrom, eto)
 	else:
 		dx, dy, dz = (0., 0., 0.)
-	#print 'grid %0.9f %0.9f %0.9f' % (dx, dy, dz,)
+	print 'grid %0.9f %0.9f %0.9f' % (dx, dy, dz,)
 
 	# Reproject to the dest coordinates and add the shifts.
 	p3 = pyproj.Proj('+init=EPSG:32612')
 	x2, y2, z2 = pyproj.transform(p2, p3, x1, y1, z1)
-	#print 'final %0.9f %0.9f %0.9f' % (x2, y2, z2,)
+	print 'final %0.9f %0.9f %0.9f' % (x2, y2, z2,)
 
 	# Return the shifted coordinate.	
 	return (x2 + dx, y2 + dy, z2 + dz)
 
-print (470000., 6520000., 200.)
-print to_nad83csrs(470000., 6520000., 200., 'itrf90', 1990., 2015.)
-
+if __name__ == '__main__':
+	init()
+	print (470000., 6520000., 200.)
+	print to_nad83csrs(470000., 6520000., 200., 'itrf90', 1990., 2015.)
+	cleanup()
