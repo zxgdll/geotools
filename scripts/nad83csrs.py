@@ -43,16 +43,18 @@ of that parameter.
 
 '''
 
-import pyproj
 import sys
 import numpy as np
+from pyproj import Proj, transform as project
 from scipy.interpolate import interp2d
+from scipy.ndimage import zoom
 from osgeo import gdal
 
 '''
 This is the default path to the shift file. It can be overridden.
 '''
-SHIFT_FILE = 'NAD83v6VG.tif'
+SHIFT_FILE = '/home/rob/Documents/gvb/NAD83v6VG.tif'
+#SHIFT_FILE = 'NAD83v6VG.tif'
 
 '''
 This is the default path to the ITRF transform parameter file.
@@ -64,6 +66,9 @@ This is the local datastore. In a database script, this will be replaced with
 a reference to DS.
 '''
 DATA = {}
+
+
+ZOOM = 15.
 
 def get_helmert():
 	'''
@@ -99,18 +104,16 @@ def load_shifts():
 	'''	
 	ds = gdal.Open(SHIFT_FILE)
 	trans = ds.GetGeoTransform()
-	xx = np.arange(trans[0], trans[0] + ds.RasterXSize * trans[1], trans[1])
-	yy = np.arange(trans[3], trans[3] + ds.RasterYSize * trans[5], trans[5])
-	zz0 = ds.GetRasterBand(1).ReadAsArray()
-	fx = interp2d(xx, yy, zz0, kind = 'cubic', bounds_error = True)
-	zz1 = ds.GetRasterBand(2).ReadAsArray()
-	fy = interp2d(xx, yy, zz1, kind = 'cubic', bounds_error = True)
-	zz2 = ds.GetRasterBand(3).ReadAsArray()
-	fz = interp2d(xx, yy, zz2, kind = 'cubic', bounds_error = True)
-	DATA['shift_funcs'] = (fx, fy, fz)
+	xs = ds.GetRasterBand(1).ReadAsArray()
+	xs = zoom(xs, ZOOM)
+	ys = ds.GetRasterBand(2).ReadAsArray()
+	ys = zoom(ys, ZOOM)
+	zs = ds.GetRasterBand(3).ReadAsArray()
+	zs = zoom(zs, ZOOM)
+	DATA['shift_grids'] = (xs, ys, zs)
 	DATA['shift_trans'] = trans
 
-def get_shifts(x, y, efrom, eto):
+def shift(x, y, z, efrom, eto):
 	'''
 	Returns the delta in each dimension (in mm) for the given range of 
 	epochs.
@@ -120,13 +123,20 @@ def get_shifts(x, y, efrom, eto):
 	efrom 	-- The start epoch.
 	eto 	-- The end epoch.
 	'''
-	fx, fy, fz = DATA['shift_funcs']
+	sx, sy, sz = DATA['shift_grids']
 	trans = DATA['shift_trans']
 	dt = (eto - efrom)
-	c = int((x - trans[0]) / trans[1])
-	r = int((y - trans[3]) / trans[5])
-	#print 'shifts %f %0.9f %0.9f %0.9f' % (dt, fx(x, y), fy(x, y), fz(x, y))
-	return (fx(x, y) / 1000. * dt, fy(x, y) / 1000. * dt, fz(x, y) / 1000. * dt)
+	dx = [0.] * len(x)
+	dy = [0.] * len(x)
+	dz = [0.] * len(x)
+	for i in range(len(x)):
+		c = int((x[i] - trans[0]) / trans[1] / ZOOM)
+		r = int((y[i] - trans[3]) / trans[5] / ZOOM)
+		dx[i] = sx.item((r, c)) / 1000. * dt
+		dy[i] = sy.item((r, c)) / 1000. * dt
+		dz[i] = sz.item((r, c)) / 1000. * dt
+	print dx[0], dy[0], dz[0]
+	return (dx, dy, dz)
 
 def init():
 	'''
@@ -138,10 +148,10 @@ def init():
 
 def cleanup():
 	DATA['helmert_params'] = None
-	DATA['shift_funcs'] = None
+	DATA['shift_grids'] = None
 	DATA['shift_trans'] = None
 
-def transform(x, y, z, params, epoch):
+def epoch_transform(x, y, z, params, epoch):
 	'''
 	Transform the coordinate using the procedure listed in Craymer (2006).
 
@@ -159,15 +169,20 @@ def transform(x, y, z, params, epoch):
 	d = d / 1000000000. # Listed as ppb.
 	dd = dd / 1000000000.
 	a = np.matrix([[tx + dtx * dt], [ty + dty * dt], [tz + dtz * dt]])
-	#print 'params %0.9f %0.9f %0.9f %0.9f %0.9f %0.9f %0.9f' % (tx + dtx * dt, ty + dty * dt, tz + dtz * dt, d + dd * dt, rx + drx * dt, ry + dry * dt, rz + drz * dt)
 	b = np.matrix([
 		[1 + d + dd * dt, 		-rad(rz + drz * dt), 	rad(ry + dry * dt)],
 		[rad(rz + drz * dt), 	1 + d + dd * dt, 		-rad(rx + drx * dt)],
 		[-rad(ry + dry * dt), 	rad(rx + drx * dt),		1 + d + dd * dt]
 	])
-	c = np.matrix([[x], [y], [z]])
-	d = np.add(a, np.dot(b, c))
-	return (d[0,0], d[1,0], d[2,0])
+	mtx = np.matrix
+	add = np.add
+	dot = np.dot
+	for i in range(len(x)):
+		c = mtx([[x[i]], [y[i]], [z[i]]])
+		d = add(a, dot(b, c))
+		x[i] = d[0,0]
+		y[i] = d[1,0]
+		z[i] = d[2,0]
 
 def rad(arcsec):
 	'''
@@ -178,49 +193,115 @@ def rad(arcsec):
 def deg(arcsec):
 	return arcsec * 0.0166667
 
-def to_nad83csrs(x, y, z, ffrom, efrom, eto):
+def get_utm_srid(zone):
+	return 32600 + int(zone)
+
+def get_csrs_srid(zone, y = None):
+	if not y == None:
+		x = float(zone)
+		y = float(y)
+		zone = int((x + 180.) / 6.) + 1;
+		return get_csrs_srid(zone)
+	else:
+		zone = int(zone)
+		if zone >= 11 and zone <= 13:
+			return 2944 + zone
+		elif zone >= 7 and zone <=10:
+			return 3147 + zone
+		elif zone >= 14 and zone <= 16:
+			return 3144 + zone
+		elif zone >= 17 and zone <= 21:
+			return 2941 + zone
+		else:
+			raise Exception('Invalid zone for NAD83(CSRS): %u.' % (zone,))
+
+def transform(x, y, z, ffrom, efrom, eto, type, zone):
 	'''
 	Transforms a coordinate from one available reference frame to NAD83(CSRS).
-	x 		-- The x coordinate.
-	y 		-- The y coordinate.
-	z 		-- The z coordinate.
+	x 		-- The x coordinate list.
+	y 		-- The y coordinate list.
+	z 		-- The z coordinate list.
 	sfrom 	-- The starting SRID.
 	ffrom 	-- The starting reference frame (e.g. 'ITRF92')
 	efrom 	-- The starting epoch in decimal years (e.g. 1995.2)
 	eto 	-- The ending epoch in decimal years (e.g. 2013.8)
+	type 	-- The origin projection type. 'latlon' for lat/lon, 'nad83' for NAD83.
+	zone	-- The origin UTM zone if type is 'nad83'. Ignored otherwise.
 	'''	
+	useScalar = False
+	if isinstance(x, str):
+		x = float(x)
+		y = float(y)
+		z = float(z)
+		useScalar = True
+	elif not hasattr(x, '__len__'):
+		x = [x]
+		y = [y]
+		z = [z]
+		useScalar = True
 	# Get the transformation params for the ref frames/epochs.
 	params = get_helmert()[ffrom]
 
+	# Get srids for to and from CRSes.
+	if type == 'latlon':
+		fsrid = 4326
+		tsrid = get_csrs_srid(xx[0], yy[0])
+	else:
+	 	fsrid = get_utm_srid(zone)
+		tsrid = get_csrs_srid(zone)
+
 	# Reproject from the source coords to 3D Cartesian.
-	p1 = pyproj.Proj('+init=EPSG:32612')
-	p2 = pyproj.Proj('+init=EPSG:4978')
-	x0, y0, z0 = pyproj.transform(p1, p2, x, y, z)
-	print '3D %0.9f %0.9f %0.9f' % (x0, y0, z0)
+	p1 = Proj('+init=EPSG:%u' % (fsrid,))
+	p2 = Proj('+init=EPSG:4978')
+	p3 = Proj('+init=EPSG:%u' % (tsrid,))
+	p4 = Proj('+init=EPSG:4326')
+
+	print 'a', x[0], y[0], z[0]
+	x0, y0, z0 = project(p1, p2, x, y, z)
 
 	# Transform using Helmert params.	
-	x1, y1, z1 = transform(x0, y0, z0, params, efrom)
-	print 'trans %0.9f %0.9f %0.9f' % (x1, y1, z1,)
-	
+	epoch_transform(x0, y0, z0, params, efrom)
+
 	# Only use the grid shift if the epoch changes.
 	if efrom != eto:
-		p4 = pyproj.Proj('+init=EPSG:4326')
-		x3, y3, z3 = pyproj.transform(p2, p4, x1, y1, z1)
-		dx, dy, dz = get_shifts(x3, y3, efrom, eto)
-	else:
-		dx, dy, dz = (0., 0., 0.)
-	print 'grid %0.9f %0.9f %0.9f' % (dx, dy, dz,)
+		x1, y1, z1 = project(p2, p4, x0, y0, z0)
+		dx, dy, dz = shift(x1, y1, z1, efrom, eto)
 
 	# Reproject to the dest coordinates and add the shifts.
-	p3 = pyproj.Proj('+init=EPSG:32612')
-	x2, y2, z2 = pyproj.transform(p2, p3, x1, y1, z1)
-	print 'final %0.9f %0.9f %0.9f' % (x2, y2, z2,)
+	x0, y0, z0 = project(p2, p3, x0, y0, z0)
 
-	# Return the shifted coordinate.	
-	return (x2 + dx, y2 + dy, z2 + dz)
+	if efrom != eto:
+		for i in range(len(x)):
+			x[i] = x0[i] + dx[i]
+			y[i] = y0[i] + dy[i]
+			z[i] = z0[i] + dz[i]
+	else:
+		for i in range(len(x)):
+			x[i] = x0[i]
+			y[i] = y0[i]
+			z[i] = z0[i]
+
+	print 'b', x[0], y[0], z[0]
+	if useScalar:
+		return x[0], y[0], z[0]
+	else:
+		return x, y, z
 
 if __name__ == '__main__':
-	init()
-	print (470000., 6520000., 200.)
-	print to_nad83csrs(470000., 6520000., 200., 'itrf90', 1990., 2015.)
-	cleanup()
+
+
+	try:
+		x, y, z = map(float, sys.argv[1:4])
+		ffrom = sys.argv[4]
+		efrom, eto = map(float, sys.argv[5:7])
+		type = sys.argv[7]
+		zone = None
+		if type == 'nad83':
+			zone = int(sys.argv[8])
+		init()
+		print transform(x, y, z, ffrom, efrom, eto, type, zone)
+		cleanup()
+	except Exception, e:
+		import traceback
+		traceback.print_exc()
+		print 'Usage: nad83csrs.py <x> <y> <z> <origin ref frame> <origin epoch> <destination epoch> <type (latlon|nad83)> <zone (if nad83)>'
