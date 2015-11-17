@@ -164,23 +164,24 @@ def epoch_transform(x, y, z, params, epoch):
 	dtx, dty, dtz, drx, dry, drz, dd = params[2]
 	d = d / 1000000000. # Listed as ppb.
 	dd = dd / 1000000000.
-	a = np.matrix([[tx + dtx * dt], [ty + dty * dt], [tz + dtz * dt]])
-	b = np.matrix([
-		[1 + d + dd * dt, 		-rad(rz + drz * dt), 	rad(ry + dry * dt)],
-		[rad(rz + drz * dt), 	1 + d + dd * dt, 		-rad(rx + drx * dt)],
-		[-rad(ry + dry * dt), 	rad(rx + drx * dt),		1 + d + dd * dt]
-	])
-	mtx = np.matrix
-	add = np.add
-	dot = np.dot
-	def _et(item):
-		_x, _y, _z, i = item
-		c = mtx([[_x], [_y], [_z]])
-		d = add(a, dot(b, c))
-		x[i] = d[0,0]
-		y[i] = d[1,0]
-		z[i] = d[2,0]
-	map(_et, zip(x, y, z, range(len(x))))
+	a0 = tx + dtx * dt
+	a1 = ty + dty * dt
+	a2 = tz + dtz * dt
+	b00 = 1 + d + dd * dt
+	b01 = -rad(rz + drz * dt)
+	b02 = rad(ry + dry * dt)
+	b10 = rad(rz + drz * dt)
+	b11 = 1 + d + dd * dt
+	b12 = -rad(rx + drx * dt)
+	b20 = -rad(ry + dry * dt)
+	b21 = rad(rx + drx * dt)
+	b22 = 1 + d + dd * dt
+	def _trans(i):
+		x[i] = x[i] + a0 + b00 * tx + b01 * ty + b02 * tz
+		y[i] = y[i] + a1 + b10 * tx + b11 * ty + b12 * tz
+		z[i] = z[i] + a2 + b20 * tx + b21 * ty + b22 * tz
+	map(_trans, range(len(x)))
+
 
 def rad(arcsec):
 	'''
