@@ -173,13 +173,14 @@ def epoch_transform(x, y, z, params, epoch):
 	mtx = np.matrix
 	add = np.add
 	dot = np.dot
-	for i in range(len(x)):
-		c = mtx([[x[i]], [y[i]], [z[i]]])
+	def _et(item):
+		_x, _y, _z, i = item
+		c = mtx([[_x], [_y], [_z]])
 		d = add(a, dot(b, c))
 		x[i] = d[0,0]
 		y[i] = d[1,0]
 		z[i] = d[2,0]
-
+	map(_et, zip(x, y, z, range(len(x))))
 
 def rad(arcsec):
 	'''
@@ -275,7 +276,7 @@ def transform(x, y, z, ffrom, efrom, eto, type, zone):
 	# Only use the grid shift if the epoch changes.
 	if efrom != eto:
 		x1, y1, z1 = project(p2, p4, x0, y0, z0)
-		dx, dy, dz = shift(x1, y1, z1, efrom, eto)
+		dx, dy, dz = shift(x1, y1, efrom, eto)
 
 	# Reproject to the dest coordinates and add the shifts.
 	x0, y0, z0 = project(p2, p3, x0, y0, z0)
