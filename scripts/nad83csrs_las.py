@@ -36,7 +36,7 @@ def transform_las(srcfile, dstdir, ffrom, efrom, eto, type, zone):
 	if os.path.isfile(srcfile):
 		files.append(srcfile)
 	elif os.path.isdir(srcfile):
-		for f in [x for x in os.listdir(srcfile) if x.lower().endswith('.las')]:
+		for f in [x for x in os.listdir(srcfile) if x.lower().endswith('.las') and not os.path.exists(os.path.join(dstdir, x))]:
 			files.append(os.path.join(srcfile, f))
 	
 	if not len(files):
@@ -48,9 +48,10 @@ def transform_las(srcfile, dstdir, ffrom, efrom, eto, type, zone):
 		x = src.x
 		y = src.y
 		z = src.z
-		x, y, z = nad83csrs.transform(x, y, z, ffrom, efrom, eto, type, zone)
+		nad83csrs.transform(x, y, z, ffrom, efrom, eto, type, zone)
 		dst = laspy.file.File(os.path.join(dstdir, os.path.basename(f)), 
 			header = src.header, vlrs = src.header.vlrs, mode = 'w')
+		dst.points = src.points
 		dst.x = x
 		dst.y = y
 		dst.z = z
