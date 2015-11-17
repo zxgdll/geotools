@@ -118,14 +118,13 @@ def shift(x, y, efrom, eto):
 	dx = [0.] * len(x)
 	dy = [0.] * len(x)
 	dz = [0.] * len(x)
-	def _x(pt):
-		x, y, i = pt
+	def _x(x, y, i):
 		x = (x - trans[0]) / trans[1]
 		y = (y - trans[3]) / trans[5]
 		dx[i] = sx(x, y) / 1000. * dt
 		dy[i] = sy(x, y) / 1000. * dt
 		dz[i] = sz(x, y) / 1000. * dt
-	map(_x, zip(x, y, range(len(x))))
+	map(_x, x, y, range(len(x)))
 	return (dx, dy, dz)
 
 
@@ -240,9 +239,9 @@ def transform(x, y, z, ffrom, efrom, eto, type, zone):
 	# If scalars are given, wrap them.
 	useScalar = False
 	if isinstance(x, str):
-		x = float(x)
-		y = float(y)
-		z = float(z)
+		x = [float(x)]
+		y = [float(y)]
+		z = [float(z)]
 		useScalar = True
 	elif not hasattr(x, '__len__'):
 		x = [x]
