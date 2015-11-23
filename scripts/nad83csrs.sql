@@ -8,20 +8,17 @@
 -- ffrom	The origin reference frame. This will be something like 'ITRF90'.
 -- efrom	The origin epoch. Epochs are expressed as decimal years.
 -- eto		The destination epoch.
-CREATE OR REPLACE FUNCTION ToNAD83CSRS(geom bytea, ffrom text, efrom double precision, eto double precision)
+CREATE OR REPLACE FUNCTION ToNAD83CSRS(geom bytea, ffrom text, efrom double precision, eto double precision, type text, zone integer)
 RETURNS bytea
 AS $$
 
-from nad83csrs import to_nad83csrs
-from shapely import Point
+from nad83csrs import transform
+from shapely.geometry import Point
 from shapely.wkb import loads, dumps
 
 pt = loads(geom)
-x, y, z = to_nad83csrs(pt.x, pt.y, pt.z, ffrom, efrom, eto)
-pt.x = x
-pt.y = y
-pt.z = z
-return dumps(pt)
+x, y, z = transform(pt.x, pt.y, pt.z, ffrom, efrom, eto, type, zone)
+return dumps(Point(x, y, z))
 
 $$ LANGUAGE 'plpythonu';
 
@@ -35,13 +32,13 @@ SELECT ToNAD83CSRS_Init('/Users/robskelly/Documents/geotools/scripts',
 	'/Users/robskelly/Documents/geotools/scripts/NAD83v6VG.tif', 
 	'/Users/robskelly/Documents/geotools/scripts/itrf.csv')
 
-AS $$ LANGUAGE 'sql';
+$$ LANGUAGE 'sql';
 
 
 -- Initializes the NAD83(CSRS) transformation package, which requires loading some 
 -- external data and initializing some paths. If the _Cleanup function is not
 -- called subsequently, a memory leak will occur!
-CREATE OR REPLACE FUNCTION ToNAD83CSRS_Init(script_path varchar, shift_file varchar, itrf_file varchar)
+CREATE OR REPLACE FUNCTION ToNAD83CSRS_Init(script_path text, shift_file text, itrf_file text)
 RETURNS VOID
 AS $$
 
