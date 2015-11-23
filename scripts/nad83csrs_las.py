@@ -42,8 +42,9 @@ def transform_las(srcfile, dstdir, ffrom, efrom, eto, type, zone):
 	if not len(files):
 		raise Exception('No files found in ' + str(srcfile))
 
+	i = 1
 	for f in files:
-		print 'Processing ', f
+		print 'Processing %u of %u: %s' % (i, len(files), f)
 		src = laspy.file.File(f, mode = 'r')
 		x = src.x
 		y = src.y
@@ -57,6 +58,7 @@ def transform_las(srcfile, dstdir, ffrom, efrom, eto, type, zone):
 		dst.z = z
 		dst.close()
 		src.close()
+		i = i + 1
 
 if __name__ == '__main__':
 
