@@ -166,19 +166,17 @@ def epoch_transform(x, y, z, params, epoch):
 	a0 = tx + dtx * dt
 	a1 = ty + dty * dt
 	a2 = tz + dtz * dt
-	b00 = 1 + d + dd * dt
+	bsx = 1. + d + dd * dt
 	b01 = -rad(rz + drz * dt)
 	b02 = rad(ry + dry * dt)
 	b10 = rad(rz + drz * dt)
-	b11 = 1 + d + dd * dt
 	b12 = -rad(rx + drx * dt)
 	b20 = -rad(ry + dry * dt)
 	b21 = rad(rx + drx * dt)
-	b22 = 1 + d + dd * dt
 	def _trans(i):
-		x[i] = x[i] + a0 + b00 * tx + b01 * ty + b02 * tz
-		y[i] = y[i] + a1 + b10 * tx + b11 * ty + b12 * tz
-		z[i] = z[i] + a2 + b20 * tx + b21 * ty + b22 * tz
+		x[i] = a0 + bsx * x[i] + b01 * y[i] + b02 * z[i]
+		y[i] = a1 + b10 * x[i] + bsx * y[i] + b12 * z[i]
+		z[i] = a2 + b20 * x[i] + b21 * y[i] + bsx * z[i]
 	map(_trans, range(len(x)))
 
 
@@ -222,19 +220,39 @@ def get_csrs_srid(zone, y = None):
 		else:
 			raise Exception('Invalid zone for NAD83(CSRS): %u.' % (zone,))
 
+def find_match(x0, y0, z0, x1, y1, z1, eto, zone = 0):
+	'''
+	x0, y0, z0 -- The points we know, in CSRS.
+	x1, y1, z1 -- The input points. These are the ones we don't know the RF for.
+	eto -- The epoch of the known points.
+	zone -- The UTM zone or 0.
+	'''
+	results = None
+	d = 99999.
+	for e in range(19880, 20150):
+		e = e  /10.
+		for ffrom in DATA['helmert_params'].keys():
+			if ffrom == 'nad83csrs': continue
+			x, y, z = transform(x1, y1, z1, ffrom, e, eto, zone)
+			dx0 = x0 - x
+			dy0 = y0 - y
+			dz0 = z0 - z
+			d0 = abs(dx0) + abs(dy0) + abs(dz0)
+			if d0 < d:
+				result = (ffrom, e, dx0, dy0, dz0, x0, y0, z0, x1, y1, z1, x, y, z)
+				d = d0
+	return result
 
-def transform(x, y, z, ffrom, efrom, eto, type, zone):
+def transform(x, y, z, ffrom, efrom, eto, zone = 0):
 	'''
 	Transforms coordinate(s) from one available reference frame to NAD83(CSRS).
 	x 		-- The x coordinate list.
 	y 		-- The y coordinate list.
 	z 		-- The z coordinate list.
-	sfrom 	-- The starting SRID.
 	ffrom 	-- The starting reference frame (e.g. 'ITRF92')
 	efrom 	-- The starting epoch in decimal years (e.g. 1995.2)
 	eto 	-- The ending epoch in decimal years (e.g. 2013.8)
-	type 	-- The origin projection type. 'latlon' for lat/lon, 'nad83' for NAD83.
-	zone	-- The origin UTM zone if type is 'nad83'. Ignored otherwise.
+	zone	-- The origin UTM zone if the CRS is UTM. Otherwise latlon is assumed.
 	'''	
 	# If scalars are given, wrap them.
 	useScalar = False
@@ -253,10 +271,12 @@ def transform(x, y, z, ffrom, efrom, eto, type, zone):
 	params = DATA['helmert_params'][ffrom]
 
 	# Get srids for to and from CRSes.
-	if type == 'latlon':
+	if zone <= 0:
+		type = 'latlon'
 		fsrid = 4326
-		tsrid = get_csrs_srid(xx[0], yy[0])
+		tsrid = get_csrs_srid(x[0], y[0])
 	else:
+		type = 'nad83'
 	 	fsrid = get_utm_srid(zone)
 		tsrid = get_csrs_srid(zone)
 
@@ -274,6 +294,7 @@ def transform(x, y, z, ffrom, efrom, eto, type, zone):
 	epoch_transform(x0, y0, z0, params, efrom)
 
 	# Only use the grid shift if the epoch changes.
+	dx, dy, dz = ([0.], [0.], [0.])
 	if efrom != eto:
 		x1, y1, z1 = project(p2, p4, x0, y0, z0)
 		dx, dy, dz = shift(x1, y1, efrom, eto)
@@ -303,17 +324,33 @@ def transform(x, y, z, ffrom, efrom, eto, type, zone):
 if __name__ == '__main__':
 
 	try:
-		x, y, z = map(float, sys.argv[1:4])
-		ffrom = sys.argv[4]
-		efrom, eto = map(float, sys.argv[5:7])
-		type = sys.argv[7]
-		zone = None
-		if type == 'nad83':
-			zone = int(sys.argv[8])
-		init()
-		print transform(x, y, z, ffrom, efrom, eto, type, zone)
-		cleanup()
+		argv = sys.argv[1:]
+		mode = argv[0]
+		if mode == 'transform':
+			x, y, z = map(float, argv[1:4])
+			ffrom = argv[4]
+			efrom, eto = map(float, argv[5:7])
+			zone = 0
+			try:
+				zone = int(argv[7])
+			except: pass
+			init()
+			print transform(x, y, z, ffrom, efrom, eto, zone)
+			cleanup()
+		elif mode == 'find_match':
+			x0, y0, z0 = map(float, argv[1:4])
+			x1, y1, z1 = map(float, argv[4:7])
+			eto = float(argv[7])
+			zone = int(argv[8])
+			init()
+			print find_match(x0, y0, z0, x1, y1, z1, eto, zone)
+			cleanup()
+		else:
+			raise Exception('Invalid mode:' + mode)
 	except Exception, e:
 		import traceback
 		traceback.print_exc()
-		print 'Usage: nad83csrs.py <x> <y> <z> <origin ref frame> <origin epoch> <destination epoch> <type (latlon|nad83)> <zone (if nad83)>'
+		print '''
+Usage: nad83csrs.py <mode> [args]
+	Available modes are: transform, find_match.
+'''
