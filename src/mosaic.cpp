@@ -9,6 +9,7 @@
 #include <iostream>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 
 #include <ogr_spatialref.h>
 #include <gdal_priv.h>
@@ -17,18 +18,17 @@
 #define E 0.5772156649
 #define SLOPE 56.7
 
-float sinTable[8];
-float cosTable[8];
-
 /**
  * Initialize the sin and cos lookup tables. This way we don't
  * have to compute them in each run, nor use angles.
  */
-void initSinCos() {
-	int i = 0;
-	for(float d = 0.0; d <= PI * 2.0; d += PI / 4.0, ++i) {
-		sinTable[i] = sin(d);
-		cosTable[i] = cos(d);
+void initSinCos(float sinTable[][8], float cosTable[][8], int steps) {
+	for(int s = 0; s < steps; ++s) {
+		int i = 0;
+		for(float d = 0.0; d < PI * 2.0; d += PI / 4.0, ++i) {
+			sinTable[s][i] = (int) round(sin(d) * s);
+			cosTable[s][i] = (int) round(cos(d) * s);
+		}
 	}
 }
 
@@ -40,17 +40,17 @@ void initSinCos() {
  * I if it finds one, it returns the distance. If not, it continues searching
  * further out.
  */
-float distanceFromNull(float *srcGrid, int cols, int rows, int col, int row, float nodata, float resolution, float limit) {
+float distanceFromNull(float *srcGrid, float sinTable[][8], float cosTable[][8], int cols, int rows, int col, int row, float nodata, float resolution, float limit) {
 	if(srcGrid[row * cols + col] == nodata)
 		return 0.0;
 	int r, c;
-	for(float d = 0.0; d <= limit; d += resolution) {
+	for(int s = 0; s < (int) (limit / resolution) + 1; ++s) {
 		for(int a = 0; a < 8; ++a) {
-			c = col + (int) round(cosTable[a] * d);
-			r = row + (int) round(sinTable[a] * d);
+			c = col + cosTable[s][a];
+			r = row + sinTable[s][a];
 			if(c >= 0 && c < cols && r >= 0 && r < rows
 				&& srcGrid[r * cols + c] == nodata) {
-				return d;
+				return s * resolution;
 			}
 		}
 	}
@@ -71,12 +71,22 @@ inline float logCurve(float distance, float limit) {
  */
 void feather(float *srcGrid, float *dstGrid, int cols, int rows, float distance, float nodata, float resolution) {
 	float dfn = 0.0;
+	int status = 0;
+	
+	int steps = (int) (distance / resolution) + 1;
+	float sinTable[steps][8];
+	float cosTable[steps][8];
+	initSinCos(sinTable, cosTable, steps);
+
 	for(int row = 0; row < rows; ++row) {
 		for(int col = 0; col < cols; ++col) {
-			dfn = distanceFromNull(srcGrid, cols, rows, col, row, nodata, resolution, distance);
+			dfn = distanceFromNull(srcGrid, sinTable, cosTable, cols, rows, col, row, nodata, resolution, distance);
 			dstGrid[row * cols + col] =  logCurve(dfn, distance); //dfn / distance;
+			if(++status % (int) (cols * rows / 100) == 0)
+				std::cout << " .. " << std::setprecision(2) << ((float) status / (cols * rows) * 100.0) << "%%";
 		}
 	}
+	std::cout << std::endl;
 }
 
 /**
@@ -88,6 +98,8 @@ void blend(float *imgGrid, float *bgGrid, float *alpha, int cols, int rows, floa
 		if(bgGrid[i] == bgNodata || imgGrid[i] == imNodata)
 			continue;
 		bgGrid[i] = bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i];
+		if(i % (int) (cols * rows / 100) == 0)
+			std::cout << " .. " << std::setprecision(2) << ((float) i / (cols * rows) * 100.0) << "%%";
 	}
 }
 
@@ -103,6 +115,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 	GDALAllRegister();
 
 	// Copy the background file to the destination.
+	std::cout << "Copying background file." << std::endl;
 	std::ifstream src(files[0].c_str(), std::ios::binary);
 	std::ofstream dst(outfile.c_str(), std::ios::binary);
 	dst << src.rdbuf();
@@ -225,8 +238,6 @@ int main(int argc, char **argv) {
 	 			files.push_back(argv[i]);
 	 		}
 	 	}
-
-	 	initSinCos();
 
  		mosaic(files, outfile, distance);
 
