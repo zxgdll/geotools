@@ -92,11 +92,13 @@ void blend(float *imgGrid, float *bgGrid, float *alpha, int cols, int rows, floa
 }
 
 
-int build(std::vector<std::string> &files, std::string &outfile, float distance) {
-	if(files.size() < 2) {
-		std::cerr << "Less than 2 files. Nothing to do." << std::endl;
-		return 1;
-	}
+void mosaic(std::vector<std::string> &files, std::string &outfile, float distance) {
+	
+	if(outfile.size() == 0)
+		throw "No output file given.";
+
+	if(files.size() < 2)
+		throw "Less than 2 files. Nothing to do.";
 
 	GDALAllRegister();
 
@@ -203,7 +205,6 @@ int build(std::vector<std::string> &files, std::string &outfile, float distance)
 
 	GDALClose(outDS);
 
-	return 0;
 }
 
 int main(int argc, char **argv) {
@@ -227,11 +228,12 @@ int main(int argc, char **argv) {
 
 	 	initSinCos();
 
- 		return build(files, outfile, distance);
+ 		mosaic(files, outfile, distance);
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;
  		return 1;
  	}
 
+ 	return 0;
  }
