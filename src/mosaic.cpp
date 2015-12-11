@@ -82,11 +82,12 @@ void feather(float *srcGrid, float *dstGrid, int cols, int rows, float distance,
 		for(int i = 0; i < rows * cols; ++i) 
 			if(fillGrid[i] == 2) fillGrid[i] = 0;
 		
-		std::cout << " .. " << std::setprecision(3) << (step / steps * 100.0) << '%' << std::flush;
+		std::cout << "." << std::flush;
 
 		++step;
 
 	} while(found);
+
 	std::cout << std::endl;
 
 	free(fillGrid);
@@ -98,12 +99,16 @@ void feather(float *srcGrid, float *dstGrid, int cols, int rows, float distance,
 void blend(float *imgGrid, float *bgGrid, float *alpha, int cols, int rows, float imNodata, float bgNodata) {
 	// TODO: Maybe im component needs to be scaled down by the number of images it's blending with?
 	for(int i = 0; i < cols * rows; ++i) {
+		
 		if(bgGrid[i] == bgNodata || imgGrid[i] == imNodata)
 			continue;
+		
 		bgGrid[i] = bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i];
+
 		if(i % (int) (cols * rows / 100) == 0)
-			std::cout << " .. " << std::setprecision(3) << ((float) i / (cols * rows) * 100.0) << '%' << std::flush;
+			std::cout << "." << std::flush;
 	}
+
 	std::cout << std::endl;
 }
 
@@ -128,8 +133,8 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 	float *imGrid = NULL, *outGrid = NULL, *alphaGrid = NULL;
 	double outTrans[6], imTrans[6];
 	float imNodata, outNodata;
-	int cols, rows;
-	int col, row;
+	int cols, rows, col, row;
+	int rowHeight, rowOffset, bufRows;
 
 	try {
 
@@ -163,27 +168,63 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			imNodata = imDS->GetRasterBand(1)->GetNoDataValue();
 			outNodata = outDS->GetRasterBand(1)->GetNoDataValue();
 			
+			rowHeight = 500 > rows ? rows : 500;
+			rowOffset = (int) (distance / imTrans[1]) + 1;
+			bufRows = rowHeight + rowOffset * 2;
+
 			// Initialize the grids.
-			imGrid = (float *) malloc(cols * rows * sizeof(float));
-			alphaGrid = (float *) calloc(cols * rows, sizeof(float));
+			imGrid = (float *) malloc(cols * bufRows * sizeof(float));
+			alphaGrid = (float *) calloc(cols * bufRows, sizeof(float));
+			outGrid = (float *) malloc(cols * bufRows * sizeof(float));
 
-			// Load the overlay.
-			imDS->RasterIO(GF_Read, 0, 0, cols, rows, imGrid, cols, rows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+			// Move the window down by rowHeight and one rowOffset *not* two.
+			for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) { 
 
-			std::cout << "Feathering" << std::endl;
-			// Feather the overlay
-			feather(imGrid, alphaGrid, cols, rows, distance, imNodata, imTrans[1]);
+				// Set to zero or nodata depending on the band.
+				std::fill_n(outGrid, cols * bufRows, 2);//outNodata);
+				std::fill_n(imGrid, cols * bufRows, 1);//imNodata);
+				std::fill_n(alphaGrid, cols * bufRows, 0.0);
 
-			// Initialize an out grid of the correct size for the feathered overlay.			
-			outGrid = (float *) malloc(cols * rows * sizeof(float));
-			outDS->RasterIO(GF_Read, col, row, cols, rows, outGrid, cols, rows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+				int addrOffset = 0;
+				int bufRows0 = bufRows;
+				int bufRow0 = bufRow;
+				int rowHeight0 = rowHeight;
+				if(bufRow0 < 0) {
+					bufRow0 = 0;
+					addrOffset = rowOffset * cols;
+					bufRows0 = bufRows - rowOffset;
+				}
 
-			std::cout << "Blending" << std::endl;
-			// Blend the overlay into the output.
-			blend(imGrid, outGrid, alphaGrid, cols, rows, imNodata, outNodata);
+				// The last row might have to be smaller.
+				if(bufRow0 + bufRows0 > rows) {
+					bufRows0 = rows - bufRow0;
+					rowHeight0 = bufRows0 - rowOffset * 2;
+				}
 
-			// Write back to the output.
-			outDS->RasterIO(GF_Write, col, row, cols, rows, outGrid, cols, rows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+				std::cout << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
+
+				// Load the overlay.
+				imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid + addrOffset), cols, bufRows0, 
+					GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+
+				std::cout << "Feathering" << std::endl;
+				// Feather the overlay
+				feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, imTrans[1]);
+
+				// Read background data.
+				outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid + addrOffset), cols, bufRows0, 
+					GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+
+				std::cout << "Blending" << std::endl;
+				// Blend the overlay into the output.
+				blend(imGrid, outGrid, alphaGrid, cols, bufRows, imNodata, outNodata);
+
+				// Write back to the output.
+				// We are extracting a slice out of the buffer, so we add rowOffset * cols to the pointer
+				// to the grid, and add rowOffset to the row index.
+				outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset, cols, rowHeight0, (outGrid + cols * rowOffset), 
+					cols, rowHeight0, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+			}
 
 			free(imGrid);
 			free(outGrid);
