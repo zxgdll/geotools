@@ -15,9 +15,6 @@
 #include <gdal_priv.h>
 
 #define PI 3.14159265358979323846
-#define E 0.5772156649
-#define SLOPE 25.0
-#define ANGLES 4
 
 float _min(float a, float b) {
 	return a > b ? b : a;
