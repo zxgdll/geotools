@@ -16,53 +16,40 @@
 
 #define PI 3.14159265358979323846
 #define E 0.5772156649
-#define SLOPE 56.7
+#define SLOPE 25.0
+#define ANGLES 4
 
-/**
- * Initialize the sin and cos lookup tables. This way we don't
- * have to compute them in each run, nor use angles.
- */
-void initSinCos(float sinTable[][8], float cosTable[][8], int steps) {
-	for(int s = 0; s < steps; ++s) {
-		int i = 0;
-		for(float d = 0.0; d < PI * 2.0; d += PI / 4.0, ++i) {
-			sinTable[s][i] = (int) round(sin(d) * s);
-			cosTable[s][i] = (int) round(cos(d) * s);
-		}
-	}
+float _min(float a, float b) {
+	return a > b ? b : a;
+}
+
+float _max(float a, float b) {
+	return a < b ? b : a;
 }
 
 /**
- * Returns the minimum distance of the given cell from a null cell as 
- * distinguished by nodata. The limit distance, beyond which the
- * algorithm will not search, is in map units. The algorithm searches
- * in a circular pattern, checking for nulls at each PI/4 interval.
- * I if it finds one, it returns the distance. If not, it continues searching
- * further out.
+ * Returns a value between 0 and 1 following the tan curve.
+ * The range of step is expected to be 0 -> steps.
  */
-float distanceFromNull(float *srcGrid, float sinTable[][8], float cosTable[][8], int cols, int rows, int col, int row, float nodata, float resolution, float limit) {
-	if(srcGrid[row * cols + col] == nodata)
-		return 0.0;
-	int r, c;
-	for(int s = 0; s < (int) (limit / resolution) + 1; ++s) {
-		for(int a = 0; a < 8; ++a) {
-			c = col + cosTable[s][a];
-			r = row + sinTable[s][a];
-			if(c >= 0 && c < cols && r >= 0 && r < rows
-				&& srcGrid[r * cols + c] == nodata) {
-				return s * resolution;
-			}
-		}
-	}
-	return limit;
+float _tanCurve(float step, float steps) {
+	if(step <= 0.0) return 0.0;
+	if(step >= steps) return 1.0;
+	return tanh(((step - steps / 2.0) / (steps / 2.0)) * PI) * 0.5 + 0.5;
 }
 
 /**
- * Compute a logistic curve based on the distance (variable) and the
- * limit (static).
+ * Returns true if the given pixel is next to a nodata pixel, or the edge of the grid.
  */
-inline float logCurve(float distance, float limit) {
-	return 1.0 - 1.0 / (1.0 + pow(E, -(1.0 / limit * SLOPE) * (distance - limit / 2.0)));
+bool isEdgePixel(char *fillGrid, int col, int row, int cols, int rows) {
+	if(fillGrid[row * cols + col] == 0)
+		return false;
+	for(int r = row - 1; r < row + 2; ++r) {
+		for(int c = col - 1; c < col + 2; ++c) {
+			if(c <= 0 || r <= 0 || c >= cols-1 || r >= rows-1 || fillGrid[r * cols + c] == 0)
+				return true;
+		}
+	}
+	return false;
 }
 
 /**
@@ -70,23 +57,42 @@ inline float logCurve(float distance, float limit) {
  * value for a pixel in proportion to its distance from the nearest null.
  */
 void feather(float *srcGrid, float *dstGrid, int cols, int rows, float distance, float nodata, float resolution) {
-	float dfn = 0.0;
-	int status = 0;
-	
-	int steps = (int) (distance / resolution) + 1;
-	float sinTable[steps][8];
-	float cosTable[steps][8];
-	initSinCos(sinTable, cosTable, steps);
 
-	for(int row = 0; row < rows; ++row) {
-		for(int col = 0; col < cols; ++col) {
-			dfn = distanceFromNull(srcGrid, sinTable, cosTable, cols, rows, col, row, nodata, resolution, distance);
-			dstGrid[row * cols + col] =  logCurve(dfn, distance); //dfn / distance;
-			if(++status % (int) (cols * rows / 100) == 0)
-				std::cout << " .. " << std::setprecision(2) << ((float) status / (cols * rows) * 100.0) << "%%";
+	char *fillGrid = (char *) malloc(cols * rows * sizeof(char));
+
+	// Create a mask of non-nodata pixels from the source.
+	for(int i = 0; i < rows * cols; ++i)
+		fillGrid[i] = srcGrid[i] == nodata ? 0 : 1;
+
+	float step = 0.0, steps = distance / resolution;
+	if(steps < 1.0) steps = 1.0;
+
+	bool found = false;
+	// "Snow in" the alpha mask.
+	do {
+		found = false;
+		for(int row = 0; row < rows; ++row) {
+			for(int col = 0; col < cols; ++col) {
+				if(isEdgePixel(fillGrid, col, row, cols, rows)) {
+					fillGrid[row * cols + col] = 2; // Set edge to dirty.
+					dstGrid[row * cols + col] = _tanCurve(step, steps); // TODO: Configurable curves.
+					found = true;
+				}
+			}
 		}
-	}
+		
+		// Reset dirty edges to 0
+		for(int i = 0; i < rows * cols; ++i) 
+			if(fillGrid[i] == 2) fillGrid[i] = 0;
+		
+		std::cout << " .. " << std::setprecision(3) << (step / steps * 100.0) << '%' << std::flush;
+
+		++step;
+
+	} while(found);
 	std::cout << std::endl;
+
+	free(fillGrid);
 }
 
 /**
@@ -99,8 +105,9 @@ void blend(float *imgGrid, float *bgGrid, float *alpha, int cols, int rows, floa
 			continue;
 		bgGrid[i] = bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i];
 		if(i % (int) (cols * rows / 100) == 0)
-			std::cout << " .. " << std::setprecision(2) << ((float) i / (cols * rows) * 100.0) << "%%";
+			std::cout << " .. " << std::setprecision(3) << ((float) i / (cols * rows) * 100.0) << '%' << std::flush;
 	}
+	std::cout << std::endl;
 }
 
 
@@ -121,11 +128,10 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 	dst << src.rdbuf();
 
 	GDALDataset *outDS = NULL, *imDS = NULL;
-	float *imGrid = NULL, *outGrid = NULL, *alphaGrid = NULL, *tmpGrid = NULL;
+	float *imGrid = NULL, *outGrid = NULL, *alphaGrid = NULL;
 	double outTrans[6], imTrans[6];
 	float imNodata, outNodata;
-	int celBuf;
-	int cols, rows, imCols, imRows;
+	int cols, rows;
 	int col, row;
 
 	try {
@@ -137,9 +143,6 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 
 		// Load the transform parameters.
 		outDS->GetGeoTransform(outTrans);
-
-		// Compute the cell buffer required to accomodate the distance argument.
-		celBuf = (int) (distance / outTrans[1]) + 1;
 
 		// Iterate over the files, adding each one to the background.
 		for(unsigned int i = 1; i < files.size(); ++i) {
@@ -161,42 +164,29 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			col = (int) ((imTrans[0] - outTrans[0]) / outTrans[1]);
 			row = (int) ((imTrans[3] - outTrans[3]) / outTrans[5]);
 			imNodata = imDS->GetRasterBand(1)->GetNoDataValue();
-			imCols = cols + celBuf * 2;
-			imRows = rows + celBuf * 2;
 			outNodata = outDS->GetRasterBand(1)->GetNoDataValue();
 			
 			// Initialize the grids.
-			imGrid = (float *) malloc(imCols * imRows * sizeof(float));
-			alphaGrid = (float *) calloc(imCols * imRows, sizeof(float));
+			imGrid = (float *) malloc(cols * rows * sizeof(float));
+			alphaGrid = (float *) calloc(cols * rows, sizeof(float));
 
-			// Fill the im grid with nodata.
-			std::fill_n(imGrid, imCols * imRows, imNodata);
-
-			// Load the overlay into a tmp grid, then copy it into
-			// the im grid with the correct buffer.
-			tmpGrid = (float *) malloc(cols * rows * sizeof(float));
-			imDS->RasterIO(GF_Read, 0, 0, cols, rows, tmpGrid, cols, rows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
-			for(int r = 0; r < rows; ++r) {
-				for(int c = 0; c < cols; ++c) {
-					imGrid[(r + celBuf) * imCols + (c + celBuf)] = tmpGrid[r * cols + c];
-				}
-			}
-			free(tmpGrid);
-
-			// Initialize an out grid of the correct size for the feathered overlay.			
-			outGrid = (float *) malloc(imCols * imRows * sizeof(float));
-			outDS->RasterIO(GF_Read, col - celBuf, row - celBuf, imCols, imRows, outGrid, imCols, imRows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+			// Load the overlay.
+			imDS->RasterIO(GF_Read, 0, 0, cols, rows, imGrid, cols, rows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
 
 			std::cout << "Feathering" << std::endl;
 			// Feather the overlay
-			feather(imGrid, alphaGrid, imCols, imRows, distance, imNodata, outTrans[1]);
+			feather(imGrid, alphaGrid, cols, rows, distance, imNodata, imTrans[1]);
+
+			// Initialize an out grid of the correct size for the feathered overlay.			
+			outGrid = (float *) malloc(cols * rows * sizeof(float));
+			outDS->RasterIO(GF_Read, col, row, cols, rows, outGrid, cols, rows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
 
 			std::cout << "Blending" << std::endl;
 			// Blend the overlay into the output.
-			blend(imGrid, outGrid, alphaGrid, imCols, imRows, imNodata, outNodata);
+			blend(imGrid, outGrid, alphaGrid, cols, rows, imNodata, outNodata);
 
 			// Write back to the output.
-			outDS->RasterIO(GF_Write, col - celBuf, row - celBuf, imCols, imRows, outGrid, imCols, imRows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+			outDS->RasterIO(GF_Write, col, row, cols, rows, outGrid, cols, rows, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
 
 			free(imGrid);
 			free(outGrid);
@@ -209,7 +199,6 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 		free(imGrid);
 		free(outGrid);
 		free(alphaGrid);
-		free(tmpGrid);
 
 		GDALClose(outDS);
 		GDALClose(imDS);
