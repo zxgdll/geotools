@@ -135,7 +135,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 	float imNodata, outNodata;
 	int cols, rows, col, row;
 	int rowHeight, rowOffset, bufRows;
-	int addrOffset, bufRows0, bufRow0, rowHeight0;
+	int addrOffset, bufRows0, bufRow0, rowHeight0, rowOffset0;
 
 	try {
 
@@ -166,6 +166,12 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			rows = imDS->GetRasterYSize();
 			col = (int) ((imTrans[0] - outTrans[0]) / outTrans[1]);
 			row = (int) ((imTrans[3] - outTrans[3]) / outTrans[5]);
+			
+			if(col + cols > outDS->GetRasterXSize())
+				cols = outDS->GetRasterXSize() - col;
+			if(row + rows > outDS->GetRasterYSize())
+				rows = outDS->GetRasterYSize() - row;
+
 			imNodata = imDS->GetRasterBand(1)->GetNoDataValue();
 			outNodata = outDS->GetRasterBand(1)->GetNoDataValue();
 			
@@ -183,24 +189,26 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) { 
 
 				// Set to zero or nodata depending on the band.
-				std::fill_n(outGrid, cols * bufRows, 2);//outNodata);
-				std::fill_n(imGrid, cols * bufRows, 1);//imNodata);
-				std::fill_n(alphaGrid, cols * bufRows, 0.0);
+				std::fill_n(outGrid, cols * bufRows, outNodata);
+				std::fill_n(imGrid, cols * bufRows, imNodata);
+				std::fill_n(alphaGrid, cols * bufRows, 1.0);
 
-				int addrOffset = 0;
-				int bufRows0 = bufRows;
-				int bufRow0 = bufRow;
-				int rowHeight0 = rowHeight;
+				addrOffset = 0;
+				bufRows0 = bufRows;
+				bufRow0 = bufRow;
+				rowHeight0 = rowHeight;
+				rowOffset0 = rowOffset;
 				if(bufRow0 < 0) {
 					bufRow0 = 0;
 					addrOffset = rowOffset * cols;
 					bufRows0 = bufRows - rowOffset;
+					rowOffset0 = 0;
 				}
 
 				// The last row might have to be smaller.
 				if(bufRow0 + bufRows0 > rows) {
 					bufRows0 = rows - bufRow0;
-					rowHeight0 = bufRows0 - rowOffset * 2;
+					rowHeight0 = bufRows0 - rowOffset0;
 				}
 
 				std::cout << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
@@ -219,13 +227,13 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 
 				std::cout << "Blending" << std::endl;
 				// Blend the overlay into the output.
-				blend(imGrid, outGrid, alphaGrid, cols, bufRows, imNodata, outNodata);
+				blend(imGrid, outGrid, alphaGrid, cols, bufRows0, imNodata, outNodata);
 
 				// Write back to the output.
 				// We are extracting a slice out of the buffer, so we add rowOffset * cols to the pointer
 				// to the grid, and add rowOffset to the row index.
-				outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset, cols, rowHeight0, (outGrid + cols * rowOffset), 
-					cols, rowHeight0, GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+				outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid + addrOffset + rowOffset0 * cols), cols, rowHeight0, 
+					GDT_Float32, 1, NULL, 0, 0, 0, NULL);
 			}
 
 			free(imGrid);
