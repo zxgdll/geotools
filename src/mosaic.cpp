@@ -113,7 +113,7 @@ void blend(float *imgGrid, float *bgGrid, float *alpha, int cols, int rows, floa
 }
 
 
-void mosaic(std::vector<std::string> &files, std::string &outfile, float distance) {
+void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, bool overviews) {
 	
 	if(outfile.size() == 0)
 		throw "No output file given.";
@@ -241,6 +241,16 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			free(alphaGrid);
 
 			GDALClose(imDS);
+
+			if(overviews) {
+				std::cout << "Building overviews..." << std::endl;
+				GDALClose(outDS);
+				outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
+				if(outDS == NULL)
+					throw "Failed to open destination image.";
+				int overViews[] = { 2, 4, 8, 16 };
+				outDS->BuildOverviews("NEAREST", 4, overViews, 0, NULL, NULL, NULL);
+			}
 		}
 	} catch(const char *e) {
 
@@ -264,6 +274,7 @@ int main(int argc, char **argv) {
 	 	float distance = 100.0;
 	 	std::vector<std::string> files;
 	 	std::string outfile;
+	 	bool overviews = false;
 
 	 	for(int i = 1; i < argc; ++i) {
 	 		std::string arg(argv[i]);
@@ -271,12 +282,14 @@ int main(int argc, char **argv) {
 	 			distance = atof(argv[++i]);
 	 		} else if(arg == "-o") {
 	 			outfile = argv[++i];
+	 		} else if(arg == "-b") {
+	 			overviews = true;
 	 		} else {
 	 			files.push_back(argv[i]);
 	 		}
 	 	}
 
- 		mosaic(files, outfile, distance);
+ 		mosaic(files, outfile, distance, overviews);
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;
