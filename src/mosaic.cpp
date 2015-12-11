@@ -135,6 +135,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 	float imNodata, outNodata;
 	int cols, rows, col, row;
 	int rowHeight, rowOffset, bufRows;
+	int addrOffset, bufRows0, bufRow0, rowHeight0;
 
 	try {
 
@@ -168,6 +169,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			imNodata = imDS->GetRasterBand(1)->GetNoDataValue();
 			outNodata = outDS->GetRasterBand(1)->GetNoDataValue();
 			
+			// TODO: Configurable row height.
 			rowHeight = 500 > rows ? rows : 500;
 			rowOffset = (int) (distance / imTrans[1]) + 1;
 			bufRows = rowHeight + rowOffset * 2;
