@@ -26,7 +26,7 @@ float _max(float a, float b) {
 
 /**
  * Returns a value between 0 and 1 following the tan curve.
- * The range of step is expected to be 0 -> steps.
+ * The range of step is expected to be 0 -> steps and is clamped.
  */
 float _tanCurve(float step, float steps) {
 	if(step <= 0.0) return 0.0;
@@ -54,18 +54,17 @@ bool isEdgePixel(char *fillGrid, int col, int row, int cols, int rows) {
  * value for a pixel in proportion to its distance from the nearest null.
  */
 void feather(float *srcGrid, float *dstGrid, int cols, int rows, float distance, float nodata, float resolution) {
-
+	// Fill grid is used to keep track of where the edges are as they're "snowed in"
+	// Starts out as a mask of non-nodata pixels from the source.
 	char *fillGrid = (char *) malloc(cols * rows * sizeof(char));
-
-	// Create a mask of non-nodata pixels from the source.
 	for(int i = 0; i < rows * cols; ++i)
 		fillGrid[i] = srcGrid[i] == nodata ? 0 : 1;
-
-	float step = 0.0, steps = distance / resolution;
-	if(steps < 1.0) steps = 1.0;
-
+	// The number of steps is just the number of pixels needed to 
+	// cover the distance of the fade.
+	float step = 0.0;
+	float steps = _min(1.0, distance / resolution);
 	bool found = false;
-	// "Snow in" the alpha mask.
+	// "Snow in" the alpha mask. The loop will exit when no more edge pixels can be found.
 	do {
 		found = false;
 		for(int row = 0; row < rows; ++row) {
@@ -77,19 +76,11 @@ void feather(float *srcGrid, float *dstGrid, int cols, int rows, float distance,
 				}
 			}
 		}
-		
 		// Reset dirty edges to 0
 		for(int i = 0; i < rows * cols; ++i) 
 			if(fillGrid[i] == 2) fillGrid[i] = 0;
-		
-		std::cout << "." << std::flush;
-
 		++step;
-
 	} while(found);
-
-	std::cout << std::endl;
-
 	free(fillGrid);
 }
 
@@ -97,24 +88,24 @@ void feather(float *srcGrid, float *dstGrid, int cols, int rows, float distance,
  * Blends two rasters together using the alpha grid for blending.
  */
 void blend(float *imgGrid, float *bgGrid, float *alpha, int cols, int rows, float imNodata, float bgNodata) {
-	// TODO: Maybe im component needs to be scaled down by the number of images it's blending with?
 	for(int i = 0; i < cols * rows; ++i) {
-		
-		if(bgGrid[i] == bgNodata || imgGrid[i] == imNodata)
-			continue;
-		
-		bgGrid[i] = bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i];
-
-		if(i % (int) (cols * rows / 100) == 0)
-			std::cout << "." << std::flush;
+		if(!(bgGrid[i] == bgNodata || imgGrid[i] == imNodata))
+			bgGrid[i] = bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i];
 	}
-
-	std::cout << std::endl;
 }
 
-
+/**
+ * Mosaic the given files together using the first as the base. The base file will serve as a clipping
+ * mask for the others. The spatial reference system and resolution of all layers must match.
+ * The distance argument determines the distance over which the edges are feathered. The
+ * overviews argument, if true, forces the construction of new overviews. If this is not
+ * used, the existing overviews may obscure the fact that the image has changed (when zoomed out.)
+ */
 void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, bool overviews) {
 	
+	if(distance <= 0.0)
+		throw "Invalid distance.";
+
 	if(outfile.size() == 0)
 		throw "No output file given.";
 
@@ -230,8 +221,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 				blend(imGrid, outGrid, alphaGrid, cols, bufRows0, imNodata, outNodata);
 
 				// Write back to the output.
-				// We are extracting a slice out of the buffer, so we add rowOffset * cols to the pointer
-				// to the grid, and add rowOffset to the row index.
+				// We are extracting a slice out of the buffer, not writing the whole thing.
 				outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid + addrOffset + rowOffset0 * cols), cols, rowHeight0, 
 					GDT_Float32, 1, NULL, 0, 0, 0, NULL);
 			}
@@ -244,10 +234,12 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 
 			if(overviews) {
 				std::cout << "Building overviews..." << std::endl;
+				// Must close and open the DS to avoid errors.
 				GDALClose(outDS);
 				outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
 				if(outDS == NULL)
-					throw "Failed to open destination image.";
+					throw "Failed to open destination image for overview creation.";
+				// TODO: Configure overviews and method.
 				int overViews[] = { 2, 4, 8, 16 };
 				outDS->BuildOverviews("NEAREST", 4, overViews, 0, NULL, NULL, NULL);
 			}
@@ -265,6 +257,16 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 
 	GDALClose(outDS);
 
+}
+
+void usage() {
+	std::cout << "Usage: mosaic [options] -o <output file> <file [file [file [...]]]>" << std::endl;
+	std::cout << "    -o <file>     -- The output file." << std::endl;
+	std::cout << "    -d <distance> -- The feather distance in map units (default 100.)" << std::endl;
+	std::cout << "    -b            -- Build overviews (default: old overviews are preserved.)" << std::endl;
+	std::cout << "    <file [...]>  -- A list of files. The first is used as the background " << std::endl;
+	std::cout << "                     and determines the size of the output. Subsequent " << std::endl;
+	std::cout << "                     images are layered on top and feathered." << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -293,6 +295,7 @@ int main(int argc, char **argv) {
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;
+ 		usage();
  		return 1;
  	}
 
