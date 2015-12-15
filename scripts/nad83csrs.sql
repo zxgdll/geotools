@@ -8,67 +8,82 @@
 -- ffrom	The origin reference frame. This will be something like 'ITRF90'.
 -- efrom	The origin epoch. Epochs are expressed as decimal years.
 -- eto		The destination epoch.
-CREATE OR REPLACE FUNCTION ToNAD83CSRS(geom bytea, ffrom text, efrom double precision, eto double precision, type text, zone integer)
+-- fsrid    The SRID of the origin geometry.
+-- tsrid    The SRID of the destination geometry.
+CREATE OR REPLACE FUNCTION ToNAD83CSRS(geom bytea, ffrom text, efrom double precision, eto double precision, fsrid integer, tsrid integer)
 RETURNS bytea
 AS $$
 
-from nad83csrs import transform
+import sys
+import os
+
+script_base = '/Users/robskelly/Documents/geotools'
+script_path = script_base + '/scripts'
+if not script_path in sys.path:
+	sys.path.append(script_path)
+	os.environ['PATH'] += os.pathsep + script_base + '/bin'
+
+import nad83csrs
 from shapely.geometry import Point
 from shapely.wkb import loads, dumps
 
+nad83csrs.SHIFT_FILE = script_base + '/share/NAD83v6VG.tif'
+nad83csrs.ITRF_FILE = script_base + '/share/itrf.csv'
+
 pt = loads(geom)
-x, y, z = transform(pt.x, pt.y, pt.z, ffrom, efrom, eto, type, zone)
-return dumps(Point(x, y, z))
+t = nad83csrs.Transformer(ffrom.lower(), efrom, eto, fsrid, tsrid)
+x, y, z, bounds = t.transformPoints([pt.x], [pt.y], [pt.z])
+return dumps(Point(x[0], y[0], z[0]))
 
 $$ LANGUAGE 'plpythonu';
 
 
--- This a temporary method for configuring the init.
-CREATE OR REPLACE FUNCTION ToNAD83CSRS_Init()
-RETURNS VOID
-AS $$
-
-SELECT ToNAD83CSRS_Init('/Users/robskelly/Documents/geotools/scripts', 
-	'/Users/robskelly/Documents/geotools/scripts/NAD83v6VG.tif', 
-	'/Users/robskelly/Documents/geotools/scripts/itrf.csv')
-
-$$ LANGUAGE 'sql';
-
-
--- Initializes the NAD83(CSRS) transformation package, which requires loading some 
--- external data and initializing some paths. If the _Cleanup function is not
--- called subsequently, a memory leak will occur!
-CREATE OR REPLACE FUNCTION ToNAD83CSRS_Init(script_path text, shift_file text, itrf_file text)
-RETURNS VOID
+-- Transforms a PostGIS geometry in any coordinate reference system at any epoch and reference frame
+-- to NAD83(CSRS) at any epoch.
+-- 
+-- geoms 	An array of 3D point geometries in WKB form.
+-- ffrom	The origin reference frame. This will be something like 'ITRF90'.
+-- efrom	The origin epoch. Epochs are expressed as decimal years.
+-- eto		The destination epoch.
+-- fsrid    The SRID of the origin geometry.
+-- tsrid    The SRID of the destination geometry.
+CREATE OR REPLACE FUNCTION ToNAD83CSRS(geoms bytea[], ffrom text, efrom double precision, eto double precision, fsrid integer, tsrid integer)
+RETURNS bytea[]
 AS $$
 
 import sys
 
-# Set the path for the script.
-sys.path.append(script_path)
+script_base = '/Users/robskelly/Documents/geotools'
+script_path = script_base + '/scripts'
+if not script_path in sys.path:
+	sys.path.append(script_path)
+	os.environ['PATH'] += os.pathsep + script_base + '/bin'
 
 import nad83csrs
+from shapely.geometry import Point
+from shapely.wkb import loads, dumps
 
-# Give the module a reference to PostgreSQL's persistent storage.
-nad83csrs.DATA = SD
+nad83csrs.SHIFT_FILE = script_base + '/share/NAD83v6VG.tif'
+nad83csrs.ITRF_FILE = script_base + '/share/itrf.csv'
 
-# Set the paths for required data files.
-nad83csrs.SHIFT_FILE = shift_file
-nad83csrs.ITRF_FILE = itrf_file
+count = len(geoms)
+x = [None] * count
+y = [None] * count
+z = [None] * count
 
-nad83csrs.init()
+for i in range(count):
+	pt = loads(geoms[i])
+	x[i] = pt.x
+	y[i] = pt.y
+	z[i] = pt.z
 
-$$ LANGUAGE 'plpythonu';
+t = nad83csrs.Transformer(ffrom.lower(), efrom, eto, fsrid, tsrid)
+x, y, z, bounds = t.transformPoints(x, y, z)
 
+result = [None] * count
+for i in range(count):
+	result[i] = dumps(Point(x[i], y[i], z[i]))
 
--- Cleans up resources used by the NAD83(CSRS) transformation routines.
--- This must be called afterwards or a memory leak will occur!
-CREATE OR REPLACE FUNCTION ToNAD83CSRS_Cleanup()
-RETURNS VOID
-AS $$
-
-import nad83csrs
-
-nad83csrs.cleanup()
+return result
 
 $$ LANGUAGE 'plpythonu';

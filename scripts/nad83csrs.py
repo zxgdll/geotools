@@ -10,6 +10,8 @@ from math import sin, cos
 PI = 3.14159265358979323846
 FLT_MIN = -99999999.9
 FLT_MAX = 99999999.9
+ITRF_FILE = '../share/itrf.csv'
+SHIFT_FILE = '../share/NAD83v6VG.tif'
 
 # Convert from arcsec to radians.
 def _sec2rad(x):
@@ -77,7 +79,7 @@ class ShiftGrid(object):
 		 // TODO: Only load the portion of the grid necessary for the point cloud.
 		 //       On the other hand, the grid is so small, who cares?
 		'''
-		ds = gdal.Open("../share/NAD83v6VG.tif", gdal.GA_ReadOnly)
+		ds = gdal.Open(SHIFT_FILE, gdal.GA_ReadOnly)
 		if not ds:
 			raise Exception("Failed to load shift grid.")
 		xband = ds.GetRasterBand(1)
@@ -148,7 +150,7 @@ class Transformer(object):
 		self.eto = eto
 		self.fsrid = fsrid
 		self.tsrid = tsrid
-		self.ffrom = ffrom
+		self.ffrom = ffrom.lower()
 
 		self.initProjections()
 		self.loadHelmert()
@@ -183,7 +185,7 @@ class Transformer(object):
 		self.epochTransform(x, y, z)
 
 		# Only use the grid shift if the epoch changes.
-		if efrom != eto:
+		if self.efrom != self.eto:
 
 			# Copy the coordinate arrays for transformation.
 			x0 = x[:]
@@ -286,14 +288,14 @@ class Transformer(object):
 		 */
 		'''
 		found = False
-		with open("../share/itrf.csv", "rU") as f:
+		with open(ITRF_FILE, "rU") as f:
 			line = f.readline()
 			while line:
 				line = line.strip().split()
 				if line[0] == self.ffrom:
 					ffrom, fto = line[:2]
 					epoch, tx, ty, tz, rx, ry, rz, d, dtx, dty, dtz, drx, dry, drz, dd = map(float, line[2:])
-					dt = self.dt = eto - efrom
+					dt = self.dt = self.eto - self.efrom
 					self.d = d / 1000000000 		# Listed as ppb.
 					self.dd = dd / 1000000000
 					self.a0 = tx + dtx * dt
