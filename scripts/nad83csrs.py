@@ -6,6 +6,7 @@ import sys
 import gdal
 import subprocess
 from math import sin, cos
+from numpy import dtype
 
 PI = 3.14159265358979323846
 FLT_MIN = -99999999.9
@@ -15,33 +16,23 @@ SHIFT_FILE = '../share/NAD83v6VG.tif'
 
 # Convert from arcsec to radians.
 def _sec2rad(x):
-	return x * 4.84813681 / 1000000000.0
+	return x * 4.8481368 / 1000000000.
 
 # Convert from radians to degrees.
 def _deg(x):
-	return x * 180.0 / PI
+	return x * 180. / PI
 
 def _rad(x):
-	return x * PI / 180.0
+	return x * PI / 180.
 
-def _sq(x):
-	return x*x
-
+# TODO: This would probably be more accurate (i.e. closer to TRX) with bicubic?
 def _binterp(grid, c, r, c0, r0, c1, r1, width):
 	'''
-	// w -- x  c0 -- c1
-	// |    |   |    |
-	// y -- z  r0 -- r1
+	Bilinear interpolation of shift grid.
 	'''
-	a1 = ((c1 - c) * (r1 - r))
-	g1 = grid[r0, c0]
-	a2 = ((c - c0) * (r1 - r))
-	g2 = grid[r0, c1]
-	a3 = ((c1 - c) * (r - r0))
-	g3 = grid[r1, c0]
-	a4 = ((c - c0) * (r - r0))
-	g4 = grid[r1, c1]
-	return a1 * g1 + a2 * g2 + a3 * g3 + a4 * g4
+	x1 = (c1 - c) / (c1 - c0) * grid[r0, c0] + (c - c0) / (c1 - c0) * grid[r0, c1]
+	x2 = (c1 - c) / (c1 - c0) * grid[r1, c0] + (c - c0) / (c1 - c0) * grid[r1, c1]
+	return (r1 - r) / (r1 - r0) * x1 + (r - r0) / (r1 - r0) * x2
 
 def _shift2latlon(dx, dy, lat, h, a, e2):
 	'''
@@ -59,8 +50,8 @@ def _shift2latlon(dx, dy, lat, h, a, e2):
 	dlon = [0.] * len(dx)
 	for i in range(len(dx)):
 		l = lat[i]
-		m = a * (1.0 - e2) / (1.0 - e2 * _sq(sin(l))) ** (3.0/2.0) 	# Meridional radius of curvature.
-		n = a / (1.0 - e2 * sin(l) ** 2) ** (1.0/2.0) 				# Parallel radius of curvature.
+		m = a * (1. - e2) / (1. - e2 * sin(l) ** 2.) ** (3. / 2.) 	# Meridional radius of curvature.
+		n = a / (1. - e2 * sin(l) ** 2.) ** (1. / 2.) 				# Parallel radius of curvature.
 		r = n * cos(l) 												# Radius of parallel.
 		dlon[i] = dx[i] / (r + h[i])
 		dlat[i] = dy[i] / (m + h[i])
@@ -68,16 +59,14 @@ def _shift2latlon(dx, dy, lat, h, a, e2):
 
 class ShiftGrid(object):
 	'''
-	 * Loads and interpolates the NAD83(CSRS) shift grid.
+	Loads and interpolates the NAD83(CSRS) shift grid.
 	'''
 
 	def load(self):
 		'''
-		/**
-		 * Load the shift grid raster and store the x, y, z shifts internally.
-		 */
-		 // TODO: Only load the portion of the grid necessary for the point cloud.
-		 //       On the other hand, the grid is so small, who cares?
+		Load the shift grid raster and store the x, y, z shifts internally.
+		TODO: Only load the portion of the grid necessary... On the other hand, 
+		the grid is so small, who cares?
 		'''
 		ds = gdal.Open(SHIFT_FILE, gdal.GA_ReadOnly)
 		if not ds:
@@ -94,10 +83,8 @@ class ShiftGrid(object):
 
 	def interpolate(self, x, y, dx, dy, dz):
 		'''
-		/**
-		 * Compute the the shifts in x, y and z at position x, y. x and y are radians,
-		 * dx, dy and dz are m.
-		 */
+		Compute the the shifts in x, y and z at position x, y. x and y are radians,
+		dx, dy and dz are m.
 		'''
 		transform = self.transform
 		width = self.width
@@ -106,52 +93,45 @@ class ShiftGrid(object):
 		ygrid = self.ygrid
 		zgrid = self.zgrid
 		for i in range(len(x)):
-			c = ((_deg(x[i]) - transform[0]) / transform[1])
-			r = ((_deg(y[i]) - transform[3]) / transform[5])
+			_dx = _deg(x[i])
+			_dy = _deg(y[i])
+			c = ((_dx - transform[0]) / transform[1])
+			r = ((_dy - transform[3]) / transform[5])
 			c0 = int(c)
 			r0 = int(r)
 			c1 = c0 + 1
 			r1 = r0 + 1
-			if(c0 < 0):
-				c0 = 0
-			if(r0 < 0):
-				r0 = 0
-			if(c1 >= width):
-				c1 = width - 1
-			if(r1 >= height):
-				r1 = height - 1
-			dx[i] = _binterp(xgrid, c, r, c0, r0, c1, r1, width) / 1000.0
-			dy[i] = _binterp(ygrid, c, r, c0, r0, c1, r1, width) / 1000.0
-			dz[i] = _binterp(zgrid, c, r, c0, r0, c1, r1, width) / 1000.0
+			if(c0 < 0): c0 = 0
+			if(r0 < 0): r0 = 0
+			if(c1 >= width): c1 = width - 1
+			if(r1 >= height): r1 = height - 1
+			dx[i] = _binterp(xgrid, c, r, c0, r0, c1, r1, width) / 1000.
+			dy[i] = _binterp(ygrid, c, r, c0, r0, c1, r1, width) / 1000.
+			dz[i] = _binterp(zgrid, c, r, c0, r0, c1, r1, width) / 1000.
 
 
 class Transformer(object):
 	'''
-	/**
-	 * Performs the work of transforming coordinates from a given reference frame to NAD83(CSRS).
- 	*/
+	Performs the work of transforming coordinates from a given reference frame to NAD83(CSRS).
  	'''
 
 	def __init__(self, ffrom, efrom, eto, fsrid, tsrid):
 		'''
-			/**
-			 * Prepares the Helmert transformation parameters for the given transformation.
-			 * These will be used in later method calls.
-			 * The constructor will load an process the grid shift file and the transformation database.
-			 * ffrom -- The name of the reference frame, e.g. 'itrf90'
-			 * efrom -- The epoch of data collection (decimal years), e.g. 1994.2
-			 * eto   -- The target epoch. One might select 1997.0 for BC or 2002.0 for Albera (etc.)
-			 * fsrid -- The SRID (EPSG code) of the source.
-			 * tsrid -- The SRID of the destination. This is the code for the UTM zone under
-			 *          NAD83(CSRS), e.g. 2956 for UTM12N.
-			 */
+	 	Prepares the Helmert transformation parameters for the given transformation.
+		These will be used in later method calls.
+		The constructor will load an process the grid shift file and the transformation database.
+		ffrom -- The name of the reference frame, e.g. 'itrf90'
+		efrom -- The epoch of data collection (decimal years), e.g. 1994.2
+		eto   -- The target epoch. One might select 1997.0 for BC or 2002.0 for Albera (etc.)
+		fsrid -- The SRID (EPSG code) of the source.
+		tsrid -- The SRID of the destination. This is the code for the UTM zone under
+		         NAD83(CSRS), e.g. 2956 for UTM12N.
 	 	'''
 		self.efrom = efrom
 		self.eto = eto
 		self.fsrid = fsrid
 		self.tsrid = tsrid
 		self.ffrom = ffrom.lower()
-
 		self.initProjections()
 		self.loadHelmert()
 		self.shiftGrid = ShiftGrid()
@@ -160,19 +140,8 @@ class Transformer(object):
 
 	def transformPoints(self, x, y, z):
 		'''
-		/**
-		 * Transforms coordinate(s) from one available reference frame to NAD83(CSRS).
-		 * a = UTM (m)
-	 	 * c = a -> 4798 (geocentric, m) -> helmert
-	 	 * b = c -> 4326 (geodetic, deg)
-	 	 * d = b -> shifts (mm)
-	 	 * e = d -> geocentric (sec)
-	 	 * f = c + e
-	 	 * g = f -> UTM (m)
-	 	 *
-		 * x, y, z -- Coordinate arrays.
-		 * count   -- The number of coordinates.
-		*/
+		Transforms coordinate(s) from one available reference frame to NAD83(CSRS).
+	 	x, y, z -- Coordinate arrays.
 		'''
 		if len(x) != len(y) or len(x) != len(z):
 			raise Exception('Point arrays must be the same length.')
@@ -182,7 +151,7 @@ class Transformer(object):
 		x, y, z = pyproj.transform(self.p1, self.p2, x, y, z, True)
 
 		# Transform to csrs using Helmert (etc.) params. (c)
-		self.epochTransform(x, y, z)
+		self.epochTransform(x, y, z, self.efrom - 1997.)
 
 		# Only use the grid shift if the epoch changes.
 		if self.efrom != self.eto:
@@ -204,16 +173,14 @@ class Transformer(object):
 			self.shiftGrid.interpolate(x0, y0, dx, dy, dz)
 			
 			# Transform mm shifts to latlon
-			# Get projection's spheroid props.
-			#double a, e2
-			#pj_get_spheroid_defn(p4, &a, &e2)
+			# Get projection's spheroid props. This is a hack that relies on proj_ellips for now.
 			a, e2 = self.getEllipsProps("+init=EPSG:4326")
 
 			# Change the shift distance in projected coords to latlon.
 			# This avoids the scale distortion associated with projection.
 			dlon, dlat = _shift2latlon(dx, dy, y0, z0, a, e2)
 
-			dt = self.dt
+			dt = self.eto - self.efrom
 			# Apply shifts to latlon coords.
 			for i in range(count):
 				x0[i] += dlon[i] * dt
@@ -238,42 +205,42 @@ class Transformer(object):
 			if z[i] < bounds[4]: bounds[4] = z[i]
 			if z[i] > bounds[5]: bounds[5] = z[i]
 
-		#printf("xmin: %0.6f xmax: %0.6f ymin: %0.6f ymax: %0.6f zmin: %0.6f zmax: %0.6f\n",
-		#		bounds[0], bounds[1], bounds[2], bounds[3], bounds[4], bounds[5])
-
 		return (x, y, z, bounds)
 
-	def epochTransform(self, x, y, z):
+	def epochTransform(self, x, y, z, dt):
 		'''
-		/**
 		Transform the coordinate using the procedure listed in Craymer (2006).
-
 		x, y, z -- 	The coordinate arrays.
-		count 	-- 	The number of points.
-		*/
+		dt      --  The time delta in decimal years.
 		'''
-		bsx = self.bsx
-		b01 = self.b01
-		b02 = self.b02
-		b10 = self.b10
-		b12 = self.b12
-		b20 = self.b20
-		b21 = self.b21
-		a0 = self.a0
-		a1 = self.a1
-		a2 = self.a2
+		a0 = self.tx + self.dtx * dt
+		a1 = self.ty + self.dty * dt
+		a2 = self.tz + self.dtz * dt
+		bsx = 1. + self.d + self.dd * dt
+		b01 = -_sec2rad(self.rz + self.drz * dt)
+		b02 = _sec2rad(self.ry + self.dry * dt)
+		b10 = _sec2rad(self.rz + self.drz * dt)
+		b12 = -_sec2rad(self.rx + self.drx * dt)
+		b20 = -_sec2rad(self.ry + self.dry * dt)
+		b21 = _sec2rad(self.rx + self.drx * dt)
 		for i in range(len(x)):
 			x[i] = a0 + bsx * x[i] + b01 * y[i] + b02 * z[i]
 			y[i] = a1 + b10 * x[i] + bsx * y[i] + b12 * z[i]
 			z[i] = a2 + b20 * x[i] + b21 * y[i] + bsx * z[i]
 
 	def getEllipsProps(self, proj):
+		'''
+		Return the ellipsoid parameters using the proj_ellips program,
+		which is a total hack until I figure out the python way.
+		'''
 		p = subprocess.Popen(['proj_ellips', proj], stdout=subprocess.PIPE)
 		stdout, stderr = p.communicate()
 		return map(float, stdout.split())
 
 	def initProjections(self):
-		# Initialize projections.
+		'''
+		Initialize projections.
+		'''
 		if not self.fsrid or not self.tsrid:
 			raise Exception("SRIDs are not set.")
 		self.p1 = pyproj.Proj("+init=EPSG:%u" % (self.fsrid,))
@@ -283,9 +250,7 @@ class Transformer(object):
 
 	def loadHelmert(self):
 		'''
-		/**
-		 * Load the transformation database.
-		 */
+		Load the transformation database.
 		'''
 		found = False
 		with open(ITRF_FILE, "rU") as f:
@@ -295,19 +260,21 @@ class Transformer(object):
 				if line[0] == self.ffrom:
 					ffrom, fto = line[:2]
 					epoch, tx, ty, tz, rx, ry, rz, d, dtx, dty, dtz, drx, dry, drz, dd = map(float, line[2:])
-					dt = self.dt = self.eto - self.efrom
-					self.d = d / 1000000000 		# Listed as ppb.
-					self.dd = dd / 1000000000
-					self.a0 = tx + dtx * dt
-					self.a1 = ty + dty * dt
-					self.a2 = tz + dtz * dt
-					self.bsx = 1 + d + dd * dt
-					self.b01 = -_sec2rad(rz + drz * dt)
-					self.b02 = _sec2rad(ry + dry * dt)
-					self.b10 = _sec2rad(rz + drz * dt)
-					self.b12 = -_sec2rad(rx + drx * dt)
-					self.b20 = -_sec2rad(ry + dry * dt)
-					self.b21 = _sec2rad(rx + drx * dt)
+					self.epoch = epoch
+					self.d = d / 1000000000. 		# Listed as ppb.
+					self.dd = dd / 1000000000.
+					self.tx = tx
+					self.ty = ty
+					self.tz = tz
+					self.rx = rx
+					self.ry = ry
+					self.rz = rz
+					self.dtx = dtx
+					self.dty = dty 
+					self.dtz = dtz
+					self.drx = drx
+					self.dry = dry
+					self.drz = drz
 					found = True
 					break
 				line = f.readline()
