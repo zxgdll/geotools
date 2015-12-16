@@ -16,7 +16,7 @@ SHIFT_FILE = '../share/NAD83v6VG.tif'
 
 # Convert from arcsec to radians.
 def _sec2rad(x):
-	return x * 4.8481368 / 1000000000.
+	return x * 4.84813681 / 1000000000.
 
 # Convert from radians to degrees.
 def _deg(x):
