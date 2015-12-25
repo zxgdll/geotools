@@ -60,3 +60,4 @@ bin
 .cproject
 .project
 .pydevproject
+*.tif.aux.xml
