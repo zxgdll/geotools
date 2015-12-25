@@ -205,16 +205,20 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 				std::cout << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
 
 				// Load the overlay.
-				imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid + addrOffset), cols, bufRows0, 
+				CPLErr err = imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid + addrOffset), cols, bufRows0,
 					GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+				if(err != CPLE_None)
+					throw "Failed to read raster.";
 
 				std::cout << "Feathering" << std::endl;
 				// Feather the overlay
 				feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, imTrans[1]);
 
 				// Read background data.
-				outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid + addrOffset), cols, bufRows0, 
+				err = outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid + addrOffset), cols, bufRows0,
 					GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+				if(err != CPLE_None)
+					throw "Failed to read raster.";
 
 				std::cout << "Blending" << std::endl;
 				// Blend the overlay into the output.
@@ -222,8 +226,10 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 
 				// Write back to the output.
 				// We are extracting a slice out of the buffer, not writing the whole thing.
-				outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid + addrOffset + rowOffset0 * cols), cols, rowHeight0, 
+				err = outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid + addrOffset + rowOffset0 * cols), cols, rowHeight0,
 					GDT_Float32, 1, NULL, 0, 0, 0, NULL);
+				if(err != CPLE_None)
+					throw "Failed to write raster.";
 			}
 
 			free(imGrid);
