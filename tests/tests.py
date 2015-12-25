@@ -1,13 +1,13 @@
+#!/usr/bin/env python
 
 import sys
 import os
+import subprocess
 
 sys.path.append(os.path.realpath('../scripts'))
 os.environ['PATH'] += os.pathsep + os.path.realpath('../bin')
 
 def test():
-    
-    import nad83csrs as n
     
     tests = [
             ('itrf88', 1986., 2011., 26912, 2956, 470000.000, 6520000.000, 200.000, 470000.800, 6519999.074, 200.431), 
@@ -32,11 +32,13 @@ def test():
     for test in tests:
         
         ffrom, efrom, eto, fsrid, tsrid, x0, y0, z0, x1, y1, z1 = test
-        t = n.Transformer(ffrom, efrom, eto, fsrid, tsrid)
-        x2, y2, z2, bounds = t.transformPoints([x0], [y0], [z0])
-        print 'input: %f %f %f; output: %f %f %f; expected: %f %f %f' % (x0, y0, z0, x2[0], y2[0], z2[0], x1, y1, z1)
-        if rnd(x1) != rnd(x2[0]) or rnd(y1) != rnd(y2[0]) or rnd(z1) != rnd(z2[0]):
-            print 'Failed'
+        params = map(str, test[:8])
+        p = subprocess.Popen(['las2csrs', 'test'] + params, stdout=subprocess.PIPE)
+        stdout, stderr = p.communicate()
+        x2, y2, z2 = map(float, stdout.split())
+        print 'input: %f %f %f; output: %f %f %f; expected: %f %f %f' % (x0, y0, z0, x2, y2, z2, x1, y1, z1)
+        if rnd(x1) != rnd(x2) or rnd(y1) != rnd(y2) or rnd(z1) != rnd(z2):
+            print 'Failed', test
         else:
             print 'Passed'
  

@@ -30,6 +30,12 @@ lasgrid:
 lasgrid_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g lasgrid.cpp $(LIB) -llas -lgdal -lboost_system -o ../bin/lasgrid
 	
+las2csrs:
+	$(CPP) $(CXXFLAGS) -Wall -O3 las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
+
+las2csrs_debug:
+	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
+	
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips
 
