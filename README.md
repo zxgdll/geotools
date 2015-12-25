@@ -12,7 +12,7 @@ This is a c++ program that transforms a point cloud in LAS format from any ITRF 
 
 This is a simple program that grids one or more LAS files into a GeoTiff. The user can select the classes, and a number of methods, such as mean, min, max, stddev, density, etc.
 
-# lasstats
+## lasstats
 
 This program computes zonal statistics from a point cloud in LAS format from either a collection of polygons in Shapefile format, or from a classification raster. If a Shapefile is used, each polygon is updated with columns for the statistics. If a raster is used (it must be the Byte type), statistics are computed for each unique cell value and output as a CSV file.
 
