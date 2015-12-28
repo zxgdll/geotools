@@ -13,7 +13,9 @@ public:
 	 * array to contain the result. If the dims argument is 2, the
 	 * horizontal coords are considered and if it's 3, all coords are.
 	 */
-	static void computeLasBounds(las::Header &hdr, double *bounds, int dims) {
+	static bool computeLasBounds(las::Header &hdr, double *bounds, int dims) {
+		if((dims != 2 && dims != 3) || hdr.GetMaxX() == hdr.GetMinX() || hdr.GetMaxY() == hdr.GetMinY())
+			return false;
 		if(dims == 2 or dims == 3) {
 			if(hdr.GetMinX() < bounds[0]) bounds[0] = hdr.GetMinX();
 			if(hdr.GetMinY() < bounds[1]) bounds[1] = hdr.GetMinY();
@@ -24,6 +26,34 @@ public:
 			if(hdr.GetMinZ() < bounds[4]) bounds[5] = hdr.GetMinZ();
 			if(hdr.GetMaxZ() > bounds[5]) bounds[5] = hdr.GetMaxZ();
 		}
+		return true;
+	}
+
+	/**
+	 * Compute the bounds of a LAS file using the Reader and a double
+	 * array to contain the result. If the dims argument is 2, the
+	 * horizontal coords are considered and if it's 3, all coords are.
+	 * Use this method when the header bounds are bogus (it iterates over all the points.
+	 */
+	static bool computeLasBounds(las::Reader &rdr, double *bounds, int dims) {
+		if(dims != 2 && dims != 3)
+			return false;
+		double x, y, z;
+		while(rdr.ReadNextPoint()) {
+			las::Point pt = rdr.GetPoint();
+			x = pt.GetX();
+			y = pt.GetY();
+			if(x < bounds[0]) bounds[0] = x;
+			if(y < bounds[1]) bounds[1] = y;
+			if(x > bounds[2]) bounds[2] = x;
+			if(y > bounds[3]) bounds[3] = y;
+			if(dims == 3) {
+				z = pt.GetZ();
+				if(z < bounds[4]) bounds[4] = z;
+				if(z > bounds[5]) bounds[5] = z;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -117,6 +147,10 @@ public:
 	 */
 	static bool inList(std::set<int> &values, int value) {
 		return values.size() == 0 || values.find(value) != values.end();
+	}
+
+	static bool inList(std::vector<int> &values, int value) {
+		return std::find(values.begin(), values.end(), value) != values.end();
 	}
 
 };
