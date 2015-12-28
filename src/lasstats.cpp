@@ -25,6 +25,8 @@
 #include <ogrsf_frmts.h>
 #include <gdal_priv.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include <geos/geom/GeometryCollection.h>
 #include <geos/geom/GeometryFactory.h>
 #include <geos/geom/Geometry.h>
@@ -40,6 +42,11 @@
 
 namespace las = liblas;
 namespace geom = geos::geom;
+namespace alg = boost::algorithm;
+
+#define RASTER 1
+#define VECTOR 2
+#define CSV 3
 
 /**
  * Squares a double.
@@ -75,6 +82,33 @@ public:
 		init();
 		_ptClass = ptClass;
 		_cellId = cellId;
+	}
+
+	static int numBands(int numQuantiles) {
+		return 8 + numQuantiles + 2; // plus 2 for the 0th and nth.
+	}
+
+	static void bandNames(std::string *names, int numQuantiles) {
+		std::string n[8] = {"count", "sum", "min", "max", "mean", "median", "variance", "stddev"};
+		for(int i = 0; i < 8; ++i)
+			names[i] = n[i];
+		for(int i = 0; i < numQuantiles + 2; ++i)
+			names[i + 8] = "q" + i;
+	}
+
+	void bandValues(double *values, int numQuantiles) {
+		values[0] = this->count();
+		values[1] = this->sum();
+		values[2] = this->min();
+		values[3] = this->max();
+		values[4] = this->mean();
+		values[5] = this->median();
+		values[6] = this->variance();
+		values[7] = this->stddev();
+		double q[numQuantiles];
+		quantiles(q, numQuantiles);
+		for(int i = 0; i < numQuantiles + 2; ++i)
+			values[i + 8] = q[i];
 	}
 
 	/**
@@ -278,7 +312,7 @@ private:
 };
 
 void doVector(std::string &shapefile, std::string &outfile, std::string &layername,
-		std::vector<std::string> &files, std::set<int> &classes, int numQuantiles) {
+		std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType) {
 
 	const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
 	const geom::GeometryFactory *gf = geom::GeometryFactory::getDefaultInstance();
@@ -457,7 +491,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 }
 
 void doRaster(std::string &raster, std::string &outfile, int band,
-		std::vector<std::string> &files, std::set<int> &classes, int numQuantiles) {
+		std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType) {
 
 	GDALDataset *ds = (GDALDataset *) GDALOpen(raster.c_str(), GA_ReadOnly);
 	if(ds == NULL)
@@ -471,6 +505,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 	int rows = ds->GetRasterYSize();
 	double trans[6];
 	ds->GetGeoTransform(trans);
+	const char *proj = ds->GetProjectionRef();
 
 	double minx = trans[0];
 	double maxy = trans[3];
@@ -530,48 +565,99 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 		throw ex;
 	}
 
-	free(grid);
+	if(outType == CSV) {
 
-	std::stringstream head;
-	head << "id,cls,count,sum,min,max,mean,median,variance,stddev";
-	for(int i = 0; i < numQuantiles + 2; ++i)
-		head << ",q" << i;
-	head << std::endl;
+		std::stringstream head;
+		head << "id,cls,count,sum,min,max,mean,median,variance,stddev";
+		for(int i = 0; i < numQuantiles + 2; ++i)
+			head << ",q" << i;
+		head << std::endl;
 
-	std::ofstream out;
-	out.open(outfile.c_str());
-	out << head.str();
-	out << std::setprecision(9);
+		std::ofstream out;
+		out.open(outfile.c_str());
+		out << head.str();
+		out << std::setprecision(9);
 
-	double quantiles[numQuantiles > 0 ? numQuantiles + 2 : 0];
+		double quantiles[numQuantiles > 0 ? numQuantiles + 2 : 0];
 
-	for(std::map<int, std::map<int, Stat*> >::iterator it = stats.begin(); it != stats.end(); ++it) {
-		for(std::map<int, Stat*>::iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
-			int id = it->first;
-			int cls = it2->first;
-			Stat *st = it2->second;
-			out << id << "," << cls << "," << st->count() << "," << st->sum() << ","
-				<< st->min() << "," << st->max() << "," << st->mean() << ","
-				<< st->median() << "," << st->variance() << "," << st->stddev();
-			if(numQuantiles > 0) {
-				st->quantiles(quantiles, numQuantiles);
-				for(int i = 0; i < numQuantiles + 2; ++i)
-					 out << "," << quantiles[i];
+		for(std::map<int, std::map<int, Stat*> >::iterator it = stats.begin(); it != stats.end(); ++it) {
+			for(unsigned int c = 0; c < classes.size(); ++c) {
+				int id = it->first;
+				int cls = classes[c];
+				Stat *st = stats[id][cls];
+				out << id << "," << cls << "," << st->count() << "," << st->sum() << ","
+					<< st->min() << "," << st->max() << "," << st->mean() << ","
+					<< st->median() << "," << st->variance() << "," << st->stddev();
+				if(numQuantiles > 0) {
+					st->quantiles(quantiles, numQuantiles);
+					for(int i = 0; i < numQuantiles + 2; ++i)
+						 out << "," << quantiles[i];
+				}
+				out << std::endl;
+				delete st;
 			}
-			out << std::endl;
-			delete st;
 		}
+
+		out.close();
+
+	} else if(outType == RASTER) {
+
+		int numBands = Stat::numBands(numQuantiles);
+		std::string bandNames[numBands];
+		Stat::bandNames(bandNames, numQuantiles);
+		double values[numBands];
+
+		int numRasterBands = numBands * classes.size();
+		GDALDriver *drv = GetGDALDriverManager()->GetDriverByName("GTiff");
+		GDALDataset *dst = drv->Create(outfile.c_str(), cols, rows, numRasterBands, GDT_Float32, NULL);
+		GDALRasterBand *band = NULL;
+
+		dst->SetGeoTransform(trans);
+		dst->SetProjection(proj);
+
+		float *fgrid = (float *) malloc(cols * rows * sizeof(float));
+		try {
+			for(std::map<int, std::map<int, Stat *> >::iterator it = stats.begin(); it != stats.end(); ++it) {
+				for(unsigned int c = 0; c < classes.size(); ++c) {
+					int id = it->first;
+					int cls = classes[c];
+					Stat *st = stats[id][cls];
+					st->bandValues(values, numQuantiles);
+					for(int b = 0; b < numBands; ++b) {
+						band = dst->GetRasterBand((c * numBands) + (b + 1));
+						if(band == NULL)
+							throw "Failed to retrieve raster band.";
+						if(0 != band->RasterIO(GF_Read, 0, 0, cols, rows, fgrid, cols, rows, GDT_Float32, 0, 0, NULL))
+							throw "Failed to read band raster.";
+						for(int i = 0; i < rows * cols; ++i) {
+							if(id == grid[i]) {
+								fgrid[i] = values[b];
+							}
+						}
+						if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, fgrid, cols, rows, GDT_Float32, 0, 0, NULL))
+							throw "Failed to write band raster.";
+					}
+					delete st;
+				}
+			}
+		} catch(char *e) {
+			free(fgrid);
+			throw e;
+		} catch(...) {
+			free(fgrid);
+			throw "Unknown exception.";
+		}
+		free(fgrid);
 	}
 
-	out.close();
-
+	free(grid);
 }
 
 // TODO: If shapefile not given, computes stats for the entire point cloud.
 void usage() {
 	std::cerr << "Produces a zonal stats style output for points within polygons or a raster." << std::endl;
 	std::cerr << "Usage: lasstats [options] lasfiles*" << std::endl;
-	std::cerr << " -o Speficy an output file." << std::endl;
+	std::cerr << " -o Speficy an output file. This can be a shapefile (shp), a raster (tif) or a csv (csv)." << std::endl;
 	std::cerr << " -s Specify a shapefile. Stats are computed for each polygon." << std::endl;
 	std::cerr << " -r Specify a raster file. Stats are computed for each unique cell ID." << std::endl;
 	std::cerr << " -l Specify a layer (shapefile only.)" << std::endl;
@@ -582,36 +668,34 @@ void usage() {
 	std::cerr << " -q If specified, is the number of quantiles to compute. Default 4." << std::endl;
 }
 
-#define RASTER 1
-#define VECTOR 2
-
 int main(int argc, char ** argv) {
 
 	std::vector<std::string> files;
 	std::string outfile;
 	std::string infile;
-	int type = 0;
+	int inType = 0;
+	int outType = 0;
 	std::string layername;
 	int band = 1;
 	int numQuantiles = 4;
-	std::set<int> classes;
+	std::set<int> classSet;
 
 	for(int i=1;i<argc;++i) {
 		std::string arg(argv[i]);
 		if(arg == "-s") {
 			infile.assign(argv[++i]);
-			type = VECTOR;
+			inType = VECTOR;
 		} else if(arg == "-o") {
 			outfile.assign(argv[++i]);
 		} else if(arg == "-c") {
-			Util::intSplit(classes, argv[++i]);
+			Util::intSplit(classSet, argv[++i]);
 		} else if(arg == "-l") {
 			layername.assign(argv[++i]);
 		} else if(arg == "-r") {
 			infile.assign(argv[++i]);
-			if(type != 0)
+			if(inType != 0)
 				throw "Raster and vector are mutually exclusive.";
-			type = RASTER;
+			inType = RASTER;
 		} else if(arg == "-b") {
 			band = atoi(argv[++i]);
 		} else if(arg == "-q") {
@@ -621,13 +705,31 @@ int main(int argc, char ** argv) {
 		}
 	}
 
+	std::vector<int> classes(classSet.size());
+	std::copy(classSet.begin(), classSet.end(), classes.begin());
+	std::sort(classes.begin(), classes.end());
+
+	std::string tmpout(outfile);
+	std::transform(tmpout.begin(), tmpout.end(), tmpout.begin(), ::tolower);
+	if(alg::ends_with(tmpout, ".shp")) {
+		outType = VECTOR;
+	} else if(alg::ends_with(tmpout, ".csv")) {
+		outType = CSV;
+	} else if(alg::ends_with(tmpout, ".tif")) {
+		outType = RASTER;
+	} else {
+		std::cerr << "There are three allowed output types: .shp, .tif and .csv." << std::endl;
+		usage();
+		return 1;
+	}
+
 	if(outfile.empty()) {
 		std::cerr << "An output file (-o) is required." << std::endl;
 		usage();
 		return 1;
 	}
 
-	if((type != RASTER && type != VECTOR) || infile.empty()) {
+	if((inType != RASTER && inType != VECTOR) || infile.empty()) {
 		std::cerr << "A shape file (-s) or raster (-r) is required, but not both." << std::endl;
 		usage();
 		return 1;
@@ -662,10 +764,10 @@ int main(int argc, char ** argv) {
 
 	int ret = 1;
 	try {
-		if(type == RASTER) {
-			doRaster(infile, outfile, band, files, classes, numQuantiles);
+		if(inType == RASTER) {
+			doRaster(infile, outfile, band, files, classes, numQuantiles, outType);
 		} else {
-			doVector(infile, outfile, layername, files, classes, numQuantiles);
+			doVector(infile, outfile, layername, files, classes, numQuantiles, outType);
 		}
 		ret = 0;
 	} catch(const char *e) {
