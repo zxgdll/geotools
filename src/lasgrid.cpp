@@ -208,7 +208,8 @@ int main(int argc, char **argv) {
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 		double bounds0[] = { FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX };
-		Util::computeLasBounds(h, bounds0, 2);
+		if(!Util::computeLasBounds(h, bounds0, 2))
+			Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 		in.close();
 		// If bounds are given, ignore blocks that do not intersect.
 		if(hasBounds) {
