@@ -20,7 +20,7 @@ The user may select which point classes are considered, but this behaviour is di
 
 This program enables the user to develop something like this, where the x-axis is cell IDs, and the y-axis is canopy height.
 
-[![Canopy height quartiles.](http://dijital.ca/files/classify/output_tn2.png)](http://dijital.ca/files/classify/output.png)
+[![Canopy height quartiles.](http://dijital.ca/files/geotools/lasstats.jpg)](http://dijital.ca/files/geotools/lasstats.html)
 
 ## gvb2tif.py
 
