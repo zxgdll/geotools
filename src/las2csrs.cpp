@@ -589,12 +589,15 @@ int main(int argc, char **argv) {
 
 	} catch(const std::exception &err) {
 		std::cerr << err.what() << std::endl;
+		usage();
 		return 1;
 	} catch(const std::string &err) {
 		std::cerr << err << std::endl;
+		usage();
 		return 1;
 	} catch(...) {
 		std::cerr << "An unknown exception occurred." << std::endl;
+		usage();
 		return 1;
 	}
 
