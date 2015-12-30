@@ -514,55 +514,47 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 
 	std::map<int, std::map<int, Stat * > > stats;
 
-	char *grid = (char *) malloc(cols * rows * sizeof(char));
-	if(!grid)
-		throw "Failed to allocate grid.";
+	Grid<char> dg(cols, rows);
 
-	try {
-		CPLErr err = b->RasterIO(GF_Read, 0, 0, cols, rows, grid, cols, rows, GDT_Byte, 0, 0, NULL);
-		if(0 != err)
-			throw "Failed to read from classification raster.";
+	if(0 != b->RasterIO(GF_Read, 0, 0, cols, rows, dg.grid(), cols, rows, GDT_Byte, 0, 0, NULL))
+		throw "Failed to read from classification raster.";
 
-		// Iterate over LAS files, process each one.
-		las::ReaderFactory rf;
-		std::cerr << "Processing files." << std::endl;
-		for(unsigned int i = 0; i < files.size(); ++i) {
+	// Iterate over LAS files, process each one.
+	las::ReaderFactory rf;
+	std::cerr << "Processing files." << std::endl;
+	for(unsigned int i = 0; i < files.size(); ++i) {
 
-			std::ifstream in(files[i].c_str(), std::ios::in | std::ios::binary);
-			las::Reader r = rf.CreateWithStream(in);
-			las::Header h = r.GetHeader();
+		std::ifstream in(files[i].c_str(), std::ios::in | std::ios::binary);
+		las::Reader r = rf.CreateWithStream(in);
+		las::Header h = r.GetHeader();
 
-			std::cout << "Processing file " << files[i]<< std::endl;
+		std::cout << "Processing file " << files[i]<< std::endl;
 
-			int cls;
-			while(r.ReadNextPoint()) {
-				las::Point pt = r.GetPoint();
+		int cls;
+		while(r.ReadNextPoint()) {
+			las::Point pt = r.GetPoint();
 
-				if(!Util::inList(classes, (cls = pt.GetClassification().GetClass())))
-					continue;
+			if(!Util::inList(classes, (cls = pt.GetClassification().GetClass())))
+				continue;
 
-				double x = pt.GetX();
-				double y = pt.GetY();
-				double z = pt.GetZ();
+			double x = pt.GetX();
+			double y = pt.GetY();
+			double z = pt.GetZ();
 
-				if(x < minx || x > maxx || y < miny || y > maxy)
-					continue;
+			if(x < minx || x > maxx || y < miny || y > maxy)
+				continue;
 
-				int c = (int) ((x - minx) / (maxx - minx) * cols);
-				int r = (int) ((maxy - y) / (maxy - miny) * rows);
-				int val = (int) grid[r * cols + c];
+			int c = (int) ((x - minx) / (maxx - minx) * cols);
+			int r = (int) ((maxy - y) / (maxy - miny) * rows);
+			int val = (int) dg(c, r);
 
-				Stat *st = stats[val][cls];
-				if(st == NULL)
-					st = stats[val][cls] = new Stat(val, cls);
-				st->add(z);
-			}
-
-			in.close();
+			Stat *st = stats[val][cls];
+			if(st == NULL)
+				st = stats[val][cls] = new Stat(val, cls);
+			st->add(z);
 		}
-	} catch (void *ex) {
-		free(grid);
-		throw ex;
+
+		in.close();
 	}
 
 	if(outType == CSV) {
@@ -615,42 +607,32 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 		dst->SetGeoTransform(trans);
 		dst->SetProjection(proj);
 
-		float *fgrid = (float *) malloc(cols * rows * sizeof(float));
-		try {
-			for(std::map<int, std::map<int, Stat *> >::iterator it = stats.begin(); it != stats.end(); ++it) {
-				for(unsigned int c = 0; c < classes.size(); ++c) {
-					int id = it->first;
-					int cls = classes[c];
-					Stat *st = stats[id][cls];
-					st->bandValues(values, numQuantiles);
-					for(int b = 0; b < numBands; ++b) {
-						band = dst->GetRasterBand((c * numBands) + (b + 1));
-						if(band == NULL)
-							throw "Failed to retrieve raster band.";
-						if(0 != band->RasterIO(GF_Read, 0, 0, cols, rows, fgrid, cols, rows, GDT_Float32, 0, 0, NULL))
-							throw "Failed to read band raster.";
-						for(int i = 0; i < rows * cols; ++i) {
-							if(id == grid[i]) {
-								fgrid[i] = values[b];
-							}
-						}
-						if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, fgrid, cols, rows, GDT_Float32, 0, 0, NULL))
-							throw "Failed to write band raster.";
+		Grid<float> fg(cols, rows);
+
+		for(std::map<int, std::map<int, Stat *> >::iterator it = stats.begin(); it != stats.end(); ++it) {
+			for(unsigned int c = 0; c < classes.size(); ++c) {
+				int id = it->first;
+				int cls = classes[c];
+				Stat *st = stats[id][cls];
+				st->bandValues(values, numQuantiles);
+				for(int b = 0; b < numBands; ++b) {
+					band = dst->GetRasterBand((c * numBands) + (b + 1));
+					if(band == NULL)
+						throw "Failed to retrieve raster band.";
+					if(0 != band->RasterIO(GF_Read, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0, NULL))
+						throw "Failed to read band raster.";
+					for(int i = 0; i < rows * cols; ++i) {
+						if(id == dg[i])
+							fg[i] = values[b];
 					}
-					delete st;
+					if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0, NULL))
+						throw "Failed to write band raster.";
 				}
+				delete st;
 			}
-		} catch(char *e) {
-			free(fgrid);
-			throw e;
-		} catch(...) {
-			free(fgrid);
-			throw "Unknown exception.";
 		}
-		free(fgrid);
 	}
 
-	free(grid);
 }
 
 // TODO: If shapefile not given, computes stats for the entire point cloud.
