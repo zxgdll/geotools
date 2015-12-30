@@ -12,6 +12,8 @@
 #include <gdal.h>
 #include <cpl_conv.h> // for CPLMalloc()
 
+#include "Util.hpp"
+
 #define PI 3.14159265358979323846
 #define LAS2CSRS_DATA "LAS2CSRS_DATA"
 
@@ -87,45 +89,35 @@ public:
 		GDALAllRegister();
 		GDALDataset *ds;
 		GDALRasterBand *xband, *yband, *zband;
-		transform = (double *) malloc(6 * sizeof(double));
+
 		ds = (GDALDataset *) GDALOpen(path, GA_ReadOnly);
 		if(!ds)
 			throw "Failed to load shift grid.";
+
 		xband = ds->GetRasterBand(1);
 		yband = ds->GetRasterBand(2);
 		zband = ds->GetRasterBand(3);
-		if(!xband || !yband || !zband) {
-			GDALClose(ds);
+		if(!xband || !yband || !zband)
 			throw "Failed to retrieve shift bands.";
-		}
+
 		width = xband->GetXSize();
 		height = yband->GetYSize();
-		if(width <= 0 || height <= 0) {
-			GDALClose(ds);
+		if(width <= 0 || height <= 0)
 			throw "The dimensions of the shift grid are invalid.";
-		}
-		xgrid = (float *) malloc((unsigned long) (width * height * sizeof(float)));
-		ygrid = (float *) malloc((unsigned long) (width * height * sizeof(float)));
-		zgrid = (float *) malloc((unsigned long) (width * height * sizeof(float)));
-		if(!xgrid || !ygrid || !zgrid) {
-			free(xgrid);
-			free(ygrid);
-			free(zgrid);
-			GDALClose(ds);
-			throw "Failed to initialize shift grids.";
-		}
-		CPLErr xe = xband->RasterIO(GF_Read, 0, 0, width, height, xgrid, width, height, GDT_Float32, 0, 0);
-		CPLErr ye = yband->RasterIO(GF_Read, 0, 0, width, height, ygrid, width, height, GDT_Float32, 0, 0);
-		CPLErr ze = zband->RasterIO(GF_Read, 0, 0, width, height, zgrid, width, height, GDT_Float32, 0, 0);
-		if(xe == CE_Failure || ye == CE_Failure || ze == CE_Failure) {
-			free(xgrid);
-			free(ygrid);
-			free(zgrid);
-			GDALClose(ds);
+
+		xg.init(width, height);
+		yg.init(width, height);
+		zg.init(width, height);
+
+		CPLErr xe = xband->RasterIO(GF_Read, 0, 0, width, height, xg.grid(), width, height, GDT_Float32, 0, 0);
+		CPLErr ye = yband->RasterIO(GF_Read, 0, 0, width, height, yg.grid(), width, height, GDT_Float32, 0, 0);
+		CPLErr ze = zband->RasterIO(GF_Read, 0, 0, width, height, zg.grid(), width, height, GDT_Float32, 0, 0);
+
+		if(xe == CE_Failure || ye == CE_Failure || ze == CE_Failure)
 			throw "Failed to read shift grid.";
-		}
-		ds->GetGeoTransform(transform);
-		GDALClose(ds);
+
+		tg.init(6, 1);
+		ds->GetGeoTransform(tg.grid());
 	}
 
 	/**
@@ -136,8 +128,8 @@ public:
 		double c, r;
 		int c0, c1, r0, r1;
 		for(;count;--count, ++x, ++y, ++dx, ++dy, ++dz) {
-			c = ((_deg(*x) - transform[0]) / transform[1]);
-			r = ((_deg(*y) - transform[3]) / transform[5]);
+			c = ((_deg(*x) - tg[0]) / tg[1]);
+			r = ((_deg(*y) - tg[3]) / tg[5]);
 			c0 = (int) c;
 			r0 = (int) r;
 			c1 = c0 + 1;
@@ -146,25 +138,20 @@ public:
 			if(r0 < 0) r0 = 0;
 			if(c1 >= width) c1 = width-1;
 			if(r1 >= height) r1 = height-1;
-			*dx = _binterp(xgrid, c, r, c0, r0, c1, r1, width) / 1000.0;
-			*dy = _binterp(ygrid, c, r, c0, r0, c1, r1, width) / 1000.0;
-			*dz = _binterp(zgrid, c, r, c0, r0, c1, r1, width) / 1000.0;
+			*dx = _binterp(xg.grid(), c, r, c0, r0, c1, r1, width) / 1000.0;
+			*dy = _binterp(yg.grid(), c, r, c0, r0, c1, r1, width) / 1000.0;
+			*dz = _binterp(zg.grid(), c, r, c0, r0, c1, r1, width) / 1000.0;
 		}
 	}
 
 	~ShiftGrid() {
-		free(xgrid);
-		free(ygrid);
-		free(zgrid);
-		free(transform);
 	}
 
 private:
-
-	float *xgrid;
-	float *ygrid;
-	float *zgrid;
-	double *transform;
+	Grid<float> xg;
+	Grid<float> yg;
+	Grid<float> zg;
+	Grid<double> tg;
 	int width;
 	int height;
 };
@@ -204,85 +191,78 @@ public:
 	 * count   -- The number of coordinates.
 	 * bounds  -- The bounds of the transformed coordinate list.
 	 */
-	void transformPoints(double *x, double *y, double *z, int count, double bounds[6]) {
+	void transformPoints(Grid<double> &x, Grid<double> &y, Grid<double> &z, int count, double bounds[6]) {
 
 		// Project to Cartesian 3D. (c)
-		pj_transform(p1, p2, count, 1, x, y, z);
+		pj_transform(p1, p2, count, 1, x.grid(), y.grid(), z.grid());
 
 		// Transform to csrs using Helmert (etc.) params. (c)
-		epochTransform(x, y, z, count, this->efrom - 1997.0);
+		epochTransform(x.grid(), y.grid(), z.grid(), count, this->efrom - 1997.0);
 
 		// Only use the grid shift if the epoch changes.
 		if(efrom != eto) {
 
 			// Copy the coordinate arrays for transformation.
-			double *x0 = (double *) malloc(sizeof(double) * count);
-			double *y0 = (double *) malloc(sizeof(double) * count);
-			double *z0 = (double *) malloc(sizeof(double) * count);
-			memcpy(x0, x, sizeof(double) * count);
-			memcpy(y0, y, sizeof(double) * count);
-			memcpy(z0, z, sizeof(double) * count);
+			Grid<double> x0(count, 1);
+			Grid<double> y0(count, 1);
+			Grid<double> z0(count, 1);
+			memcpy(x0.grid(), x.grid(), sizeof(double) * count);
+			memcpy(y0.grid(), y.grid(), sizeof(double) * count);
+			memcpy(z0.grid(), z.grid(), sizeof(double) * count);
 
 			// Initalize shift arrays.
-			double *dx = (double *) malloc(sizeof(double) * count);
-			double *dy = (double *) malloc(sizeof(double) * count);
-			double *dz = (double *) malloc(sizeof(double) * count);
+			Grid<double> dx(count, 1);
+			Grid<double> dy(count, 1);
+			Grid<double> dz(count, 1);
 			
 			// Transform to latlon. (b)
-			pj_transform(p2, p4, count, 1, x0, y0, z0);
+			pj_transform(p2, p4, count, 1, x0.grid(), y0.grid(), z0.grid());
 			
 			// Interpolate shifts using latlon coords -- returns in mm. (d)
-			shiftGrid.interpolate(x0, y0, dx, dy, dz, count);
+			shiftGrid.interpolate(x0.grid(), y0.grid(), dx.grid(), dy.grid(), dz.grid(), count);
 			
 			// Transform mm shifts to latlon
-			double *dlat = (double *) malloc(sizeof(double) * count);
-			double *dlon = (double *) malloc(sizeof(double) * count);
+			Grid<double> dlat(count, 1);
+			Grid<double> dlon(count, 1);
+
 			// Get projection's spheroid props.
 			double a, e2;
 			pj_get_spheroid_defn(p4, &a, &e2);
 			// Change the shift distance in projected coords to latlon.
 			// This avoids the scale distortion associated with projection.
-			_shift2latlon(dx, dy, y0, z0, a, e2, count, dlat, dlon);
-			free(dx);
-			free(dy);
+			_shift2latlon(dx.grid(), dy.grid(), y0.grid(), z0.grid(), a, e2, count, dlat.grid(), dlon.grid());
 
 			double dt = this->eto - this->efrom;
 			// Apply shifts to latlon coords.
 			for(int i = 0; i < count; ++i) {
-				*(x0 + i) += *(dlon + i) * dt;
-				*(y0 + i) += *(dlat + i) * dt;
-				*(z0 + i) += *(dz + i) * dt;
+				*(x0.grid() + i) += *(dlon.grid() + i) * dt;
+				*(y0.grid() + i) += *(dlat.grid() + i) * dt;
+				*(z0.grid() + i) += *(dz.grid() + i) * dt;
 			}
-			free(dlat);
-			free(dlon);
-			free(dz);
 			
 			// Transform latlon to target proj
-			pj_transform(p4, p3, count, 1, x0, y0, z0);
+			pj_transform(p4, p3, count, 1, x0.grid(), y0.grid(), z0.grid());
 			
 			// Assign the shifted coords to the output arrays.
-			memcpy(x, x0, sizeof(double) * count);
-			memcpy(y, y0, sizeof(double) * count);
-			memcpy(z, z0, sizeof(double) * count);
-			free(x0);
-			free(y0);
-			free(z0);
+			memcpy(x.grid(), x0.grid(), sizeof(double) * count);
+			memcpy(y.grid(), y0.grid(), sizeof(double) * count);
+			memcpy(z.grid(), z0.grid(), sizeof(double) * count);
 
 		} else {
 
 			// Reproject to the dest coordinates
-			pj_transform(p2, p3, count, 1, x, y, z);
+			pj_transform(p2, p3, count, 1, x.grid(), y.grid(), z.grid());
 
 		}
 
 		// Expand the bounds for the new header.
-		for(;count;--count, ++x, ++y, ++z) {
-			if(*x < bounds[0]) bounds[0] = *x;
-			if(*x > bounds[1]) bounds[1] = *x;
-			if(*y < bounds[2]) bounds[2] = *y;
-			if(*y > bounds[3]) bounds[3] = *y;
-			if(*z < bounds[4]) bounds[4] = *z;
-			if(*z > bounds[5]) bounds[5] = *z;
+		for(int i = 0; i < count; ++i) {
+			if(x[i] < bounds[0]) bounds[0] = x[i];
+			if(x[i] > bounds[1]) bounds[1] = x[i];
+			if(y[i] < bounds[2]) bounds[2] = y[i];
+			if(y[i] > bounds[3]) bounds[3] = y[i];
+			if(z[i] < bounds[4]) bounds[4] = z[i];
+			if(z[i] > bounds[5]) bounds[5] = z[i];
 		}			
 	}
 
@@ -308,7 +288,6 @@ public:
 		}
 
 		// Get the list of las files.
-		// TODO: Ignore completed files.
 		std::list<fs::path> files;
 		if(fs::is_regular_file(src)) {
 			if(overwrite || !fs::exists(dst / src.leaf()))
@@ -353,16 +332,16 @@ public:
 
 			int count = h.GetPointRecordsCount();
 
-			double *x = (double *) malloc(sizeof(double) * count);
-			double *y = (double *) malloc(sizeof(double) * count);
-			double *z = (double *) malloc(sizeof(double) * count);
+			Grid<double> x(count, 1);
+			Grid<double> y(count, 1);
+			Grid<double> z(count, 1);
 
 			// Iterate over the points.
 			for(int i = 0; r.ReadNextPoint(); ++i) {
 				las::Point pt = r.GetPoint();
-				*(x + i) = pt.GetX();
-				*(y + i) = pt.GetY();
-				*(z + i) = pt.GetZ();
+				*(x.grid() + i) = pt.GetX();
+				*(y.grid() + i) = pt.GetY();
+				*(z.grid() + i) = pt.GetZ();
 			}
 
 			// Transform the points in-place.
@@ -378,9 +357,9 @@ public:
 			r.Reset();
 			for(int i = 0; r.ReadNextPoint(); ++i) {
 				las::Point pt = r.GetPoint();
-				pt.SetX(*(x + i));
-				pt.SetY(*(y + i));
-				pt.SetZ(*(z + i));
+				pt.SetX(*(x.grid() + i));
+				pt.SetY(*(y.grid() + i));
+				pt.SetZ(*(z.grid() + i));
 				// Write to the output
 				w.WritePoint(pt);
 			}
@@ -458,24 +437,24 @@ private:
 		if(!fsrid || !tsrid)
 			throw "SRIDs are not set.";
 		char str[128];
-		sprintf(str, "+init=EPSG:%u", fsrid);
+		sprintf(str, "+init=epsg:%u", fsrid);
 		p1 = pj_init_plus(str);
 		if(!p1) {
 			const char *err = pj_strerrno(pj_errno);
 			throw err;
 		}
-		sprintf(str, "+init=EPSG:%u", tsrid);
+		sprintf(str, "+init=epsg:%u", tsrid);
 		p3 = pj_init_plus(str);
 		if(!p3){
 			const char *err = pj_strerrno(pj_errno);
 			throw err;
 		}
-		p2 = pj_init_plus("+init=EPSG:4978");
+		p2 = pj_init_plus("+init=epsg:4978");
 		if(!p2){
 			const char *err = pj_strerrno(pj_errno);
 			throw err;
 		}
-		p4 = pj_init_plus("+init=EPSG:4326");
+		p4 = pj_init_plus("+init=epsg:4326");
 		if(!p4){
 			const char *err = pj_strerrno(pj_errno);
 			throw err;
@@ -552,9 +531,13 @@ int test(int argc, char **argv) {
 
 	Transformer trans(ffrom, efrom, eto, fsrid, tsrid);
 
-	double xx[1] = {x};
-	double yy[1] = {y};
-	double zz[1] = {z};
+	Grid<double> xx(1,1);
+	Grid<double> yy(1,1);
+	Grid<double> zz(1,1);
+
+	xx[0] = x;
+	yy[0] = y;
+	zz[0] = z;
 	double bounds[6];
 
 	trans.transformPoints(xx, yy, zz, 1, bounds);
@@ -579,7 +562,7 @@ int main(int argc, char **argv) {
 	bool overwrite = false;
 	try {
 
-		int i = 0;
+		int i = 1;
 		for(; i < argc; ++i) {
 			std::string arg(argv[i]);
 			if(arg.c_str()[0] != '-') {
@@ -589,7 +572,7 @@ int main(int argc, char **argv) {
 			}
 		}
 
-		std::string srcfile(argv[++i]);
+		std::string srcfile(argv[i]);
 		std::string dstdir(argv[++i]);
 		std::string ffrom(argv[++i]);
 		double efrom = atof(argv[++i]);
@@ -604,11 +587,15 @@ int main(int argc, char **argv) {
 
 		trans.transformLas(srcfile, dstdir, overwrite);
 
-	} catch(char const *err) {
-		std::cerr << err << std::endl;
+	} catch(const std::exception &err) {
+		std::cerr << err.what() << std::endl;
 		return 1;
 	} catch(const std::string &err) {
 		std::cerr << err << std::endl;
+		return 1;
+	} catch(...) {
+		std::cerr << "An unknown exception occurred." << std::endl;
+		return 1;
 	}
 
 	return 0;
