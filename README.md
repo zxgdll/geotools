@@ -1,12 +1,12 @@
 # geotools
 
-Contains scripts and things that I've found useful.
+These are tools for working with GIS data, in particular, LiDAR and raster data and geodetic transformation. They're mostly experimental and not presented for production use, though they have been very useful in my work.
 
 ## las2csrs
 
 This program is experimental. Please do not use it for important work.
 
-This is a c++ program that transforms a point cloud in LAS format from any ITRF reference frame/epoch to NAD83(CSRS) at any epoch. The algorithm is based on Craymer, M. R. (2006). The evolution of NAD83 in Canada, 60(2), 151–165.
+This is a c++ program that transforms a point cloud in LAS format from any ITRF reference frame/epoch to NAD83(CSRS) at any epoch. The algorithm is based on Craymer, M. R. (2006). The evolution of NAD83 in Canada, 60(2), 151–165. [Read more about NAD83(CSRS) here](http://www.nrcan.gc.ca/earth-sciences/geomatics/geodetic-reference-systems/9052).
 
 ## lasgrid
 
@@ -24,6 +24,15 @@ This program enables the user to develop something like this, where the x-axis i
 
 Click on the image to view an interactive map.
 
+## mosaic
+
+This program mosaics overlapping rasters, using the first as a "background" which sets the spatial extent of the result. Successive rasters
+are blended into the result using a sigmoid (tangent) curve over a given distance.
+
+The image below shows the sigmoid blend on an artificial 10m step.
+
+![Image showing blend profile](http://dijital.ca/files/geotools/mosaic.png) 
+ 
 ## gvb2tif.py
 
 This program converts NRCAN's NAD83(CSRS) velocity grid to a GeoTiff format. The grid contains horizontal and 
