@@ -154,3 +154,90 @@ public:
 	}
 
 };
+
+template <class T>
+class Grid {
+private:
+	int g_cols;
+	int g_rows;
+	T *g_grid;
+
+public:
+	Grid() {
+		g_grid = NULL;
+		g_cols = 0;
+		g_rows = 0;
+	}
+
+	Grid(int cols, int rows) {
+		g_grid = NULL;
+		g_cols = 0;
+		g_rows = 0;
+		init(cols, rows);
+	}
+
+	Grid(int elements) {
+		g_grid = NULL;
+		g_cols = 0;
+		g_rows = 0;
+		init(elements);
+	}
+
+	~Grid() {
+		free(g_grid);
+	}
+
+	T *grid() {
+		return g_grid;
+	}
+
+	int rows() const {
+		return g_rows;
+	}
+
+	int cols() const {
+		return g_cols;
+	}
+
+	int size() const {
+		return g_rows * g_cols;
+	}
+
+	void init(int elements) {
+		init(elements, 1);
+	}
+
+	void init(int cols, int rows) {
+		if(cols * rows <= 0)
+			throw "Size of grid must be >0.";
+		if(g_grid != NULL)
+			free(g_grid);
+		g_cols = cols;
+		g_rows = rows;
+		g_grid = (T *) calloc(sizeof(T), cols * rows);
+	}
+
+	void fill(T value) {
+		std::fill_n(g_grid, size(), value);
+	}
+
+	T &operator[](int idx) {
+		if(idx < 0 || idx >= size())
+			throw "Index out of bounds.";
+		return g_grid[idx];
+	}
+
+	T &operator()(int idx) {
+		if(idx < 0 || idx >= size())
+			throw "Index out of bounds.";
+		return g_grid[idx];
+	}
+
+	T &operator()(int col, int row) {
+		int idx = row * g_cols + col;
+		if(idx < 0 || idx >= size())
+			throw "Index out of bounds.";
+		return g_grid[idx];
+	}
+
+};
