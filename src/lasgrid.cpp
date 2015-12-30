@@ -197,8 +197,9 @@ int main(int argc, char **argv) {
 		Util::snapBounds(bounds, resolution, 2);
 
 	int cols, rows;
-	float *grid = NULL, *grid2 = NULL;
-	int *counts = NULL;
+	Grid<float> grid1;
+	Grid<float> grid2;
+	Grid<int> counts;
 
 	las::ReaderFactory rf;
 	std::vector<unsigned int> indices;
@@ -237,28 +238,14 @@ int main(int argc, char **argv) {
 	
 	// For types other than count, we need a double grid to manage sums.
 	if(type != TYPE_COUNT) {
-		grid = (float *) calloc(sizeof(float), cols * rows);
-		if(grid == NULL) {
-			std::cerr << "Failed to initialize grid." << std::endl;
-			return 1;
-		}
-
+		grid1.init(cols, rows);
 		// For variance and stddev, we need 2 double grids.
-		if(type == TYPE_VARIANCE || type == TYPE_STDDEV) {
-			grid2 = (float *) calloc(sizeof(float), cols * rows);
-			if(grid2 == NULL) {
-				std::cerr << "Failed to initialize secondary grid." << std::endl;
-				return 1;
-			}
-		}
+		if(type == TYPE_VARIANCE || type == TYPE_STDDEV)
+			grid2.init(cols, rows);
 	}
 
 	// Create a grid for maintaining counts.
-	counts = (int *) calloc(sizeof(int), cols * rows);
-	if(counts == NULL) {
-		std::cerr << "Failed to initialize counts." << std::endl;
-		return 1;
-	}
+	counts.init(cols, rows);
 
 	int current = 0;
 
@@ -326,23 +313,23 @@ int main(int argc, char **argv) {
 						counts[idx]++;
 						break;
 					case TYPE_MIN:
-						if(counts[idx] == 0 || pz < grid[idx]) 
-							grid[idx] = pz;
+						if(counts[idx] == 0 || pz < grid1[idx])
+							grid1[idx] = pz;
 						counts[idx]++;
 						break;
 					case TYPE_MAX:
-						if(counts[idx] == 0 || pz > grid[idx])
-							grid[idx] = pz;
+						if(counts[idx] == 0 || pz > grid1[idx])
+							grid1[idx] = pz;
 						counts[idx]++;
 						break;
 					case TYPE_MEAN:
 					case TYPE_VARIANCE:
 					case TYPE_STDDEV:
-						grid[idx] += pz;
+						grid1[idx] += pz;
 						counts[idx]++;
 						break;
 					case TYPE_DENSITY:
-						grid[idx]++;
+						grid1[idx]++;
 						counts[idx]++;
 						break;
 					}
@@ -358,9 +345,9 @@ int main(int argc, char **argv) {
 	case TYPE_STDDEV:
 		for(int i=0;i<cols*rows;++i) {
 			if(counts[i] > 0) {
-				grid[i] /= counts[i];
+				grid1[i] /= counts[i];
 			} else {
-				grid[i] = -9999.0;
+				grid1[i] = -9999.0;
 			}
 		}
 		break;
@@ -369,9 +356,9 @@ int main(int argc, char **argv) {
 		double r2 = _sq(resolution);
 		for(int i=0;i<cols*rows;++i)
 			if(counts[i] > 0) {
-				grid[i] /= r2;
+				grid1[i] /= r2;
 			} else {
-				grid[i] = 0.0;
+				grid1[i] = 0.0;
 			}
 		}	
 		break;
@@ -381,7 +368,7 @@ int main(int argc, char **argv) {
 	default:
 		for(int i=0;i<cols*rows;++i) {
 			if(counts[i] == 0)
-				grid[i] = -9999.0;
+				grid1[i] = -9999.0;
 		}
 		break;
 	}
@@ -445,7 +432,7 @@ int main(int argc, char **argv) {
 						switch(type){
 						case TYPE_VARIANCE:
 						case TYPE_STDDEV:
-							grid2[idx] += _sq(grid[idx] - pz);
+							grid2[idx] += _sq(grid1[idx] - pz);
 							break;
 						}
 					}
@@ -458,18 +445,16 @@ int main(int argc, char **argv) {
 		case TYPE_VARIANCE:
 			for(int i=0;i<cols*rows;++i) {
 				if(counts[i] > 0)
-					grid[i] = grid2[i] / counts[i];
+					grid1[i] = grid2[i] / counts[i];
 			}
 			break;
 		case TYPE_STDDEV:
 			for(int i=0;i<cols*rows;++i) {
 				if(counts[i] > 0)
-					grid[i] = sqrt(grid2[i] / counts[i]);
+					grid1[i] = sqrt(grid2[i] / counts[i]);
 			}
 			break;
 		}
-
-		free(grid2);
 	}
 
 	GDALAllRegister();
@@ -488,9 +473,9 @@ int main(int argc, char **argv) {
 
 	if(type == TYPE_COUNT) {
 		gType = GDT_Int32;
-		data = (void *) counts;
+		data = (void *) counts.grid();
 	} else {
-		data = (void *) grid;
+		data = (void *) grid1.grid();
 	}
 
    	poDriver = GetGDALDriverManager()->GetDriverByName(pszFormat);
@@ -505,11 +490,16 @@ int main(int argc, char **argv) {
 
 	band = poDstDS->GetRasterBand(1);
 	band->SetNoDataValue(-9999.0);
-	CPLErr err = band->RasterIO(GF_Write, 0, 0, cols, rows, data, cols, rows, gType, 0, 0);
-	if(0 != err)
+
+	int ret = 0;
+	if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, data, cols, rows, gType, 0, 0)) {
 		std::cerr << "Failed to write raster.";
+		ret = 1;
+	}
+
 	GDALClose(poDstDS);
 	CPLFree(wkt);
-	return err; // TODO: Different return method.
+
+	return ret; // TODO: Different return method.
 
 }
