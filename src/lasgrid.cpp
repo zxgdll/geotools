@@ -35,6 +35,7 @@
 #define TYPE_VARIANCE 7
 #define TYPE_STDDEV 8
 #define TYPE_COUNT 9
+#define TYPE_QUANTILE 10
 
 #define LAS_EXT ".las"
 
@@ -75,6 +76,8 @@ int parseType(char *typeStr) {
 		return TYPE_STDDEV;
 	} else if(!strcmp("count", typeStr)) {
 		return TYPE_COUNT;
+	} else if(!strcmp("quantile", typeStr)) {
+		return TYPE_QUANTILE;
 	}
 	return 0;
 }
@@ -98,13 +101,21 @@ int _fcmp(const void * a, const void * b) {
 void usage() {
 	std::cerr << "Usage: lasgrid <options> <file [file [file]]>" << std::endl; 
 	std::cerr << " -o <output file>" << std::endl;
-	std::cerr << " -t <type>                   mean, max, min, variance, count, density, stddev (default mean)" << std::endl;
+	std::cerr << " -t <type>                   quantile, mean, max, min, variance, count, density, stddev (default mean)" << std::endl;
 	std::cerr << " -r <resolution>             (default 2)" << std::endl;
 	std::cerr << " -s <srid>                   The EPSG ID of the CRS." << std::endl;
 	std::cerr << " -c <classes>                comma-delimited (e.g. '2,0' (ground and unclassified))" << std::endl;
 	std::cerr << " -a <attribute>              height, intensity (default height)" << std::endl;	
 	std::cerr << " -d <radius>                 use zero for cell bounds" << std::endl;	
 	std::cerr << " -b <minx miny maxx maxy>    extract points from the given box and create a raster of this size" << std::endl;	
+	std::cerr << " -q <num-quantiles,quantile> gives the number of quantiles, and the index of the desired quantile. " << std::endl;
+	std::cerr << "                             If there are n quantiles, there are n+2 possible indices, with 0 being " << std::endl;
+	std::cerr << "                             the lower bound, and n+1 being the upper. For quartiles enter 4, for deciles 10, etc." << std::endl;
+	std::cerr << " -v                          Verbose output." << std::endl;
+}
+
+void vector_dealloc(std::vector<float> *item) {
+	delete item;
 }
 
 int main(int argc, char **argv) {
@@ -116,10 +127,13 @@ int main(int argc, char **argv) {
 	double resolution = 2.0;
 	double radius = -1.0;
 	std::set<int> classes;
+	std::vector<int> quantiles;
+	int numQuantiles;
+	int quantile;
 	std::vector<std::string> files;
 	double bounds[] = {FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX};
 	bool hasBounds = false;
-	bool quiet = false;
+	bool quiet = true;
 	
 	for(int i = 1; i < argc; ++i) {
 		std::string s(argv[i]);
@@ -133,12 +147,14 @@ int main(int argc, char **argv) {
 			resolution = atof(argv[++i]);
 		} else if(s == "-c") {
 			Util::intSplit(classes, argv[++i]);
+		} else if(s == "-q") {
+			Util::intSplit(quantiles, argv[++i]);
 		} else if(s == "-a") {
 			att = parseAtt(argv[++i]);
 		} else if(s == "-d") {
 			radius = atof(argv[++i]);
-		} else if(s == "-q") {
-			quiet = true;
+		} else if(s == "-v") {
+			quiet = false;
 		} else if(s == "-b") {
 			bounds[0] = atof(argv[++i]);
 			bounds[1] = atof(argv[++i]);
@@ -185,6 +201,32 @@ int main(int argc, char **argv) {
 			std::cerr << "Type: " << type << std::endl;
 	}
 
+	if(type == TYPE_QUANTILE && quantiles.size() < 2) {
+		std::cerr << "If the type is quantiles, there must be a -q argument with 2 values." << std::endl;
+		usage();
+		return 1;
+	} else if(type == TYPE_QUANTILE) {
+		quantile = quantiles[1];
+		numQuantiles = quantiles[0];
+		if(quantile == 0) {
+			if(!quiet)
+				std::cerr << "Using min because q = 0." << std::endl;
+			type = TYPE_MIN;
+		} else if(quantile == numQuantiles) {
+			if(!quiet)
+				std::cerr << "Using max because q = numQuantiles." << std::endl;
+			type = TYPE_MAX;
+		} else {
+			if(numQuantiles < 2) {
+				std::cerr << "The number of quantiles must be >=2 and the quantile must be between 0 and n, inclusive." << std::endl;
+				usage();
+				return 1;
+			}
+			if(!quiet)
+				std::cerr << "Quantiles: " << quantile << ", Q: " << numQuantiles << std::endl;
+		}
+	}
+
 	if(classes.size() == 0) {
 		std::cerr << "WARNING: No classes given. Matching all classes." << std::endl;
 	} else {
@@ -200,6 +242,7 @@ int main(int argc, char **argv) {
 	Grid<float> grid1;
 	Grid<float> grid2;
 	Grid<int> counts;
+	Grid<std::vector<float>* > qGrid;
 
 	las::ReaderFactory rf;
 	std::vector<unsigned int> indices;
@@ -228,7 +271,8 @@ int main(int argc, char **argv) {
 	// Prepare grid
 	cols = (int) ceil((bounds[2] - bounds[0]) / resolution);
 	rows = (int) ceil((bounds[3] - bounds[1]) / resolution);
-	std::cerr << "Raster size: " << cols << ", " << rows << std::endl;
+	if(!quiet)
+		std::cerr << "Raster size: " << cols << ", " << rows << std::endl;
 
 	// Compute the radius given the cell size, if it is not given.
 	if(radius == -1.0)
@@ -242,6 +286,14 @@ int main(int argc, char **argv) {
 		// For variance and stddev, we need 2 double grids.
 		if(type == TYPE_VARIANCE || type == TYPE_STDDEV)
 			grid2.init(cols, rows);
+	}
+
+	// For the quantile grid.
+	if(type == TYPE_QUANTILE) {
+		qGrid.init(cols, rows);
+		qGrid.setDeallocator(*vector_dealloc);
+		for(int i = 0; i < cols * rows; ++i)
+			qGrid[i] = new std::vector<float>();
 	}
 
 	// Create a grid for maintaining counts.
@@ -332,6 +384,10 @@ int main(int argc, char **argv) {
 						grid1[idx]++;
 						counts[idx]++;
 						break;
+					case TYPE_QUANTILE:
+						qGrid[idx]->push_back(pz);
+						counts[idx]++;
+						break;
 					}
 				}
 			}
@@ -361,6 +417,31 @@ int main(int argc, char **argv) {
 				grid1[i] = 0.0;
 			}
 		}	
+		break;
+	case TYPE_QUANTILE:
+		for(int i = 0; i < cols * rows; ++i) {
+			if(counts[i] <= numQuantiles) {
+				// Don't compute a value if there are too view points.
+				grid1[i] = -9999.0;
+			} else {
+				// Compute the median.
+				std::sort(qGrid[i]->begin(), qGrid[i]->end());
+				if(quantile == 0) {
+					// If index is zero, just return the min.
+					grid1[i] = (*qGrid[i])[0];
+				} else if(quantile == numQuantiles) {
+					// If index == numQuantiles, return the max.
+					grid1[i] = (*qGrid[i])[qGrid[i]->size() - 1];
+				} else {
+					float idx = (((float) qGrid[i]->size() - 1) / numQuantiles) * quantile;
+					if(floor(idx) == idx) {
+						grid1[i] = (*qGrid[i])[(int) idx];
+					} else {
+						grid1[i] = ((*qGrid[i])[(int) idx] + (*qGrid[i])[(int) idx + 1]) / 2.0;
+					}
+				}
+			}
+		}
 		break;
 	case TYPE_COUNT:
 		// do nothing
