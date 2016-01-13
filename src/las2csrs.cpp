@@ -279,12 +279,11 @@ public:
 
 		// Check the files for sanity.
 		if(src == dst)
-			throw std::string("Destination and source are the same: ") + dst.string() + std::string("==") + src.string();
-		//if(!fs::is_directory(dst))
-		//	throw std::string("Destination is a file: ") + dst.string();
+			throw "Destination and source are the same: " + dst.string() + "==" + src.string();
+
 		if(!fs::exists(dst)) {
 			if(!fs::create_directory(dst))
-				throw std::string("Failed to create output directory: ") + dst.string();
+				throw "Failed to create output directory: " + dst.string();
 		}
 
 		// Get the list of las files.
@@ -402,7 +401,7 @@ private:
 	double tx, ty, tz, dtx, dty, dtz;		// Shifts, rates.
 	double rx, ry, rz, drx, dry, drz;		// Rotations, rates.
 	double epoch;							// ITRF Transform epoch.
-	double dt; 								// Time delta
+	//double dt; 								// Time delta
 	double d, dd; 							// Scale, scale rate.
 
 	/**
@@ -439,26 +438,18 @@ private:
 		char str[128];
 		sprintf(str, "+init=epsg:%u", fsrid);
 		p1 = pj_init_plus(str);
-		if(!p1) {
-			const char *err = pj_strerrno(pj_errno);
-			throw err;
-		}
+		if(!p1)
+			throw std::string(pj_strerrno(pj_errno));
 		sprintf(str, "+init=epsg:%u", tsrid);
 		p3 = pj_init_plus(str);
-		if(!p3){
-			const char *err = pj_strerrno(pj_errno);
-			throw err;
-		}
+		if(!p3)
+			throw std::string(pj_strerrno(pj_errno));
 		p2 = pj_init_plus("+init=epsg:4978");
-		if(!p2){
-			const char *err = pj_strerrno(pj_errno);
-			throw err;
-		}
+		if(!p2)
+			throw std::string(pj_strerrno(pj_errno));
 		p4 = pj_init_plus("+init=epsg:4326");
-		if(!p4){
-			const char *err = pj_strerrno(pj_errno);
-			throw err;
-		}
+		if(!p4)
+			throw std::string(pj_strerrno(pj_errno));
 	}
 
 	/**
@@ -510,6 +501,7 @@ private:
 void usage() {
 	std::cout << "Usage: las2csrs [options] <src file or dir> <dst dir> <src ref frame> <src epoch> <dst epoch> <srd srid> <dst srid>" << std::endl;
 	std::cout << " -o     Overwrite existing files. Defaults to false." << std::endl;
+	std::cout << "Set LAS2CSRS_DATA to point to ITRF DB and grid shift file." << std::endl;
 }
 
 int test(int argc, char **argv) {
