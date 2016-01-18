@@ -223,19 +223,21 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 				throw "Failed to write raster.";
 		}
 
-		if(overviews) {
-			std::cout << "Building overviews..." << std::endl;
-			// Must close and open the DS to avoid errors.
-			GDALClose(outDS);
-			outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
-			if(outDS == NULL)
-				throw "Failed to open destination image for overview creation.";
-			// TODO: Configure overviews and method.
-			int overViews[] = { 2, 4, 8, 16 };
-			outDS->BuildOverviews("NEAREST", 4, overViews, 0, NULL, NULL, NULL);
-		}
+		GDALClose(imDS);
 	}
 
+	if(overviews) {
+		std::cout << "Building overviews..." << std::endl;
+		// Must close and open the DS to avoid errors.
+		GDALClose(outDS);
+		outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
+		if(outDS == NULL)
+			throw "Failed to open destination image for overview creation.";
+		// TODO: Configure overviews and method.
+		int overViews[] = { 2, 4, 8, 16 };
+ 		outDS->BuildOverviews("NEAREST", 4, overViews, 0, NULL, NULL, NULL);
+ 		GDALClose(outDS);
+	}
 }
 
 void usage() {
