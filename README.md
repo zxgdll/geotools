@@ -10,7 +10,7 @@ This is a c++ program that transforms a point cloud in LAS format from any ITRF 
 
 ## lasgrid
 
-This is a simple program that grids one or more LAS files into a GeoTiff. The user can select the classes, and a number of methods, such as mean, min, max, stddev, density, etc.
+This is a simple program that grids one or more LAS files into a GeoTiff. The user can select the classes, and a number of methods, such as mean, min, max, stddev, density and quantiles. The quantile selection produces a single band with quantile *i* of *n*, with the 0th and nth bands being the min and max, respectively.
 
 ## lasstats
 
