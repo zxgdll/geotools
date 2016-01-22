@@ -2,14 +2,14 @@
  * "Feathers" the edges of a data region (i.e. not nodata) to the specified
  * distance in map units, using the specified curve.
  */
-
-//#include <float.h>
 #include <vector>
 #include <string>
 #include <iostream>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+
+#include <omp.h>
 
 #include <ogr_spatialref.h>
 #include <gdal_priv.h>
@@ -117,18 +117,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 
 	// Copy the background file to the destination.
 	std::cout << "Copying background file." << std::endl;
-	std::ifstream src(files[0].c_str(), std::ios::binary);
-	std::ofstream dst(outfile.c_str(), std::ios::binary);
-	dst << src.rdbuf();
-
-	Grid<float> imGrid;
-	Grid<float> outGrid;
-	Grid<float> alphaGrid;
-	double outTrans[6], imTrans[6];
-	float imNodata, outNodata;
-	int cols, rows, col, row;
-	int rowHeight, rowOffset, bufRows;
-	int addrOffset, bufRows0, bufRow0, rowHeight0, rowOffset0;
+	Util::copyfile(files[0], outfile);
 
 	// Open the destination file to modify it.
 	GDALDataset *outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
@@ -136,6 +125,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 		throw "Failed to open destination image.";
 
 	// Load the transform parameters.
+	double outTrans[6];
 	outDS->GetGeoTransform(outTrans);
 
 	// Iterate over the files, adding each one to the background.
@@ -147,48 +137,47 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 		if(!imDS)
 			throw "Failed to open mosaic image.";
 
+		double imTrans[6];
 		imDS->GetGeoTransform(imTrans);
-		if(outTrans[1] != imTrans[1] || outTrans[5] != imTrans[5]) {
-			GDALClose(imDS);
+		if(outTrans[1] != imTrans[1] || outTrans[5] != imTrans[5]) 
 			throw "Raster's resolution does not match the background.";
-		}
 
-		cols = imDS->GetRasterXSize();
-		rows = imDS->GetRasterYSize();
-		col = (int) ((imTrans[0] - outTrans[0]) / outTrans[1]);
-		row = (int) ((imTrans[3] - outTrans[3]) / outTrans[5]);
+		int cols = imDS->GetRasterXSize();
+		int rows = imDS->GetRasterYSize();
+		int col = (int) ((imTrans[0] - outTrans[0]) / outTrans[1]);
+		int row = (int) ((imTrans[3] - outTrans[3]) / outTrans[5]);
 
 		if(col + cols > outDS->GetRasterXSize())
 			cols = outDS->GetRasterXSize() - col;
 		if(row + rows > outDS->GetRasterYSize())
 			rows = outDS->GetRasterYSize() - row;
 
-		imNodata = imDS->GetRasterBand(1)->GetNoDataValue();
-		outNodata = outDS->GetRasterBand(1)->GetNoDataValue();
+		float imNodata = imDS->GetRasterBand(1)->GetNoDataValue();
+		float outNodata = outDS->GetRasterBand(1)->GetNoDataValue();
 
 		// TODO: Configurable row height.
-		rowHeight = 500 > rows ? rows : 500;
-		rowOffset = (int) (distance / imTrans[1]) + 1;
-		bufRows = rowHeight + rowOffset * 2;
-
-		// Initialize the grids.
-		imGrid.init(cols, bufRows);
-		alphaGrid.init(cols, bufRows);
-		outGrid.init(cols, bufRows);
+		int rowHeight = 500 > rows ? rows : 500;
+		int rowOffset = (int) (distance / imTrans[1]) + 1;
+		int bufRows = rowHeight + rowOffset * 2;
 
 		// Move the window down by rowHeight and one rowOffset *not* two.
+		#pragma omp parallel for
 		for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) {
 
+			// Initialize the grids.
+			Grid<float> imGrid(cols, bufRows);
+			Grid<float> outGrid(cols, bufRows);
+			Grid<float> alphaGrid(cols, bufRows);
 			// Set to zero or nodata depending on the band.
 			outGrid.fill(outNodata);
 			imGrid.fill(imNodata);
 			alphaGrid.fill(1.0);
 
-			addrOffset = 0;
-			bufRows0 = bufRows;
-			bufRow0 = bufRow;
-			rowHeight0 = rowHeight;
-			rowOffset0 = rowOffset;
+			int addrOffset = 0;
+			int bufRows0 = bufRows;
+			int bufRow0 = bufRow;
+			int rowHeight0 = rowHeight;
+			int rowOffset0 = rowOffset;
 			if(bufRow0 < 0) {
 				bufRow0 = 0;
 				addrOffset = rowOffset * cols;
@@ -202,23 +191,31 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 				rowHeight0 = bufRows0 - rowOffset0;
 			}
 
-			std::cout << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
+			// Could happen with multiple threads.
+			if(rowHeight0 < 1)
+				continue;
+
+			std::cout << "Thread: " << omp_get_thread_num() << ": " << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
 
 			// Load the overlay.
-			CPLErr err = imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid.grid() + addrOffset), cols, bufRows0,
-				GDT_Float32, 1, NULL, 0, 0, 0, NULL);
-			if(err != CPLE_None)
-				throw "Failed to read raster.";
+			#pragma omp critical
+			{
+				if(CPLE_None != imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid.grid() + addrOffset), cols, bufRows0,
+					GDT_Float32, 1, NULL, 0, 0, 0))
+					throw "Failed to read raster.";
+			}
 
 			std::cout << "Feathering" << std::endl;
 			// Feather the overlay
 			feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, imTrans[1]);
 
 			// Read background data.
-			err = outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid.grid() + addrOffset), cols, bufRows0,
-				GDT_Float32, 1, NULL, 0, 0, 0, NULL);
-			if(err != CPLE_None)
-				throw "Failed to read raster.";
+			#pragma omp critical 
+			{
+				if(CPLE_None != outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid.grid() + addrOffset), cols, bufRows0,
+					GDT_Float32, 1, NULL, 0, 0, 0))
+					throw "Failed to read raster.";
+			}
 
 			std::cout << "Blending" << std::endl;
 			// Blend the overlay into the output.
@@ -226,25 +223,30 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 
 			// Write back to the output.
 			// We are extracting a slice out of the buffer, not writing the whole thing.
-			err = outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid.grid() + addrOffset + rowOffset0 * cols), cols, rowHeight0,
-				GDT_Float32, 1, NULL, 0, 0, 0, NULL);
-			if(err != CPLE_None)
-				throw "Failed to write raster.";
+			#pragma omp critical 
+			{
+				if(CPLE_None != outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid.grid() + addrOffset + rowOffset0 * cols), cols, rowHeight0,
+					GDT_Float32, 1, NULL, 0, 0, 0))
+					throw "Failed to write raster.";
+			}
+
 		}
 
-		if(overviews) {
-			std::cout << "Building overviews..." << std::endl;
-			// Must close and open the DS to avoid errors.
-			GDALClose(outDS);
-			outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
-			if(outDS == NULL)
-				throw "Failed to open destination image for overview creation.";
-			// TODO: Configure overviews and method.
-			int overViews[] = { 2, 4, 8, 16 };
-			outDS->BuildOverviews("NEAREST", 4, overViews, 0, NULL, NULL, NULL);
-		}
+		GDALClose(imDS);
 	}
 
+	if(overviews) {
+		std::cout << "Building overviews..." << std::endl;
+		// Must close and open the DS to avoid errors.
+		GDALClose(outDS);
+		outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
+		if(outDS == NULL)
+			throw "Failed to open destination image for overview creation.";
+		// TODO: Configure overviews and method.
+		int overViews[] = { 2, 4, 8, 16 };
+ 		outDS->BuildOverviews("NEAREST", 4, overViews, 0, NULL, NULL, NULL);
+ 		GDALClose(outDS);
+	}
 }
 
 void usage() {

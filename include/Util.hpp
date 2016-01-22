@@ -1,12 +1,18 @@
-#include <liblas/liblas.hpp>
-
+#ifdef LIBLAS_HPP_INCLUDED
 namespace las = liblas;
+#endif
+
+#include <set>
+#include <list>
+#include <sstream>
 
 /**
  * Provides utility methods for working with LiDAR data.
  */
 class Util {
 public:
+
+#ifdef LIBLAS_HPP_INCLUDED
 
 	/**
 	 * Compute the bounds of a LAS file using the Header and a double
@@ -55,6 +61,8 @@ public:
 		}
 		return true;
 	}
+
+#endif
 
 	/**
 	 * Expands the first bounds argument (an array of doubles) to contain
@@ -143,6 +151,26 @@ public:
 	}
 
 	/**
+	 * Split a comma-delimited string into a set of unique integers.
+	 */
+	static void intSplit(std::list<int> &values, const char *val) {
+		std::stringstream ss(val);
+		std::string item;
+		while(std::getline(ss, item, ','))
+			values.push_back(atoi(item.c_str()));
+	}
+
+	/**
+	 * Split a comma-delimited string into a set of unique integers.
+	 */
+	static void intSplit(std::vector<int> &values, const char *str) {
+		std::stringstream ss(str);
+		std::string item;
+		while(std::getline(ss, item, ','))
+			values.push_back(atoi(item.c_str()));
+	}
+
+	/**
 	 * Return true if the integer is in the set, or the set is empty.
 	 */
 	static bool inList(std::set<int> &values, int value) {
@@ -153,6 +181,29 @@ public:
 		return std::find(values.begin(), values.end(), value) != values.end();
 	}
 
+	/**
+	 * Prints out a status message; a percentage representing current
+	 * of total steps.
+	 */
+	static void status(int current, int total) {
+		static int len = 0;
+		float perc = (float) current / total * 100;
+		if(len > 0) {
+			for(int i = 0; i < len; ++i)
+				std::cout << '\b';
+		}
+		std::stringstream ss;
+		ss << perc << '%';
+		std::cout << ss.str();
+		len = ss.str().size();
+	}
+
+	static void copyfile(std::string &srcfile, std::string &dstfile) {
+		std::ifstream src(srcfile.c_str(), std::ios::binary);
+		std::ofstream dst(dstfile.c_str(), std::ios::binary);
+		dst << src.rdbuf();
+	}
+
 };
 
 template <class T>
@@ -161,18 +212,21 @@ private:
 	int g_cols;
 	int g_rows;
 	T *g_grid;
+	void (*g_item_dealloc)(T);
 
 public:
 	Grid() {
 		g_grid = NULL;
 		g_cols = 0;
 		g_rows = 0;
+		g_item_dealloc = NULL;
 	}
 
 	Grid(int cols, int rows) {
 		g_grid = NULL;
 		g_cols = 0;
 		g_rows = 0;
+		g_item_dealloc = NULL;
 		init(cols, rows);
 	}
 
@@ -184,7 +238,15 @@ public:
 	}
 
 	~Grid() {
+		if(g_item_dealloc != NULL) {
+			for(int i = 0; i < g_cols * g_rows; ++i)
+				g_item_dealloc(g_grid[i]);
+		}
 		free(g_grid);
+	}
+
+	void setDeallocator(void (*item_dealloc)(T)) {
+		g_item_dealloc = item_dealloc;
 	}
 
 	T *grid() {

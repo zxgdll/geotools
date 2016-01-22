@@ -20,6 +20,7 @@
 #include <climits>
 #include <memory>
 #include <iomanip>
+#include <cmath>
 
 #include <ogr_api.h>
 #include <ogrsf_frmts.h>
@@ -93,7 +94,7 @@ public:
 		for(int i = 0; i < 8; ++i)
 			names[i] = n[i];
 		for(int i = 0; i < numQuantiles + 2; ++i)
-			names[i + 8] = "q" + i;
+			names[i + 8] = "q" + std::to_string(i);
 	}
 
 	void bandValues(double *values, int numQuantiles) {
@@ -137,7 +138,7 @@ public:
 	}
 
 	double min() {
-		if(isnan(_min)) {
+		if(std::isnan(_min)) {
 			_reset = true;
 			if(count() == 0)
 				throw "No values to compute.";
@@ -148,7 +149,7 @@ public:
 	}
 
 	double max() {
-		if(isnan(_max)) {
+		if(std::isnan(_max)) {
 			_reset = true;
 			if(count() == 0)
 				throw "No values to compute.";
@@ -162,7 +163,7 @@ public:
 	 * Return the sum of values.
 	 */
 	double sum() {
-		if(isnan(_sum)) {
+		if(std::isnan(_sum)) {
 			_reset = true;
 			if(count() == 0)
 				throw "No values to compute.";
@@ -177,7 +178,7 @@ public:
 	 * Return the mean of values.
 	 */
 	double mean () {
-		if(isnan(_mean)) {
+		if(std::isnan(_mean)) {
 			_reset = true;
 			_mean = sum() / count();
 		}
@@ -188,7 +189,7 @@ public:
 	 * Return the median of values.
 	 */
 	double median() {
-		if(isnan(_median)) {
+		if(std::isnan(_median)) {
 			_reset = true;
 			int num;
 			if((num = count()) == 0)
@@ -207,7 +208,7 @@ public:
 	 * Return the variance of values.
 	 */
 	double variance() {
-		if(isnan(_variance)) {
+		if(std::isnan(_variance)) {
 			_reset = true;
 			double m = mean();
 			double s = 0.0;
@@ -222,7 +223,7 @@ public:
 	 * Return the standard deviation of values.
 	 */
 	double stddev() {
-		if(isnan(_stddev)) {
+		if(std::isnan(_stddev)) {
 			_reset = true;
 			_stddev = sqrt(variance());
 		}
@@ -453,7 +454,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 
 	if(numQuantiles > 0) {
 		for(int qt = 0; qt <= numQuantiles; ++qt) {
-			OGRFieldDefn fqt("qt" + qt, OFTReal);
+			OGRFieldDefn fqt("qt" + std::to_string(qt), OFTReal);
 			if(layer->CreateField(&fqt) != OGRERR_NONE)
 				throw "Failed to create quantile field.";
 		}
@@ -477,7 +478,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 		if(numQuantiles > 0) {
 			(*it)->quantiles(quantiles, numQuantiles);
 			for(int qt = 0; qt < numQuantiles + 2; ++qt)
-				feat->SetField("qt" + qt, quantiles[qt]);
+				feat->SetField("qt" + std::to_string(qt), quantiles[qt]);
 		}
 		poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) (*it)->geom());
 		feat->SetGeometry(poly);
