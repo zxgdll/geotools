@@ -67,8 +67,18 @@ public:
 		if(outDS == NULL)
 			throw "Failed to copy file.";
 		GDALClose(outDS);
-		Raster<T> r(filename, band, writable);
-		return r;
+		Raster<T> cp(filename, band, writable);
+		T nodata = cp.nodata();
+		for(int r = 0; r < cp.rows(); ++r) {
+			for(int c = 0; c < cp.cols(); ++c) {
+				cp.set(c, r, nodata);
+			}
+		}
+		cp.flush();
+		return cp;
+	}
+	T nodata() {
+		return r_nodata;
 	}
 	// Returns the row offset in the block for a given y
 	int toBlockRow(float y) {
