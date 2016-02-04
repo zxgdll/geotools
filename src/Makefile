@@ -1,6 +1,6 @@
-LIB=-L/opt/lib
-CXXFLAGS=-I../include -I/opt/include
-CFLAGS=-I../include -I/opt/include
+LIB=-L/usr/lib
+CXXFLAGS=-I../include -I/usr/include -I/usr/include/gdal -std=c++11
+CFLAGS=-I../include -I/usr/include -std=c++11
 CPP=g++
 CC=gcc
 
@@ -35,6 +35,12 @@ las2csrs:
 
 las2csrs_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
+	
+rastfit:
+	$(CPP) $(CXXFLAGS) -Wall -O3 rastfit.cpp $(LIB) -lgdal -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
+
+rastfit_debug:
+	$(CPP) $(CXXFLAGS) -Wall -g rastfit.cpp $(LIB) -lgdal -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
 	
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips
