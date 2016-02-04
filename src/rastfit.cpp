@@ -38,29 +38,29 @@
 #include "Raster.hpp"
 //#include "ShapeWriter.hpp"
 
-typedef CGAL::Simple_cartesian<float> 							K;
-typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>					Vb;			// Vertex can store its area
-typedef CGAL::Triangulation_data_structure_2<Vb>										Tds;
-typedef CGAL::Delaunay_triangulation_2<K, Tds> 											Delaunay;
-typedef CGAL::Delaunay_triangulation_adaptation_traits_2<Delaunay> 						AT;
-typedef CGAL::Delaunay_triangulation_caching_degeneracy_removal_policy_2<Delaunay> 		AP;
-typedef CGAL::Voronoi_diagram_2<Delaunay,AT,AP> 										Voronoi;
-typedef CGAL::Polygon_2<K>																Polygon_2;
-typedef CGAL::Iso_rectangle_2<K>														Iso_rectangle_2;
-typedef CGAL::Direction_2<K>															Direction_2;
+typedef CGAL::Simple_cartesian<float>                                                 K;
+typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>                  Vb; // Vertex can store its area
+typedef CGAL::Triangulation_data_structure_2<Vb>                                      Tds;
+typedef CGAL::Delaunay_triangulation_2<K, Tds>                                        Delaunay;
+typedef CGAL::Delaunay_triangulation_adaptation_traits_2<Delaunay>                    AT;
+typedef CGAL::Delaunay_triangulation_caching_degeneracy_removal_policy_2<Delaunay>    AP;
+typedef CGAL::Voronoi_diagram_2<Delaunay,AT,AP>                                       Voronoi;
+typedef CGAL::Polygon_2<K>                                                            Polygon_2;
+typedef CGAL::Iso_rectangle_2<K>                                                      Iso_rectangle_2;
+typedef CGAL::Direction_2<K>                                                          Direction_2;
 
-typedef Delaunay::Vertex_handle 			DVertex_handle;
-typedef Delaunay::Edge						DEdge;
-typedef Voronoi::Face_handle 				VFace_handle;
-typedef Voronoi::Face 						VFace;
-typedef Voronoi::Ccb_halfedge_circulator	VCcb_halfedge_circulator;
-typedef Voronoi::Locate_result				VLocate_result;
-typedef Voronoi::Halfedge					VHalfedge;
-typedef Voronoi::Halfedge_handle			VHalfedge_handle;
-typedef Voronoi::Vertex_handle				VVertex_handle;
-typedef K::Point_2 							Point_2;
-typedef K::Ray_2							Ray_2;
-typedef K::Segment_2						Segment_2;
+typedef Delaunay::Vertex_handle             DVertex_handle;
+typedef Delaunay::Edge                      DEdge;
+typedef Voronoi::Face_handle                VFace_handle;
+typedef Voronoi::Face                       VFace;
+typedef Voronoi::Ccb_halfedge_circulator    VCcb_halfedge_circulator;
+typedef Voronoi::Locate_result              VLocate_result;
+typedef Voronoi::Halfedge                   VHalfedge;
+typedef Voronoi::Halfedge_handle            VHalfedge_handle;
+typedef Voronoi::Vertex_handle              VVertex_handle;
+typedef K::Point_2                          Point_2;
+typedef K::Ray_2                            Ray_2;
+typedef K::Segment_2                        Segment_2;
 
 // For writing shapes for debugging.
 //static ShapeWriter _sw;
