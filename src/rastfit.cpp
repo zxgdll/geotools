@@ -36,7 +36,7 @@
 
 #include "Util.hpp"
 #include "Raster.hpp"
-#include "ShapeWriter.hpp"
+//#include "ShapeWriter.hpp"
 
 typedef CGAL::Simple_cartesian<float> 							K;
 typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>					Vb;			// Vertex can store its area
@@ -63,7 +63,7 @@ typedef K::Ray_2							Ray_2;
 typedef K::Segment_2						Segment_2;
 
 // For writing shapes for debugging.
-static ShapeWriter _sw;
+//static ShapeWriter _sw;
 
 float _abs(float v) {
 	return v < 0.0 ? -v : v;
@@ -72,6 +72,7 @@ float _abs(float v) {
 class Point {
 public:
 	float x, y, diff;
+	Point() : x(nan("")), y(nan("")), diff(nan("")) {}
 	Point(float x, float y) :
 		x(x),
 		y(y),
@@ -120,7 +121,9 @@ private:
  */
 void shuffle(std::vector<std::unique_ptr<Point> > &samp, std::list<std::unique_ptr<Point> > &samples, int numSamples) {
 	std::random_shuffle(samp.begin(), samp.end());
-	samples.assign(samp.begin(), samp.begin() + numSamples);
+	for(int i = 0; i < numSamples; ++i)
+		samples.push_back(std::move(samp[i])); // TODO: Why?
+	//samples.assign(samp.begin(), samp.begin() + numSamples);
 }
 
 /**
@@ -143,10 +146,8 @@ void generateMaskSamples(std::list<std::unique_ptr<Point> > &samples, Raster<cha
 	std::vector<std::unique_ptr<Point> > pts;
 	for(int r = 0; r < mask.rows(); ++r) {
 		for(int c = 0; c < mask.cols(); ++c) {
-			if((int) mask.get(c, r) != 0) {
-				std::unique_ptr<Point> pt(new Point(mask.toX(c), mask.toY(r)));
-				pts.push_back(pt);
-			}
+			if((int) mask.get(c, r) != 0) 
+				pts.push_back(std::unique_ptr<Point>(new Point(mask.toX(c), mask.toY(r))));
 		}
 	}
 	shuffle(pts, samples, numSamples);
@@ -159,8 +160,7 @@ void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, Raster<f
 	do {
 		float x = rast.toX((int) random() * rast.cols());
 		float y = rast.toY((int) random() * rast.rows());
-		std::unique_ptr<Point> pt(new Point(x, y));
-		samples.push_back(pt);
+		samples.push_back(std::unique_ptr<Point>(new Point(x, y)));
 	} while(--numSamples);
 }
 
@@ -265,13 +265,11 @@ float faceArea(VFace f, Iso_rectangle_2 &boundary, Voronoi &vor) {
 	CGAL::ch_jarvis(pts.begin(), pts.end(), std::back_inserter(hull));
 	Polygon_2 poly(hull.begin(), hull.end());
 	
-	_sw.put(poly);
+	//_sw.put(poly);
 
 	return _abs(poly.area());
 
 }
-
-
 
 /**
  * Compute an adjustment for adjfile, based on basefile, maskfile and a number of samples. Write the 
@@ -311,7 +309,7 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 	);
 
 	// Debug boundary.
-	_sw.put(boundary);
+	//_sw.put(boundary);
 
 	// Start a delaunay triangulation.
 	Delaunay dt;
@@ -330,7 +328,7 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 		diffs[id] = (*pt)->diff;
 		++id;
 		// Debug point.
-		_sw.put(p);
+		//_sw.put(p);
 	}
 
 	// Pre-compute the areas of the original faces.
@@ -375,7 +373,7 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 	}
 
 	// Flush the debug shapes.
-	_sw.write();
+	//_sw.write();
 
 }
 
@@ -394,7 +392,7 @@ int main(int argc, char **argv) {
  		if(argc < 6)
  			throw "Too few arguments.";
 
- 		_sw.off();
+ 		//_sw.off();
 
  		std::string basefile = argv[1];
  		std::string adjfile = argv[2];
