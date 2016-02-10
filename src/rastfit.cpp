@@ -122,8 +122,7 @@ private:
 void shuffle(std::vector<std::unique_ptr<Point> > &samp, std::list<std::unique_ptr<Point> > &samples, int numSamples) {
 	std::random_shuffle(samp.begin(), samp.end());
 	for(int i = 0; i < numSamples; ++i)
-		samples.push_back(std::move(samp[i])); // TODO: Why?
-	//samples.assign(samp.begin(), samp.begin() + numSamples);
+		samples.push_back(std::move(samp[i])); 
 }
 
 /**
@@ -166,8 +165,8 @@ void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, Raster<f
 
 /**
  * Get a segment that represents the halfedge. If the halfedge is
- * finite, return an equivalent segment. If it is not, return a segment
- * cropped to the bounding rectangle.
+ * finite, return an equivalent segment. If it is not, return a finite segment.
+ * Either way, crop to the bounding rectangle.
  */
 std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, const Iso_rectangle_2 &boundary) {
 
@@ -178,8 +177,10 @@ std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, const Iso_rectangle_2
 		CGAL::Object inter;
 		CGAL::Point_2<K> pi;
 		CGAL::Segment_2<K> si;
+
 		// The segment still might intersect the bounding rectangle. If it does,
-		// return the clipped segment.
+		// return the clipped segment. It is possible for both ends to be outside
+		// the rectangle and for an intersection to occur.
 		for(int i = 0; i < 5; ++i) {
 			// Rectangle side.
 			Segment_2 s2(boundary.vertex(i), boundary.vertex((i + 1) % 4));
@@ -203,6 +204,7 @@ std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, const Iso_rectangle_2
 				}
 			}
 		}
+
 		// If the segment is inside the rectangle, return it.
 		if(boundary.bounded_side(s.source()) == CGAL::ON_BOUNDED_SIDE) {
 			std::unique_ptr<Segment_2> seg(new Segment_2(s));
@@ -286,7 +288,7 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 	// Initializes source, destination rasters.
 	Raster<float> base(basefile, 1, false);
 	Raster<float> adj(adjfile, 1, false);
-	Raster<float> out = adj.copy(outfile, 1, true);
+	Raster<float> out = adj.copy(outfile, adj);
 
 	std::list<std::unique_ptr<Point> > samples;
 
