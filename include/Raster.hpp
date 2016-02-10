@@ -62,7 +62,7 @@ public:
 		r_writable = writable;
 		r_close = false;
 	}
-	Raster<T> copy(std::string filename, int band = 1, bool writable = false) {
+	Raster<T> copy(std::string &filename, int band = 1, bool writable = false) {
 		GDALDataset *outDS = r_ds->GetDriver()->CreateCopy(filename.c_str(), r_ds, band, NULL, NULL, NULL);
 		if(outDS == NULL)
 			throw "Failed to copy file.";
@@ -76,6 +76,25 @@ public:
 		}
 		cp.flush();
 		return cp;
+	}
+	Raster<T> copy(std::string &filename, Raster<T> &adj, int band = 1, bool writable = false) {
+		GDALDataset *outDS = r_ds->GetDriver()->Create(filename.c_str(), adj.cols(), adj.rows(), 
+			1, adj.type(), NULL);
+		if(outDS == NULL)
+			throw "Failed to copy file.";
+		GDALClose(outDS);
+		Raster<T> cp(filename, band, writable);
+		T nodata = cp.nodata();
+		for(int r = 0; r < cp.rows(); ++r) {
+			for(int c = 0; c < cp.cols(); ++c) {
+				cp.set(c, r, nodata);
+			}
+		}
+		cp.flush();
+		return cp;
+	}
+	GDALDataType type() {
+		return r_band->GetRasterDataType();
 	}
 	T nodata() {
 		return r_nodata;
