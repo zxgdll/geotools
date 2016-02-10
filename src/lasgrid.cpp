@@ -109,7 +109,7 @@ void usage() {
 	std::cerr << " -d <radius>                 use zero for cell bounds" << std::endl;	
 	std::cerr << " -b <minx miny maxx maxy>    extract points from the given box and create a raster of this size" << std::endl;	
 	std::cerr << " -q <num-quantiles,quantile> gives the number of quantiles, and the index of the desired quantile. " << std::endl;
-	std::cerr << "                             If there are n quantiles, there are n+2 possible indices, with 0 being " << std::endl;
+	std::cerr << "                             If there are n quantiles, there are n+1 possible indices, with 0 being " << std::endl;
 	std::cerr << "                             the lower bound, and n+1 being the upper. For quartiles enter 4, for deciles 10, etc." << std::endl;
 	std::cerr << " -v                          Verbose output." << std::endl;
 }
