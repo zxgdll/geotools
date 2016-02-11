@@ -157,6 +157,8 @@ public:
 			throw "Row or column out of bounds.";
 		int bcol = (int) (col / r_bw);
 		int brow = (int) (row / r_bh);
+		if(bcol >= r_bcols || bcol < 0 || brow >= r_brows || brow < 0)
+			throw "Illegal block column or row.";
 		if(bcol != r_curcol || brow != r_currow) {
 			//std::cerr << "New block " << bcol << ", " << brow << std::endl;
 			flush();
@@ -166,7 +168,8 @@ public:
 			r_currow = brow;
 			r_curcol = bcol;
 		}
-		return r_block[(row % r_bh) * r_bw + (col % r_bw)];
+		T v = r_block[(row % r_bh) * r_bw + (col % r_bw)];
+		return v;
 	}
 	// Sets the pixel value at the given row/column
 	void set(int col, int row, T v) {
@@ -190,7 +193,10 @@ public:
 	}
 	// Returns true if the col/row are represented in the dataset
 	bool has(int col, int row) const {
-		return col >= 0 || col < r_cols || row >= 0 || row < r_rows;
+		return col >= 0 && col < r_cols && row >= 0 && row < r_rows;
+	}
+	bool hasXY(T x, T y) {
+		return has(toCol(x), toRow(y));
 	}
 	void close() {
 		flush();
