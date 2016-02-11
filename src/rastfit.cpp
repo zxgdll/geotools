@@ -134,7 +134,11 @@ void computeSampleDifferences(Raster<float> &base, Raster<float> &adj, std::list
 	for(auto pt = samples.begin(); pt != samples.end(); ++pt) {
 		float a = base.get((*pt)->x, (*pt)->y);
 		float b = adj.get((*pt)->x, (*pt)->y);
-		(*pt)->diff = a - b;
+		if(a != base.nodata() && b != adj.nodata()) {
+			(*pt)->diff = a - b;
+		} else {
+			(*pt)->diff = adj.nodata();
+		}
 	}
 }
 
@@ -152,13 +156,18 @@ void generateMaskSamples(std::list<std::unique_ptr<Point> > &samples, Raster<cha
 	shuffle(pts, samples, numSamples);
 }
 
+float _random() {
+	float r = ((float) std::rand()) / RAND_MAX;
+	return r;
+}
+
 /**
  * Generates a list of random samples within the bounds of a raster.
  */
-void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, Raster<float> &rast, int numSamples) {
+void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, float *bounds, int numSamples) {
 	do {
-		float x = rast.toX((int) random() * rast.cols());
-		float y = rast.toY((int) random() * rast.rows());
+		float x = bounds[0] + (bounds[2] - bounds[0]) * _random();
+		float y = bounds[1] + (bounds[3] - bounds[1]) * _random();
 		samples.push_back(std::unique_ptr<Point>(new Point(x, y)));
 	} while(--numSamples);
 }
@@ -273,6 +282,28 @@ float faceArea(VFace f, Iso_rectangle_2 &boundary, Voronoi &vor) {
 
 }
 
+void printSamples(std::list<std::unique_ptr<Point> > &samples) {
+	std::cout << "x,y,diff" << std::endl;
+	for(std::list<std::unique_ptr<Point> >::iterator it = samples.begin(); it != samples.end(); ++it) {
+		std::cout << (*it)->x << "," << (*it)->y << "," << (*it)->diff << std::endl;
+	}
+}
+
+float _min(float a, float b) {
+	return a > b ? b : a;
+}
+
+float _max(float a, float b) {
+	return a < b ? b : a;
+}
+
+void computeBounds(Raster<float> &a, Raster<float> &b, float *bounds) {
+	bounds[0] = _max(a.toX(0), b.toX(0));
+	bounds[1] = _max(a.toY(a.rows()), b.toY(b.rows()));
+	bounds[2] = _min(a.toX(a.cols()), b.toX(b.cols()));
+	bounds[3] = _min(a.toY(0), b.toY(0));
+}
+
 /**
  * Compute an adjustment for adjfile, based on basefile, maskfile and a number of samples. Write the 
  * result to outfile.
@@ -294,12 +325,16 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 
 	// Generate a list of samples, shuffle it and clip it to the
 	// desired count.
-	if(maskfile.empty()) {
-		generateRandomSamples(samples, adj, numSamples);
+	if(maskfile.empty() || maskfile == "-") {
+		float bounds[4];
+		computeBounds(base, adj, bounds);
+		generateRandomSamples(samples, bounds, numSamples);
 	} else {
 		Raster<char> mask(maskfile, 1);
 		generateMaskSamples(samples, mask, numSamples);
 	}
+
+	printSamples(samples);
 
 	// Compute sample differences.
 	computeSampleDifferences(base, adj, samples);
