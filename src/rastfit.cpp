@@ -31,12 +31,11 @@
 #include <CGAL/Ray_2.h>
 #include <CGAL/Iso_rectangle_2.h>
 #include <CGAL/Triangulation_vertex_base_with_info_2.h>
-#include <CGAL/convex_hull_2.h>
 #include <CGAL/ch_jarvis.h>
 
 #include "Util.hpp"
 #include "Raster.hpp"
-//#include "ShapeWriter.hpp"
+#include "ShapeWriter.hpp"
 
 typedef CGAL::Simple_cartesian<float>                                                 K;
 typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>                  Vb; // Vertex can store its area
@@ -61,9 +60,6 @@ typedef Voronoi::Vertex_handle              VVertex_handle;
 typedef K::Point_2                          Point_2;
 typedef K::Ray_2                            Ray_2;
 typedef K::Segment_2                        Segment_2;
-
-// For writing shapes for debugging.
-//static ShapeWriter _sw;
 
 float _abs(float v) {
 	return v < 0.0 ? -v : v;
@@ -164,12 +160,16 @@ float _random() {
 /**
  * Generates a list of random samples within the bounds of a raster.
  */
-void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, float *bounds, int numSamples) {
+void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, Raster<float> &a, Raster<float> &b, 
+	float *bounds, int numSamples) {
 	do {
 		float x = bounds[0] + (bounds[2] - bounds[0]) * _random();
 		float y = bounds[1] + (bounds[3] - bounds[1]) * _random();
-		samples.push_back(std::unique_ptr<Point>(new Point(x, y)));
-	} while(--numSamples);
+		if(a.getOrNodata(x, y) != a.nodata() && b.getOrNodata(x, y) != b.nodata()) {
+			samples.push_back(std::unique_ptr<Point>(new Point(x, y)));
+			--numSamples;
+		}
+	} while(numSamples);
 }
 
 /**
@@ -177,50 +177,52 @@ void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, float *b
  * finite, return an equivalent segment. If it is not, return a finite segment.
  * Either way, crop to the bounding rectangle.
  */
-std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, const Iso_rectangle_2 &boundary) {
+Segment_2 *getSegment(const VHalfedge &he, const Iso_rectangle_2 &boundary) {
 
-	// TODO: Not using is_ray because of a bug. May not need this anymore.
-	if(he.has_target() && he.has_source()) {
+	if(!he.is_ray()) {
 
-		Segment_2 s(he.source()->point(), he.target()->point());
+		Segment_2 seg(he.source()->point(), he.target()->point());
+		return new Segment_2(seg);
+		/*
 		CGAL::Object inter;
 		CGAL::Point_2<K> pi;
 		CGAL::Segment_2<K> si;
 
+		// If the segment is inside the rectangle, return it.
+		if((boundary.bounded_side(seg.source()) == CGAL::ON_BOUNDED_SIDE && 
+			boundary.bounded_side(seg.target()) == CGAL::ON_BOUNDED_SIDE)) {
+			return new Segment_2(seg);
+		}
+
+		bool bothOutside = (boundary.bounded_side(seg.source()) == CGAL::ON_UNBOUNDED_SIDE && 
+			boundary.bounded_side(seg.target()) == CGAL::ON_UNBOUNDED_SIDE);
+
 		// The segment still might intersect the bounding rectangle. If it does,
 		// return the clipped segment. It is possible for both ends to be outside
 		// the rectangle and for an intersection to occur.
-		for(int i = 0; i < 5; ++i) {
+		for(int i = 0; i < 4; ++i) {
 			// Rectangle side.
 			Segment_2 s2(boundary.vertex(i), boundary.vertex((i + 1) % 4));
-			if((inter = CGAL::intersection(s, s2))) {
+			if((inter = CGAL::intersection(seg, s2))) {
 				if(CGAL::assign(pi, inter)) {
 					// If the intersection is a point, make a segment starting with the
 					// point that is inside the boundary. If they're both outside, return null.
-					if(boundary.bounded_side(s.source()) == CGAL::ON_BOUNDED_SIDE) {
-						std::unique_ptr<Segment_2> seg(new Segment_2(s.source(), pi));
-						return seg;
-					} else if(boundary.bounded_side(s.target()) == CGAL::ON_BOUNDED_SIDE) {
-						std::unique_ptr<Segment_2> seg(new Segment_2(pi, s.target()));
-						return seg;
-					} else {
-						return NULL;
+					if(boundary.bounded_side(seg.source()) == CGAL::ON_BOUNDED_SIDE) {
+						return new Segment_2(seg.source(), pi);
+					} else if(boundary.bounded_side(seg.target()) == CGAL::ON_BOUNDED_SIDE) {
+						return new Segment_2(pi, seg.target());
 					}
 				} else if(CGAL::assign(si, inter)) {
 					// If the intersection is a segment, just return it.
-					std::unique_ptr<Segment_2> seg(new Segment_2(si));
-					return seg;			
+					return new Segment_2(si);
 				}
 			}
 		}
 
-		// If the segment is inside the rectangle, return it.
-		if(boundary.bounded_side(s.source()) == CGAL::ON_BOUNDED_SIDE) {
-			std::unique_ptr<Segment_2> seg(new Segment_2(s));
-			return seg;			
-		}
+		//throw "Failed to build segment from bounded edge.";
+		*/
 
-	} else if(he.has_target() || he.has_source()) {
+	} else {
 
 		// Get the dual of the halfedge and find its midpoint. This
 		// helps determine the orientation of the ray.
@@ -238,15 +240,15 @@ std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, const Iso_rectangle_2
 		CGAL::Point_2<K> p;
 		CGAL::Segment_2<K> s;
 		if(CGAL::assign(p, inter)) {
-			std::unique_ptr<Segment_2> seg(new Segment_2(ray.source(), p));
-			return seg;
+			return new Segment_2(ray.source(), p);
 		} else if(CGAL::assign(s, inter)) {
-			std::unique_ptr<Segment_2> seg(new Segment_2(s));
-			return seg;			
+			return new Segment_2(s);
 		}
+
+		//throw "Failed to build segment from unbounded edge.";
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 /**
@@ -256,10 +258,11 @@ float faceArea(VFace f, Iso_rectangle_2 &boundary, Voronoi &vor) {
 	std::list<Point_2> pts;
 	VCcb_halfedge_circulator hc = f.ccb(), done(hc);
 	do {
-		std::unique_ptr<Segment_2> seg = getSegment(*hc, boundary);
-		if(seg) {
-			pts.push_back(seg.get()->source());
-			pts.push_back(seg.get()->target());
+		Segment_2 *seg = getSegment(*hc, boundary);
+		if(seg != nullptr) {
+			pts.push_back(seg->source());
+			pts.push_back(seg->target());
+			delete seg;
 		}
 	} while(++hc != done);
 
@@ -276,9 +279,8 @@ float faceArea(VFace f, Iso_rectangle_2 &boundary, Voronoi &vor) {
 	CGAL::ch_jarvis(pts.begin(), pts.end(), std::back_inserter(hull));
 	Polygon_2 poly(hull.begin(), hull.end());
 	
-	//_sw.put(poly);
-
-	return _abs(poly.area());
+	float area = _abs(poly.area());
+	return area;
 
 }
 
@@ -308,18 +310,22 @@ void computeBounds(Raster<float> &a, Raster<float> &b, float *bounds) {
  * Compute an adjustment for adjfile, based on basefile, maskfile and a number of samples. Write the 
  * result to outfile.
  */
-void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, std::string &outfile, int numSamples) {
+void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, std::string &outfile, int numSamples, float resolution) {
 
 	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
 		throw "The output file must not be the same as any input file.";
 
-	if(numSamples < 1)
+	if(numSamples < 2)
 		throw "Too few samples.";
+
+	if(resolution <= 0.0)
+		throw "Invalid resolution.";
 
 	// Initializes source, destination rasters.
 	Raster<float> base(basefile, 1, false);
 	Raster<float> adj(adjfile, 1, false);
-	Raster<float> out = adj.copy(outfile, adj);
+	std::string proj = adj.projection();
+	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, proj);
 
 	std::list<std::unique_ptr<Point> > samples;
 
@@ -328,25 +334,22 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 	if(maskfile.empty() || maskfile == "-") {
 		float bounds[4];
 		computeBounds(base, adj, bounds);
-		generateRandomSamples(samples, bounds, numSamples);
+		generateRandomSamples(samples, adj, base, bounds, numSamples);
 	} else {
 		Raster<char> mask(maskfile, 1);
 		generateMaskSamples(samples, mask, numSamples);
 	}
 
-	printSamples(samples);
-
 	// Compute sample differences.
 	computeSampleDifferences(base, adj, samples);
+
+	printSamples(samples);
 
 	// Build a boundary for clipping the voronoi.
 	Iso_rectangle_2 boundary(
 		Point_2(adj.toX(0) - 1000.0, adj.toY(0) + 1000.0),
 		Point_2(adj.toX(adj.cols()) + 1000.0, adj.toY(adj.rows()) - 1000.0)
 	);
-
-	// Debug boundary.
-	//_sw.put(boundary);
 
 	// Start a delaunay triangulation.
 	Delaunay dt;
@@ -364,8 +367,6 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 		h->info() = id;
 		diffs[id] = (*pt)->diff;
 		++id;
-		// Debug point.
-		//_sw.put(p);
 	}
 
 	// Pre-compute the areas of the original faces.
@@ -377,16 +378,15 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 		areas[h->info()] = area;
 	} while(++bf != vt.faces_end());
 
-
 	// Add the point for the initial cell to the triangulation.
-	Point_2 vc(adj.toX(0), adj.toY(0));
+	Point_2 vc(out.toX(0), out.toY(0));
 	DVertex_handle vh = dt.insert(vc);
 
-	for(int r = 0; r < adj.rows(); ++r) {
-		std::cerr << "Row " << r << " of " << adj.rows() << std::endl;
-		for(int c = 0; c < adj.cols(); ++c) {
+	for(int r = 0; r < out.rows(); ++r) {
+		std::cerr << "Row " << r << " of " << out.rows() << std::endl;
+		for(int c = 0; c < out.cols(); ++c) {
 
-			Point_2 vc(adj.toX(c), adj.toY(r));
+			Point_2 vc(out.toX(c), out.toY(r));
 			dt.move_if_no_collision(vh, vc);
 
 			Voronoi vt0(dt);
@@ -394,50 +394,60 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 			VFace_handle fh = boost::get<VFace_handle>(lr);
 
 			float area = faceArea(*fh, boundary, vt0);
-			float z = adj.get(c, r), z0 = z;
-
-			VCcb_halfedge_circulator hc = vt0.ccb_halfedges(fh), done(hc);
-			do {
-				VFace_handle f = hc->twin()->face();
-				DVertex_handle v = f->dual();
-				float a = faceArea(*f, boundary, vt0);
-				unsigned int id = v->info();
-				z0 += (areas[id] - a) / area * diffs[id];
-			} while(++hc != done);
-
+			std::cerr << "Area: " << area << std::endl;
+			// float z = adj.get(out.toX(c), out.toY(r)), z0 = z;
+			// TODO: Not adjusting now; just making a difference raster.
+			float z0 = 0.0;
+			if(area > 0.0) {
+				VCcb_halfedge_circulator hc = vt0.ccb_halfedges(fh), done(hc);
+				do {
+					VFace_handle f = hc->twin()->face();
+					DVertex_handle v = f->dual();
+					float a = faceArea(*f, boundary, vt0);
+					unsigned int id = v->info();
+					std::cerr << "Area " << id << ": " << (areas[id] - a) << ", " << areas[id] << ", " << a << ", " << ((areas[id] - a) / area) << std::endl;
+					z0 += ((areas[id] - a) / area) * diffs[id];
+				} while(++hc != done);
+			} else {
+				ShapeWriter sw;
+				sw.put(boundary);
+				sw.put(dt);
+				sw.put(vt, boundary);
+				sw.put(vt0, boundary);
+				sw.put(vc);
+				sw.write();
+				std::cerr << "Area is zero at " << c << ", " << r << std::endl;
+				throw "Zero area.";
+			}
 			out.set(c, r, z0);
 		}
 	}
-
-	// Flush the debug shapes.
-	//_sw.write();
-
 }
 
 void usage() {
-	std::cout << "Usage: rastfit <base file> <file to adjust> <mask file | \"-\"> <output file> <samples>" << std::endl;
+	std::cout << "Usage: rastfit <base file> <file to adjust> <mask file | \"-\"> <output file> <samples> <resolution>" << std::endl;
 	std::cout << "	This program will adjust one raster's elevations to match another's " << std::endl;
 	std::cout << "	using a natural neighbours interpoled adjustment to all pixels. The mask is " << std::endl;
 	std::cout << "  optional and used to limit the placement of samples to where elevations are " << std::endl;
-	std::cout << "	known to be good." << std::endl;
+	std::cout << "	known to be good. The output is an adjustment raster with the same extent " << std::endl;
+	std::cout << "	as the input raster, with the new resolution. " << std::endl;
 }
 
 int main(int argc, char **argv) {
 
  	try {
 
- 		if(argc < 6)
+ 		if(argc < 7)
  			throw "Too few arguments.";
-
- 		//_sw.off();
 
  		std::string basefile = argv[1];
  		std::string adjfile = argv[2];
  		std::string maskfile = argv[3];
   		std::string outfile = argv[4];
  		int samples = atoi(argv[5]);
+ 		float resolution = atof(argv[6]);
 
- 		adjust(basefile, adjfile, maskfile, outfile, samples);
+ 		adjust(basefile, adjfile, maskfile, outfile, samples, resolution);
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;

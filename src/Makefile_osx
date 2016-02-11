@@ -1,5 +1,5 @@
 LIB=-L/usr/lib -L/usr/local/lib
-CXXFLAGS=-I../include -I/usr/include -I/usr/local/include -I/usr/local/Cellar/geos/3.5.0/include -std=c++11
+CXXFLAGS=-I../include -I/usr/include -I/usr/local/include -I/usr/local/Cellar/geos/3.5.0/include -I/usr/local/Cellar/boost/1.59.0/include -std=c++11
 CFLAGS=-I../include -I/usr/include
 CPP=g++
 CC=gcc

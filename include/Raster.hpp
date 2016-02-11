@@ -25,6 +25,37 @@ private:
 	bool r_close;					// If true, close handle on destruct.
 
 public:
+	Raster(std::string &filename, float minx, float miny, float maxx, float maxy, float resolution, std::string &srs) {
+		GDALAllRegister();
+		int width = (int) ((maxx - minx) / resolution) + 1;
+		int height = (int) ((maxy - miny) / resolution) + 1;
+		r_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(), width, height, 1, GDT_Float32, NULL); 
+		// TODO: Proper type.
+		// TODO: Nodata.
+		if(r_ds == NULL)
+			throw "Failed to create file.";
+		r_bandn = 1;
+		r_curcol = -1;
+		r_currow = -1;
+		r_trans[0] = minx;
+		r_trans[1] = resolution;
+		r_trans[2] = 0.0;
+		r_trans[3] = maxy;
+		r_trans[4] = 0.0;
+		r_trans[5] = -resolution;
+		r_ds->SetGeoTransform(r_trans);
+		r_band = r_ds->GetRasterBand(1);
+		r_band->GetBlockSize(&r_bw, &r_bh);
+		r_rows = r_ds->GetRasterYSize();
+		r_cols = r_ds->GetRasterXSize();
+		r_nodata = r_band->GetNoDataValue();
+		r_ds->SetProjection(srs.c_str());
+		r_bcols = r_cols / r_bw;
+		r_brows = r_rows / r_bh;
+		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
+		r_writable = true;
+		r_close = true;
+	}
 	Raster(std::string &filename, int band = 1, bool writable = false) {
 		GDALAllRegister();
 		r_ds = (GDALDataset *) GDALOpen(filename.c_str(), writable ? GA_Update : GA_ReadOnly);
@@ -93,8 +124,30 @@ public:
 		cp.flush();
 		return cp;
 	}
+	const std::string projection() {
+		std::string proj(r_ds->GetProjectionRef());
+		return proj;
+	}
 	GDALDataType type() {
 		return r_band->GetRasterDataType();
+	}
+	float minx() {
+		return toX(0);
+	}
+	float maxx() {
+		return toX(cols());
+	}
+	float miny() {
+		return toY(rows());
+	}
+	float maxy() {
+		return toY(0);
+	}
+	float width() {
+		return maxx() - minx();
+	}
+	float height() {
+		return maxy() - miny();
 	}
 	T nodata() {
 		return r_nodata;
@@ -147,6 +200,20 @@ public:
 	bool isNoData(float x, float y) {
 		return isNoData(toCol(x), toRow(y));
 	}
+	T getOrNodata(float x, float y) {
+		if(!has(x, y)) {
+			return r_nodata;
+		} else {
+			return get(x, y);
+		}
+	}
+	T getOrNodata(int col, int row) {
+		if(!has(col, row)) {
+			return r_nodata;
+		} else {
+			return get(col, row);
+		}
+	}
 	// Returns pixel value at the given coordinate
 	T get(float x, float y) {
 		return get(toCol(x), toRow(y));
@@ -195,7 +262,7 @@ public:
 	bool has(int col, int row) const {
 		return col >= 0 && col < r_cols && row >= 0 && row < r_rows;
 	}
-	bool hasXY(T x, T y) {
+	bool has(float x, float y) const {
 		return has(toCol(x), toRow(y));
 	}
 	void close() {
