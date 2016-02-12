@@ -25,11 +25,13 @@ private:
 	bool r_close;					// If true, close handle on destruct.
 
 public:
-	Raster(std::string &filename, float minx, float miny, float maxx, float maxy, float resolution, std::string &srs) {
+	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
+			double resolution, std::string &srs) {
 		GDALAllRegister();
 		int width = (int) ((maxx - minx) / resolution) + 1;
 		int height = (int) ((maxy - miny) / resolution) + 1;
-		r_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(), width, height, 1, GDT_Float32, NULL); 
+		r_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(),
+				width, height, 1, GDT_Float32, NULL);
 		// TODO: Proper type.
 		// TODO: Nodata.
 		if(r_ds == NULL)
@@ -93,7 +95,7 @@ public:
 		r_writable = writable;
 		r_close = false;
 	}
-	Raster<T> copy(std::string &filename, int band = 1, bool writable = false) {
+	Raster<T> copy(std::string &filename, int band = 1, bool writable = false) const {
 		GDALDataset *outDS = r_ds->GetDriver()->CreateCopy(filename.c_str(), r_ds, band, NULL, NULL, NULL);
 		if(outDS == NULL)
 			throw "Failed to copy file.";
@@ -108,7 +110,7 @@ public:
 		cp.flush();
 		return cp;
 	}
-	Raster<T> copy(std::string &filename, Raster<T> &adj, int band = 1, bool writable = false) {
+	Raster<T> copy(std::string &filename, Raster<T> &adj, int band = 1, bool writable = false) const {
 		GDALDataset *outDS = r_ds->GetDriver()->Create(filename.c_str(), adj.cols(), adj.rows(), 
 			1, adj.type(), NULL);
 		if(outDS == NULL)
@@ -124,40 +126,40 @@ public:
 		cp.flush();
 		return cp;
 	}
-	const std::string projection() {
+	const std::string projection() const {
 		std::string proj(r_ds->GetProjectionRef());
 		return proj;
 	}
-	GDALDataType type() {
+	GDALDataType type() const {
 		return r_band->GetRasterDataType();
 	}
-	float minx() {
+	double minx() const {
 		return toX(0);
 	}
-	float maxx() {
+	double maxx() const {
 		return toX(cols());
 	}
-	float miny() {
+	double miny() const {
 		return toY(rows());
 	}
-	float maxy() {
+	double maxy() const {
 		return toY(0);
 	}
-	float width() {
+	double width() const {
 		return maxx() - minx();
 	}
-	float height() {
+	double height() const {
 		return maxy() - miny();
 	}
-	T nodata() {
+	T nodata() const {
 		return r_nodata;
 	}
 	// Returns the row offset in the block for a given y
-	int toBlockRow(float y) {
+	int toBlockRow(double y) const {
 		return toRow(y) % r_brows;
 	}
 	// Returns the row offset in the block for a given y
-	int toBlockCol(float x) {
+	int toBlockCol(double x) const {
 		return toCol(x) % r_bcols;
 	}
 	// Returns the width of the block
@@ -177,30 +179,30 @@ public:
 		return r_rows;
 	}
 	// Returns the row for a given y-coordinate
-	int toRow(float y) const {
+	int toRow(double y) const {
 		return (int) ((y - r_trans[3]) / r_trans[5]);
 	}
 	// Returns the column for a given x-coordinate
-	int toCol(float x) const {
+	int toCol(double x) const {
 		return (int) ((x - r_trans[0]) / r_trans[1]);
 	}
 	// Returns the x-coordinate for a given column
-	float toX(int col) const {
+	double toX(int col) const {
 		return (col * r_trans[1]) + r_trans[0];
 	}
 	// Returns the y-coordinate for a given row
-	float toY(int row) const {
+	double toY(int row) const {
 		return (row * r_trans[5]) + r_trans[3];
 	}
 	// Returns true if the pixel is nodata
-	bool isNoData(int col, int row) {
+	bool isNoData(int col, int row) const {
 		return get(col, row) == r_nodata;
 	}
 	// Returns true if the pixel is nodata
-	bool isNoData(float x, float y) {
+	bool isNoData(double x, double y) const {
 		return isNoData(toCol(x), toRow(y));
 	}
-	T getOrNodata(float x, float y) {
+	T getOrNodata(double x, double y) {
 		if(!has(x, y)) {
 			return r_nodata;
 		} else {
@@ -215,7 +217,7 @@ public:
 		}
 	}
 	// Returns pixel value at the given coordinate
-	T get(float x, float y) {
+	T get(double x, double y) {
 		return get(toCol(x), toRow(y));
 	}
 	// Returns the pixel value at the give row/column
@@ -245,7 +247,7 @@ public:
 		r_block[(row % r_bh) * r_bw + (col % r_bw)] = v;
 	}
 	// Sets the pixel value at the given coordinate
-	void set(float x, float y, T v) {
+	void set(double x, double y, T v) {
 		set(toCol(x), toRow(y), v);
 	}
 	// Flush the current block to the dataset
@@ -262,7 +264,7 @@ public:
 	bool has(int col, int row) const {
 		return col >= 0 && col < r_cols && row >= 0 && row < r_rows;
 	}
-	bool has(float x, float y) const {
+	bool has(double x, double y) const {
 		return has(toCol(x), toRow(y));
 	}
 	void close() {
