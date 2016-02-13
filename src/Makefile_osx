@@ -1,5 +1,5 @@
-LIB=-L/usr/lib -L/usr/local/lib
-CXXFLAGS=-I../include -I/usr/include -I/usr/local/include -I/usr/local/Cellar/geos/3.5.0/include -I/usr/local/Cellar/boost/1.59.0/include -std=c++11
+LIB=-L/usr/local/Cellar/mpfr/3.1.3/lib -L/usr/local/Cellar/gmp/6.1.0/lib -L/usr/lib -L/usr/local/lib
+CXXFLAGS=-I../include -I/usr/local/Cellar/mpfr/3.1.3/include -I/usr/local/Cellar/mpfr/3.1.3/include -I/usr/include -I/usr/local/include -I/usr/local/Cellar/geos/3.5.0/include -I/usr/local/Cellar/boost/1.59.0/include -std=c++11
 CFLAGS=-I../include -I/usr/include
 CPP=g++
 CC=gcc
@@ -37,10 +37,10 @@ las2csrs_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
 	
 rastfit:
-	$(CPP) $(CXXFLAGS) -Wall -O3 rastfit.cpp $(LIB) -lgdal -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -Wall -O3 rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
 
 rastfit_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g rastfit.cpp $(LIB) -lgdal -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -Wall -g rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
 	
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips

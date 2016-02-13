@@ -80,6 +80,11 @@ double _max(double a, double b) {
 	return a < b ? b : a;
 }
 
+double _random() {
+	double r = ((double) std::rand()) / RAND_MAX;
+	return r;
+}
+
 class Point {
 public:
 	double x, y, diff;
@@ -93,9 +98,6 @@ public:
 		x(x),
 		y(y),
 		diff(z) {
-	}
-	Point(Point &p) :
-		Point(p.x, p.y, p.diff) {
 	}
 	bool equals(const Point &p) const {
 		return x == p.x && y == p.y;
@@ -128,15 +130,6 @@ private:
 };
 
 /**
- * Shuffle and truncate the list of points, adding them to samples.
- */
-void shuffle(std::vector<std::unique_ptr<Point> > &samp, std::list<std::unique_ptr<Point> > &samples, int numSamples) {
-	std::random_shuffle(samp.begin(), samp.end());
-	for(int i = 0; i < numSamples; ++i)
-		samples.push_back(std::move(samp[i])); 
-}
-
-/**
  * Computes the raster differences for each sample point.
  */
 void computeSampleDifferences(Raster<float> &base, Raster<float> &adj, std::list<std::unique_ptr<Point> > &samples) {
@@ -156,46 +149,51 @@ void computeSampleDifferences(Raster<float> &base, Raster<float> &adj, std::list
 /**
  * Generates a set of sample points, limited to valid pixels in the mask.
  */
-void generateMaskSamples(std::list<std::unique_ptr<Point> > &samples, Raster<char> &mask, int numSamples) {
-	std::vector<std::unique_ptr<Point> > pts;
+void generateMaskSamples(std::list<Point> &samples, Raster<char> &mask, 
+	Raster<float> &base, Raster<float> &adj, int numSamples) {
+	std::vector<Point> pts;
 	for(int r = 0; r < mask.rows(); ++r) {
 		for(int c = 0; c < mask.cols(); ++c) {
-			if((int) mask.get(c, r) != 0) 
-				pts.push_back(std::unique_ptr<Point>(new Point(mask.toX(c), mask.toY(r))));
+			if((int) mask.get(c, r) != 0 
+				&& adj.isValid(mask.toX(c), mask.toY(r)) && base.isValid(mask.toX(c), mask.toY(r))) {
+				Point p(mask.toX(c), mask.toY(r));
+				pts.push_back(p);
+			}
 		}
 	}
-	shuffle(pts, samples, numSamples);
-}
-
-double _random() {
-	double r = ((double) std::rand()) / RAND_MAX;
-	return r;
+	std::random_shuffle(pts.begin(), pts.end());
+	for(int i = 0; i < pts.size(); ++i) {
+		if(i < numSamples)
+			samples.push_back(pts[i]);
+	}
 }
 
 /**
  * Generates a list of random samples within the bounds of a raster.
  */
-void generateRandomSamples(std::list<std::unique_ptr<Point> > &samples, Raster<float> &a, Raster<float> &b, 
+void generateRandomSamples(std::list<Point> &samples, Raster<float> &a, Raster<float> &b, 
 	double *bounds, int numSamples) {
 	do {
 		double x = bounds[0] + (bounds[2] - bounds[0]) * _random();
 		double y = bounds[1] + (bounds[3] - bounds[1]) * _random();
 		if(a.getOrNodata(x, y) != a.nodata() && b.getOrNodata(x, y) != b.nodata()) {
-			samples.push_back(std::unique_ptr<Point>(new Point(x, y)));
+			Point p(x, y);
+			samples.push_back(p);
 			--numSamples;
 		}
 	} while(numSamples);
 }
 
 /**
- * Get a segment that represents the halfedge. If the halfedge is
- * finite, return an equivalent segment. If it is not, return a finite segment
- * with a length of d.
+ * Get or generate the output points of the halfedge. If the edge is unbounded,
+ * make a bounded segment using the d argument, which should be a reasonable distance
+ * outside the bounds of the region of interest.
  */
-std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, double d) {
+void getSegmentPoints(const VHalfedge &he, std::list<Point_2> &pts, double d) {
 	if(!he.is_ray()) {
 		// If it's not a ray, it can just be returned as a segment.
-		return std::unique_ptr<Segment_2>(new Segment_2(he.source()->point(), he.target()->point()));
+		pts.push_back(he.source()->point());
+		pts.push_back(he.target()->point());
 	} else {
 		// Get the dual of the halfedge and find its midpoint. This
 		// helps determine the orientation of the ray.
@@ -207,13 +205,11 @@ std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, double d) {
 		// If the ray has a target, reverse the dir.
 		if(!he.has_source())
 			dir = -dir;
-		Ray_2 ray(he.has_source() ? he.source()->point() : he.target()->point(), dir);
 		double a = atan2(CGAL::to_double(dir.dy()), CGAL::to_double(dir.dx()));
-		Point_2 pt(
-			CGAL::to_double(ray.source().x()) + d * cos(a),
-			CGAL::to_double(ray.source().y()) + d * sin(a)
-		);
-		return std::unique_ptr<Segment_2>(new Segment_2(ray.source(), pt));
+		Point_2 pt1 = he.has_source() ? he.source()->point() : he.target()->point();
+		Point_2 pt2(pt1.x() + d * cos(a), pt1.y() + d * sin(a));
+		pts.push_back(pt1);
+		pts.push_back(pt2);
 	}
 }
 
@@ -223,13 +219,11 @@ std::unique_ptr<Segment_2> getSegment(const VHalfedge &he, double d) {
 std::unique_ptr<Polygon_2> faceToPoly(const VFace &f, const Voronoi &vor, const Polygon_2 &bounds) {
 	// Compute a length for unbounded segments.
 	double d = _max(bounds.bbox().xmax() - bounds.bbox().xmin(), bounds.bbox().ymax() - bounds.bbox().ymin()) * 2.0;
-	std::vector<Point_2> pts;
+	std::list<Point_2> pts;
 	// Build segments from the face edges.
 	VCcb_halfedge_circulator hc = f.ccb(), done(hc);
 	do {
-		std::unique_ptr<Segment_2> seg = getSegment(*hc, d);
-		pts.push_back(seg->source());
-		pts.push_back(seg->target());
+		getSegmentPoints(*hc, pts, d);
 	} while(++hc != done);
 
 	// Add the boundary vertices that are inside the current face.
@@ -269,7 +263,7 @@ double faceArea(const VFace f, const Voronoi &vor, const Polygon_2 &bounds) {
 
 void printSamples(std::list<std::unique_ptr<Point> > &samples) {
 	std::cout << "x,y,diff" << std::endl;
-	for(std::list<std::unique_ptr<Point> >::iterator it = samples.begin(); it != samples.end(); ++it) {
+	for(auto it = samples.begin(); it != samples.end(); ++it) {
 		std::cout << (*it)->x << "," << (*it)->y << "," << (*it)->diff << std::endl;
 	}
 }
@@ -311,10 +305,15 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 		computeBounds(base, adj, bounds);
 		generateRandomSamples(samples, adj, base, bounds, numSamples);
 	} else {
+		std::cerr << "Generating samples." << std::endl;
 		Raster<char> mask(maskfile, 1);
-		generateMaskSamples(samples, mask, numSamples);
+		generateMaskSamples(samples, mask, adj, base, numSamples);
 	}
 
+	if(samples.size() == 0)
+		throw "No samples collected.";
+
+	std::cerr << "Computing sample differences." << std::endl;
 	// Compute sample differences.
 	computeSampleDifferences(base, adj, samples);
 

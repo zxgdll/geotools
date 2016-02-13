@@ -17,12 +17,12 @@ private:
 	int r_bandn;				// The band number
 	int r_bw, r_bh;				// Block width/height in pixels
 	bool r_writable;			// True if the raster is writable
-	T r_nodata;					// Nodata value.
-	GDALDataset *r_ds;			// GDAL dataset
-	GDALRasterBand *r_band;		// GDAL band
+	bool r_dirty = false;
 	double r_trans[6];			// Raster transform
 	T *r_block;					// Block storage
-	bool r_close;					// If true, close handle on destruct.
+	T r_nodata;					// Nodata value.
+	GDALDataset *r_ds = NULL;	// GDAL dataset
+	GDALRasterBand *r_band;		// GDAL band
 
 public:
 	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
@@ -52,11 +52,10 @@ public:
 		r_cols = r_ds->GetRasterXSize();
 		r_nodata = r_band->GetNoDataValue();
 		r_ds->SetProjection(srs.c_str());
-		r_bcols = r_cols / r_bw;
-		r_brows = r_rows / r_bh;
+		r_bcols = r_cols / r_bw + 1;
+		r_brows = r_rows / r_bh + 1;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = true;
-		r_close = true;
 	}
 	Raster(std::string &filename, int band = 1, bool writable = false) {
 		GDALAllRegister();
@@ -72,11 +71,10 @@ public:
 		r_rows = r_ds->GetRasterYSize();
 		r_cols = r_ds->GetRasterXSize();
 		r_nodata = r_band->GetNoDataValue();
-		r_bcols = r_cols / r_bw;
-		r_brows = r_rows / r_bh;
+		r_bcols = r_cols / r_bw + 1;
+		r_brows = r_rows / r_bh + 1;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = writable;
-		r_close = true;
 	}
 	Raster(GDALDataset *ds, int band = 1, bool writable = false) {
 		r_ds = ds;
@@ -89,11 +87,10 @@ public:
 		r_rows = ds->GetRasterYSize();
 		r_cols = ds->GetRasterXSize();
 		r_nodata = r_band->GetNoDataValue();
-		r_bcols = r_cols / r_bw;
-		r_brows = r_rows / r_bh;
+		r_bcols = r_cols / r_bw + 1;
+		r_brows = r_rows / r_bh + 1;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = writable;
-		r_close = false;
 	}
 	Raster<T> copy(std::string &filename, int band = 1, bool writable = false) const {
 		GDALDataset *outDS = r_ds->GetDriver()->CreateCopy(filename.c_str(), r_ds, band, NULL, NULL, NULL);
@@ -202,6 +199,12 @@ public:
 	bool isNoData(double x, double y) const {
 		return isNoData(toCol(x), toRow(y));
 	}
+	bool isValid(int c, int r) {
+		return getOrNodata(c, r) != r_nodata;
+	}
+	bool isValid(double x, double y) {
+		return getOrNodata(x, y) != r_nodata;
+	}
 	T getOrNodata(double x, double y) {
 		if(!has(x, y)) {
 			return r_nodata;
@@ -245,6 +248,7 @@ public:
 		if(!r_writable) return;
 		get(col, row);
 		r_block[(row % r_bh) * r_bw + (col % r_bw)] = v;
+		r_dirty = true;
 	}
 	// Sets the pixel value at the given coordinate
 	void set(double x, double y, T v) {
@@ -252,12 +256,13 @@ public:
 	}
 	// Flush the current block to the dataset
 	void flush() {
-		if(r_writable && r_curcol > -1 && r_currow > -1) {
-			GDALRasterBlock *b = r_band->GetLockedBlockRef(r_curcol, r_currow);
+		if(r_writable && r_dirty) {
+			//GDALRasterBlock *b = r_band->GetLockedBlockRef(r_curcol, r_currow);
 			CPLErr ret = r_band->WriteBlock(r_curcol, r_currow, r_block);
+			//b->DropLock();
 			if(ret != 0)
 				throw "Flush error.";
-			b->DropLock();
+			r_dirty = false;
 		}
 	}
 	// Returns true if the col/row are represented in the dataset
@@ -267,16 +272,8 @@ public:
 	bool has(double x, double y) const {
 		return has(toCol(x), toRow(y));
 	}
-	void close() {
-		flush();
-		free(r_block);
-		r_ds = 0;
-		r_band = 0;
-		if(r_close && r_ds)
-			GDALClose(r_ds);
-	}
 	~Raster() {
-		close();
+		flush();
 	}
 
 };
