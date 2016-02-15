@@ -168,12 +168,12 @@ int main(int argc, char **argv) {
 		std::ifstream in(files[i].c_str());
 		las::Reader reader = rf.CreateWithStream(in);
 		las::Header header = reader.GetHeader();
-		Util::computeLasBounds(header, bounds0);
-		Util::expand(bounds, bounds0);
+		Util::computeLasBounds(header, bounds0, 2);
+		Util::expand(bounds, bounds0, 2);
 		in.close();
 	}
 
-	Util::snapBounds(bounds, res);
+	Util::snapBounds(bounds, res, 2);
 	int cols = (int) ((bounds[2] - bounds[0]) + res);
 	int rows = (int) ((bounds[3] - bounds[1]) + res);
 	double width = bounds[2] - bounds[0];
@@ -199,27 +199,26 @@ int main(int argc, char **argv) {
 
 	// Build the shapefile output.
 	GDALAllRegister();
+	OGRRegisterAll();
 	double transform[6] = {bounds[0], res, 0, bounds[3], 0, -res};
 	const char *shpFormat = "ESRI Shapefile";
 	const char *tifFormat = "GTiff";
-    GDALDriver *shpDriver, *tifDriver;
-    GDALDataset *shpDS, *tifDS;
 
     OGRSpatialReference ref;
     ref.importFromEPSG(srid);
     char *crs = (char *) malloc(1024 * sizeof(char));
     ref.exportToWkt(&crs);
 
-    shpDriver = GetGDALDriverManager()->GetDriverByName(shpFormat);
-    tifDriver = GetGDALDriverManager()->GetDriverByName(tifFormat);
+    OGRSFDriver *shpDriver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(shpFormat);
+    GDALDriver *tifDriver = GetGDALDriverManager()->GetDriverByName(tifFormat);
 
-    tifDS = tifDriver->Create("/tmp/lasboundary.tif", cols, rows, 1, GDT_Byte, 0);
+    GDALDataset *tifDS = tifDriver->Create("/tmp/lasboundary.tif", cols, rows, 1, GDT_Byte, 0);
     tifDS->SetGeoTransform(transform);
     tifDS->SetProjection(crs);
     tifDS->RasterIO(GF_Write, 0, 0, cols, rows, grid, cols, rows, GDT_Byte, 1, 0, 0, 0, 0);
     OGRFree(crs);
 
-    shpDS = shpDriver->Create( dstFile, 0, 0, 0, GDT_Unknown, NULL);
+    OGRDataSource *shpDS = shpDriver->CreateDataSource(dstFile, NULL);
     OGRLayer *layer = shpDS->CreateLayer("boundary", &ref, wkbMultiPolygon, NULL);
 	OGRFieldDefn fvalue("value", OFTReal);
 	if(layer->CreateField(&fvalue) != OGRERR_NONE) {

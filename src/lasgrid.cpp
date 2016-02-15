@@ -128,8 +128,8 @@ int main(int argc, char **argv) {
 	double radius = -1.0;
 	std::set<int> classes;
 	std::vector<int> quantiles;
-	int numQuantiles;
-	int quantile;
+	int numQuantiles = 0;
+	int quantile = 0;
 	std::vector<std::string> files;
 	double bounds[] = {FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX};
 	bool hasBounds = false;

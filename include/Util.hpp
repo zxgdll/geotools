@@ -5,6 +5,7 @@ namespace las = liblas;
 #include <set>
 #include <list>
 #include <sstream>
+#include <algorithm>
 
 /**
  * Provides utility methods for working with LiDAR data.

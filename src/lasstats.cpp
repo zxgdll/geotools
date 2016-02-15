@@ -319,7 +319,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 	const geom::GeometryFactory *gf = geom::GeometryFactory::getDefaultInstance();
 	const geom::CoordinateSequenceFactory *cf = gf->getCoordinateSequenceFactory();
 
-	GDALDataset *srcDs, *dstDs;
+	OGRDataSource *srcDs, *dstDs;
 	OGRLayer *layer;
 	OGRFeature *feat;
 	OGRFeatureDefn *featDefn;
@@ -329,7 +329,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 	std::vector<Stat* > stats;
 
 	// Load the shapefile and get the polygons from it.
-	srcDs = (GDALDataset *) GDALOpenEx(shapefile.c_str(), GDAL_OF_VECTOR|GDAL_OF_READONLY, NULL, NULL, NULL);
+	srcDs = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
 	if(srcDs == NULL)
 		throw "Couldn't open shapefile.";
 
@@ -413,11 +413,12 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 
 	// Start building the output shapefile.
 	std::cerr << "Updating shapefile." << std::endl;
-	GDALDriver *drv = GetGDALDriverManager()->GetDriverByName("ESRI Shapefile");
+	OGRRegisterAll();
+	OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName("ESRI Shapefile");
 	if(drv == NULL)
 		throw "Shapefile driver is not available.";
 
-	dstDs = drv->Create(outfile.c_str(), 0, 0, 0, GDT_Unknown, NULL);
+	dstDs = drv->CreateDataSource(outfile.c_str(), NULL);
 	if(dstDs == NULL)
 		throw "Couldn't create shapefile.";
 
@@ -454,7 +455,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 
 	if(numQuantiles > 0) {
 		for(int qt = 0; qt <= numQuantiles; ++qt) {
-			OGRFieldDefn fqt("qt" + std::to_string(qt), OFTReal);
+			OGRFieldDefn fqt(("qt" + std::to_string(qt)).c_str(), OFTReal);
 			if(layer->CreateField(&fqt) != OGRERR_NONE)
 				throw "Failed to create quantile field.";
 		}
@@ -478,7 +479,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 		if(numQuantiles > 0) {
 			(*it)->quantiles(quantiles, numQuantiles);
 			for(int qt = 0; qt < numQuantiles + 2; ++qt)
-				feat->SetField("qt" + std::to_string(qt), quantiles[qt]);
+				feat->SetField(("qt" + std::to_string(qt)).c_str(), quantiles[qt]);
 		}
 		poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) (*it)->geom());
 		feat->SetGeometry(poly);
@@ -517,7 +518,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 
 	Grid<char> dg(cols, rows);
 
-	if(0 != b->RasterIO(GF_Read, 0, 0, cols, rows, dg.grid(), cols, rows, GDT_Byte, 0, 0, NULL))
+	if(0 != b->RasterIO(GF_Read, 0, 0, cols, rows, dg.grid(), cols, rows, GDT_Byte, 0, 0))
 		throw "Failed to read from classification raster.";
 
 	// Iterate over LAS files, process each one.
@@ -620,13 +621,13 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 					band = dst->GetRasterBand((c * numBands) + (b + 1));
 					if(band == NULL)
 						throw "Failed to retrieve raster band.";
-					if(0 != band->RasterIO(GF_Read, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0, NULL))
+					if(0 != band->RasterIO(GF_Read, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0))
 						throw "Failed to read band raster.";
 					for(int i = 0; i < rows * cols; ++i) {
 						if(id == dg[i])
 							fg[i] = values[b];
 					}
-					if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0, NULL))
+					if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0))
 						throw "Failed to write band raster.";
 				}
 				delete st;

@@ -39,7 +39,7 @@
 
 #include "Util.hpp"
 #include "Raster.hpp"
-#include "ShapeWriter.hpp"
+//#include "ShapeWriter.hpp"
 
 typedef CGAL::Exact_predicates_exact_constructions_kernel                             K;
 typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>                  Vb; // Vertex can store its area
@@ -115,10 +115,13 @@ public:
 	samplesort(Raster<float> &r) : r(r) {
 	}
 	bool operator()(std::unique_ptr<Point> &a, std::unique_ptr<Point> &b) const {
-		int ar = r.toBlockRow(a->y);
-		int br = r.toBlockRow(b->y);
-		int ac = r.toBlockCol(a->x);
-		int bc = r.toBlockCol(b->x);
+		return (a.get(), b.get());
+	}
+	bool operator()(Point &a, Point &b) const {
+		int ar = r.toBlockRow(a.y);
+		int br = r.toBlockRow(b.y);
+		int ac = r.toBlockCol(a.x);
+		int bc = r.toBlockCol(b.x);
 		if(ar == br) {
 			return ac < bc;
 		} else {
@@ -132,16 +135,16 @@ private:
 /**
  * Computes the raster differences for each sample point.
  */
-void computeSampleDifferences(Raster<float> &base, Raster<float> &adj, std::list<std::unique_ptr<Point> > &samples) {
+void computeSampleDifferences(Raster<float> &base, Raster<float> &adj, std::list<Point> &samples) {
 	const samplesort ssort(base);
 	samples.sort(ssort); // Sort because we want to read the raster efficiently
 	for(auto pt = samples.begin(); pt != samples.end(); ++pt) {
-		float a = base.get((*pt)->x, (*pt)->y);
-		float b = adj.get((*pt)->x, (*pt)->y);
+		float a = base.get(pt->x, pt->y);
+		float b = adj.get(pt->x, pt->y);
 		if(a != base.nodata() && b != adj.nodata()) {
-			(*pt)->diff = a - b;
+			pt->diff = a - b;
 		} else {
-			(*pt)->diff = adj.nodata();
+			pt->diff = adj.nodata();
 		}
 	}
 }
@@ -150,38 +153,35 @@ void computeSampleDifferences(Raster<float> &base, Raster<float> &adj, std::list
  * Generates a set of sample points, limited to valid pixels in the mask.
  */
 void generateMaskSamples(std::list<Point> &samples, Raster<char> &mask, 
-	Raster<float> &base, Raster<float> &adj, int numSamples) {
+	Raster<float> &base, Raster<float> &adj, unsigned int numSamples) {
 	std::vector<Point> pts;
 	for(int r = 0; r < mask.rows(); ++r) {
 		for(int c = 0; c < mask.cols(); ++c) {
-			if((int) mask.get(c, r) != 0 
-				&& adj.isValid(mask.toX(c), mask.toY(r)) && base.isValid(mask.toX(c), mask.toY(r))) {
+			if(mask.get(c, r) != 0 && adj.isValid(mask.toX(c), mask.toY(r))
+					&& base.isValid(mask.toX(c), mask.toY(r))) {
 				Point p(mask.toX(c), mask.toY(r));
 				pts.push_back(p);
 			}
 		}
 	}
+	std::cerr << "Selecting from " << pts.size() << " points" << std::endl;
 	std::random_shuffle(pts.begin(), pts.end());
-	for(int i = 0; i < pts.size(); ++i) {
-		if(i < numSamples)
-			samples.push_back(pts[i]);
-	}
+	samples.assign(pts.begin(), pts.begin() + (numSamples > pts.size() ? pts.size() : numSamples));
 }
 
 /**
  * Generates a list of random samples within the bounds of a raster.
  */
 void generateRandomSamples(std::list<Point> &samples, Raster<float> &a, Raster<float> &b, 
-	double *bounds, int numSamples) {
-	do {
+	double *bounds, unsigned int numSamples) {
+	while(numSamples-- > 0) {
 		double x = bounds[0] + (bounds[2] - bounds[0]) * _random();
 		double y = bounds[1] + (bounds[3] - bounds[1]) * _random();
-		if(a.getOrNodata(x, y) != a.nodata() && b.getOrNodata(x, y) != b.nodata()) {
+		if(a.isValid(x, y) && b.isValid(x, y)) {
 			Point p(x, y);
 			samples.push_back(p);
-			--numSamples;
 		}
-	} while(numSamples);
+	}
 }
 
 /**
@@ -218,7 +218,8 @@ void getSegmentPoints(const VHalfedge &he, std::list<Point_2> &pts, double d) {
  */
 std::unique_ptr<Polygon_2> faceToPoly(const VFace &f, const Voronoi &vor, const Polygon_2 &bounds) {
 	// Compute a length for unbounded segments.
-	double d = _max(bounds.bbox().xmax() - bounds.bbox().xmin(), bounds.bbox().ymax() - bounds.bbox().ymin()) * 2.0;
+	double d = _max(bounds.bbox().xmax() - bounds.bbox().xmin(),
+			bounds.bbox().ymax() - bounds.bbox().ymin()) * 2.0;
 	std::list<Point_2> pts;
 	// Build segments from the face edges.
 	VCcb_halfedge_circulator hc = f.ccb(), done(hc);
@@ -261,10 +262,10 @@ double faceArea(const VFace f, const Voronoi &vor, const Polygon_2 &bounds) {
 
 }
 
-void printSamples(std::list<std::unique_ptr<Point> > &samples) {
+void printSamples(std::list<Point> &samples) {
 	std::cout << "x,y,diff" << std::endl;
 	for(auto it = samples.begin(); it != samples.end(); ++it) {
-		std::cout << (*it)->x << "," << (*it)->y << "," << (*it)->diff << std::endl;
+		std::cout << std::setprecision(9) << it->x << "," << it->y << "," << it->diff << std::endl;
 	}
 }
 
@@ -279,7 +280,8 @@ void computeBounds(Raster<float> &a, Raster<float> &b, double *bounds) {
  * Compute an adjustment for adjfile, based on basefile, maskfile and a number of samples. Write the 
  * result to outfile.
  */
-void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, std::string &outfile, int numSamples, double resolution) {
+void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile,
+		std::string &outfile, unsigned int numSamples, double resolution) {
 
 	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
 		throw "The output file must not be the same as any input file.";
@@ -293,10 +295,13 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 	// Initializes source, destination rasters.
 	Raster<float> base(basefile, 1, false);
 	Raster<float> adj(adjfile, 1, false);
-	std::string proj = adj.projection();
-	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, proj);
+	std::string proj;
+	adj.projection(proj);
+	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, proj.c_str());
 
-	std::list<std::unique_ptr<Point> > samples;
+	base.get(0,0);
+	adj.get(0,0);
+	std::list<Point> samples;
 
 	// Generate a list of samples, shuffle it and clip it to the
 	// desired count.
@@ -339,12 +344,13 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile, 
 	// with the vertices (which are sample sites.)
 	unsigned int id = 0;
 	for(auto pt = samples.begin(); pt != samples.end(); ++pt) {
-		Point_2 p((*pt)->x, (*pt)->y);
+		Point_2 p(pt->x, pt->y);
 		DVertex_handle h = dt.insert(p);
 		h->info() = id;
-		diffs[id] = (*pt)->diff;
+		diffs[id] = pt->diff;
 		++id;
 	}
+
 
 	// Pre-compute the areas of the original faces.
 	Voronoi vt(dt);
@@ -414,10 +420,12 @@ int main(int argc, char **argv) {
  		std::string adjfile = argv[2];
  		std::string maskfile = argv[3];
   		std::string outfile = argv[4];
- 		int samples = atoi(argv[5]);
+ 		unsigned int samples = atoi(argv[5]);
  		double resolution = atof(argv[6]);
 
  		adjust(basefile, adjfile, maskfile, outfile, samples, resolution);
+
+ 		std::cerr << "END" << std::endl;
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;

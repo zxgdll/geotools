@@ -89,8 +89,7 @@ int main(int argc, char ** argv) {
 
 	/* Attempt to open and load geometries from the shape file. */
 
-	GDALAllRegister();
-	GDALDataset *ds;
+	OGRRegisterAll();
 	OGRLayer *layer;
 	OGRFeature *feat;
 	OGRGeometry *og;
@@ -98,13 +97,13 @@ int main(int argc, char ** argv) {
 	gg::GeometryCollection *geomColl;
 	gg::Geometry *geom;
 
-	ds = (GDALDataset *) GDALOpen(shapefile.c_str(), GDAL_OF_VECTOR|GDAL_OF_READONLY, NULL, NULL, NULL);
+	OGRDataSource *ds = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
 	if(ds == NULL) {
 		std::cerr << "Couldn't open shapefile." << std::endl;
 		return 1;
 	}
 
-	if(layername == NULL) {
+	if(layername.empty()) {
 		layer = ds->GetLayer(0);
 	} else {
 		layer = ds->GetLayerByName(layername.c_str());
