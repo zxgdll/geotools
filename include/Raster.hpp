@@ -17,115 +17,75 @@ private:
 	int r_bandn;				// The band number
 	int r_bw, r_bh;				// Block width/height in pixels
 	bool r_writable;			// True if the raster is writable
-	bool r_dirty = false;
-	double r_trans[6];			// Raster transform
-	T *r_block;					// Block storage
+	bool r_dirty;
 	T r_nodata;					// Nodata value.
-	GDALDataset *r_ds = NULL;	// GDAL dataset
+	T *r_block;					// Block storage
+	GDALDataset *r_ds;			// GDAL dataset
 	GDALRasterBand *r_band;		// GDAL band
+	double r_trans[6];			// Raster transform
 
 public:
+	Raster() :
+		r_cols(-1), r_rows(-1),
+		r_bcols(-1), r_brows(-1),
+		r_curcol(-1), r_currow(-1),
+		r_bandn(1),
+		r_bw(-1), r_bh(-1),
+		r_writable(false), r_dirty(false) {
+
+		r_ds = nullptr;
+		r_band = nullptr;
+		r_block = nullptr;
+
+	}
 	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolution, std::string &srs) {
+			double resolution, const char *proj) : Raster() {
 		GDALAllRegister();
 		int width = (int) ((maxx - minx) / resolution) + 1;
 		int height = (int) ((maxy - miny) / resolution) + 1;
 		r_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(),
 				width, height, 1, GDT_Float32, NULL);
-		// TODO: Proper type.
-		// TODO: Nodata.
-		if(r_ds == NULL)
+		if(r_ds == nullptr)
 			throw "Failed to create file.";
-		r_bandn = 1;
-		r_curcol = -1;
-		r_currow = -1;
-		r_trans[0] = minx;
-		r_trans[1] = resolution;
-		r_trans[2] = 0.0;
-		r_trans[3] = maxy;
-		r_trans[4] = 0.0;
-		r_trans[5] = -resolution;
+		// TODO: Proper type.
+		r_trans[0] = minx, r_trans[1] = resolution, r_trans[2] = 0.0,
+				r_trans[3] = maxy, r_trans[4] = 0.0, r_trans[5] = -resolution;
 		r_ds->SetGeoTransform(r_trans);
-		r_band = r_ds->GetRasterBand(1);
-		r_band->GetBlockSize(&r_bw, &r_bh);
+		if(proj != NULL)
+			r_ds->SetProjection(proj);
 		r_rows = r_ds->GetRasterYSize();
 		r_cols = r_ds->GetRasterXSize();
+		r_band = r_ds->GetRasterBand(1);
+		if(r_band == NULL)
+			throw "Failed to get band.";
+		r_band->GetBlockSize(&r_bw, &r_bh);
 		r_nodata = r_band->GetNoDataValue();
-		r_ds->SetProjection(srs.c_str());
-		r_bcols = r_cols / r_bw + 1;
-		r_brows = r_rows / r_bh + 1;
+		r_bcols = (r_cols + r_bw - 1) / r_bw;
+		r_brows = (r_rows + r_bh - 1) / r_bh;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = true;
 	}
-	Raster(std::string &filename, int band = 1, bool writable = false) {
+	Raster(std::string &filename, int band = 1, bool writable = false) : Raster() {
 		GDALAllRegister();
 		r_ds = (GDALDataset *) GDALOpen(filename.c_str(), writable ? GA_Update : GA_ReadOnly);
 		if(r_ds == NULL)
 			throw "Failed to open raster.";
 		r_bandn = band;
-		r_curcol = -1;
-		r_currow = -1;
 		r_ds->GetGeoTransform(r_trans);
 		r_band = r_ds->GetRasterBand(band);
+		if(r_band == nullptr)
+			throw "Failed to get band.";
 		r_band->GetBlockSize(&r_bw, &r_bh);
 		r_rows = r_ds->GetRasterYSize();
 		r_cols = r_ds->GetRasterXSize();
 		r_nodata = r_band->GetNoDataValue();
-		r_bcols = r_cols / r_bw + 1;
-		r_brows = r_rows / r_bh + 1;
+		r_bcols = (r_cols + r_bw - 1) / r_bw;
+		r_brows = (r_rows + r_bh - 1) / r_bh;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = writable;
 	}
-	Raster(GDALDataset *ds, int band = 1, bool writable = false) {
-		r_ds = ds;
-		r_bandn = band;
-		r_curcol = -1;
-		r_currow = -1;
-		ds->GetGeoTransform(r_trans);
-		r_band = ds->GetRasterBand(band);
-		r_band->GetBlockSize(&r_bw, &r_bh);
-		r_rows = ds->GetRasterYSize();
-		r_cols = ds->GetRasterXSize();
-		r_nodata = r_band->GetNoDataValue();
-		r_bcols = r_cols / r_bw + 1;
-		r_brows = r_rows / r_bh + 1;
-		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
-		r_writable = writable;
-	}
-	Raster<T> copy(std::string &filename, int band = 1, bool writable = false) const {
-		GDALDataset *outDS = r_ds->GetDriver()->CreateCopy(filename.c_str(), r_ds, band, NULL, NULL, NULL);
-		if(outDS == NULL)
-			throw "Failed to copy file.";
-		GDALClose(outDS);
-		Raster<T> cp(filename, band, writable);
-		T nodata = cp.nodata();
-		for(int r = 0; r < cp.rows(); ++r) {
-			for(int c = 0; c < cp.cols(); ++c) {
-				cp.set(c, r, nodata);
-			}
-		}
-		cp.flush();
-		return cp;
-	}
-	Raster<T> copy(std::string &filename, Raster<T> &adj, int band = 1, bool writable = false) const {
-		GDALDataset *outDS = r_ds->GetDriver()->Create(filename.c_str(), adj.cols(), adj.rows(), 
-			1, adj.type(), NULL);
-		if(outDS == NULL)
-			throw "Failed to copy file.";
-		GDALClose(outDS);
-		Raster<T> cp(filename, band, writable);
-		T nodata = cp.nodata();
-		for(int r = 0; r < cp.rows(); ++r) {
-			for(int c = 0; c < cp.cols(); ++c) {
-				cp.set(c, r, nodata);
-			}
-		}
-		cp.flush();
-		return cp;
-	}
-	const std::string projection() const {
-		std::string proj(r_ds->GetProjectionRef());
-		return proj;
+	void projection(std::string &proj) const {
+		proj.assign(r_ds->GetProjectionRef());
 	}
 	GDALDataType type() const {
 		return r_band->GetRasterDataType();
@@ -192,11 +152,11 @@ public:
 		return (row * r_trans[5]) + r_trans[3];
 	}
 	// Returns true if the pixel is nodata
-	bool isNoData(int col, int row) const {
+	bool isNoData(int col, int row) {
 		return get(col, row) == r_nodata;
 	}
 	// Returns true if the pixel is nodata
-	bool isNoData(double x, double y) const {
+	bool isNoData(double x, double y) {
 		return isNoData(toCol(x), toRow(y));
 	}
 	bool isValid(int c, int r) {
@@ -225,6 +185,11 @@ public:
 	}
 	// Returns the pixel value at the give row/column
 	T get(int col, int row) {
+		loadBlock(col, row);
+		T v = r_block[(row % r_bh) * r_bw + (col % r_bw)];
+		return v;
+	}
+	void loadBlock(int col, int row) {
 		if(!has(col, row))
 			throw "Row or column out of bounds.";
 		int bcol = (int) (col / r_bw);
@@ -232,21 +197,17 @@ public:
 		if(bcol >= r_bcols || bcol < 0 || brow >= r_brows || brow < 0)
 			throw "Illegal block column or row.";
 		if(bcol != r_curcol || brow != r_currow) {
-			//std::cerr << "New block " << bcol << ", " << brow << std::endl;
 			flush();
-			CPLErr ret = r_band->ReadBlock(bcol, brow, r_block);
-			if(ret != 0)
+			if(r_band->ReadBlock(bcol, brow, r_block) != CE_None)
 				throw "Failed to read block.";
 			r_currow = brow;
 			r_curcol = bcol;
 		}
-		T v = r_block[(row % r_bh) * r_bw + (col % r_bw)];
-		return v;
 	}
 	// Sets the pixel value at the given row/column
 	void set(int col, int row, T v) {
 		if(!r_writable) return;
-		get(col, row);
+		loadBlock(col, row);
 		r_block[(row % r_bh) * r_bw + (col % r_bw)] = v;
 		r_dirty = true;
 	}
@@ -257,10 +218,7 @@ public:
 	// Flush the current block to the dataset
 	void flush() {
 		if(r_writable && r_dirty) {
-			//GDALRasterBlock *b = r_band->GetLockedBlockRef(r_curcol, r_currow);
-			CPLErr ret = r_band->WriteBlock(r_curcol, r_currow, r_block);
-			//b->DropLock();
-			if(ret != 0)
+			if(r_band->WriteBlock(r_curcol, r_currow, r_block) != CE_None)
 				throw "Flush error.";
 			r_dirty = false;
 		}
@@ -274,6 +232,9 @@ public:
 	}
 	~Raster() {
 		flush();
+		r_band = NULL;
+		r_ds = NULL;
+		std::cerr << "Flushed" << std::endl;
 	}
 
 };
