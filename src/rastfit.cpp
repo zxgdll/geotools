@@ -85,19 +85,30 @@ double _random() {
 	return r;
 }
 
+double _sq(double a) {
+	return a*a;
+}
+
 class Point {
 public:
-	double x, y, diff;
-	Point() : x(nan("")), y(nan("")), diff(nan("")) {}
-	Point(double x, double y) :
-		x(x),
-		y(y),
-		diff(nan("")) {
+	double x, y, adj, base, change;
+	Point() : 
+		x(nan("")), 
+		y(nan("")), 
+		adj(nan("")),
+		base(nan("")), 
+		change(nan("")) {
+
 	}
-	Point(double x, double y, double z) :
-		x(x),
-		y(y),
-		diff(z) {
+	Point(double x, double y) : Point() {
+		this->x = x;
+		this->y = y;
+	}
+	double diff() {
+		return adj - base;
+	}
+	double resid() {
+		return diff() - change;
 	}
 	bool equals(const Point &p) const {
 		return x == p.x && y == p.y;
@@ -133,23 +144,6 @@ private:
 };
 
 /**
- * Computes the raster differences for each sample point.
- */
-void computeSampleDifferences(Raster<float> &base, Raster<float> &adj, std::list<Point> &samples) {
-	const samplesort ssort(base);
-	samples.sort(ssort); // Sort because we want to read the raster efficiently
-	for(auto pt = samples.begin(); pt != samples.end(); ++pt) {
-		float a = base.get(pt->x, pt->y);
-		float b = adj.get(pt->x, pt->y);
-		if(a != base.nodata() && b != adj.nodata()) {
-			pt->diff = a - b;
-		} else {
-			pt->diff = adj.nodata();
-		}
-	}
-}
-
-/**
  * Generates a set of sample points, limited to valid pixels in the mask.
  */
 void generateMaskSamples(std::list<Point> &samples, Raster<char> &mask, 
@@ -157,9 +151,13 @@ void generateMaskSamples(std::list<Point> &samples, Raster<char> &mask,
 	std::vector<Point> pts;
 	for(int r = 0; r < mask.rows(); ++r) {
 		for(int c = 0; c < mask.cols(); ++c) {
-			if(mask.get(c, r) != 0 && adj.isValid(mask.toX(c), mask.toY(r))
+			if(mask.get(c, r) == 1.0 
+					&& adj.isValid(mask.toX(c), mask.toY(r))
 					&& base.isValid(mask.toX(c), mask.toY(r))) {
-				pts.push_back(Point(mask.toX(c), mask.toY(r)));
+				Point p(mask.toX(c), mask.toY(r));
+				p.adj = adj.get(mask.toX(c), mask.toY(r));
+				p.base = base.get(mask.toX(c), mask.toY(r));
+				pts.push_back(p);
 			}
 		}
 	}
@@ -171,13 +169,15 @@ void generateMaskSamples(std::list<Point> &samples, Raster<char> &mask,
 /**
  * Generates a list of random samples within the bounds of a raster.
  */
-void generateRandomSamples(std::list<Point> &samples, Raster<float> &a, Raster<float> &b, 
+void generateRandomSamples(std::list<Point> &samples, Raster<float> &adj, Raster<float> &base, 
 	double *bounds, unsigned int numSamples) {
 	while(numSamples-- > 0) {
 		double x = bounds[0] + (bounds[2] - bounds[0]) * _random();
 		double y = bounds[1] + (bounds[3] - bounds[1]) * _random();
-		if(a.isValid(x, y) && b.isValid(x, y)) {
+		if(adj.isValid(x, y) && base.isValid(x, y)) {
 			Point p(x, y);
+			p.adj = adj.get(x, y);
+			p.base = base.get(x, y);
 			samples.push_back(p);
 		}
 	}
@@ -252,13 +252,27 @@ double faceArea(const VFace &f, const Voronoi &vor, const Polygon_2 &bounds) {
 	}
 }
 
+/**
+ * Print the sample locations in csv format with the original raster
+ * difference, the adjustment value, the final value, and the residual.
+ * Prints the variances at the bottom.
+ */
 void printSamples(std::list<Point> &samples) {
-	std::cout << "x,y,diff" << std::endl;
+	std::cout << "x,y,base,adj,diff,final,resid" << std::endl;
+	double d = 0.0, r = 0.0;
 	for(auto it = samples.begin(); it != samples.end(); ++it) {
-		std::cout << std::setprecision(9) << it->x << "," << it->y << "," << it->diff << std::endl;
+		d += _sq(it->diff());
+		r += _sq(it->resid());
+		std::cout << std::setprecision(9) 
+			<< it->x << "," << it->y << "," << it->base << "," << it->adj << ","
+			<< it->diff() << "," << it->change << "," << it->resid() << std::endl;
 	}
+	std::cout << "Var before: " << (d / samples.size()) << ", after: " << (r / samples.size()) << std::endl;
 }
 
+/**
+ * Compute the intersection of the bounds of the two rasters.
+ */
 void computeBounds(Raster<float> &a, Raster<float> &b, double *bounds) {
 	bounds[0] = _max(a.toX(0), b.toX(0));
 	bounds[1] = _max(a.toY(a.rows()), b.toY(b.rows()));
@@ -271,7 +285,7 @@ void computeBounds(Raster<float> &a, Raster<float> &b, double *bounds) {
  * result to outfile.
  */
 void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile,
-		std::string &outfile, unsigned int numSamples, double resolution) {
+		std::string &outfile, unsigned int numSamples, double resolution, bool print) {
 
 	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
 		throw "The output file must not be the same as any input file.";
@@ -295,24 +309,18 @@ void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile
 
 	// Generate a list of samples, shuffle it and clip it to the
 	// desired count.
+	std::cerr << "Generating samples." << std::endl;
 	if(maskfile.empty() || maskfile == "-") {
 		double bounds[4];
 		computeBounds(base, adj, bounds);
 		generateRandomSamples(samples, adj, base, bounds, numSamples);
 	} else {
-		std::cerr << "Generating samples." << std::endl;
 		Raster<char> mask(maskfile, 1);
 		generateMaskSamples(samples, mask, adj, base, numSamples);
 	}
 
 	if(samples.size() == 0)
 		throw "No samples collected.";
-
-	std::cerr << "Computing sample differences." << std::endl;
-	// Compute sample differences.
-	computeSampleDifferences(base, adj, samples);
-
-	printSamples(samples);
 
 	// Build a boundary for clipping the voronoi.
 	std::list<Point_2> pts;
@@ -337,10 +345,9 @@ void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile
 		Point_2 p(pt->x, pt->y);
 		DVertex_handle h = dt.insert(p);
 		h->info() = id;
-		diffs[id] = pt->diff;
+		diffs[id] = pt->diff();
 		++id;
 	}
-
 
 	// Pre-compute the areas of the original faces.
 	Voronoi vt(dt);
@@ -358,7 +365,7 @@ void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile
 	DVertex_handle vh = dt.insert(vc);
 
 	for(int r = 0; r < out.rows(); ++r) {
-		std::cerr << "Row " << r << " of " << out.rows() << std::endl;
+		//std::cerr << "Row " << r << " of " << out.rows() << std::endl;
 		for(int c = 0; c < out.cols(); ++c) {
 
 			Point_2 vc(out.toX(c), out.toY(r));
@@ -386,6 +393,13 @@ void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile
 			out.set(c, r, z0);
 		}
 	}
+
+	if(print) {
+		for(auto it = samples.begin(); it != samples.end(); ++it)
+			it->change = out.get(it->x, it->y);
+		printSamples(samples);
+	}
+
 }
 
 void determinant3(double *d, double **m) {
@@ -412,7 +426,6 @@ void scaleadjoint3(double **a, double s, double **m) {
 double minvert3(double **a, double **b) {
 	double det = 0;
 	determinant3(&det, a);
-	std::cerr << "det " << det << std::endl;
 	double tmp = 1.0 / det;
 	scaleadjoint3(b, tmp, a);
 	return det;
@@ -476,7 +489,7 @@ void mprint(double **mtx, int rows, int cols) {
 }
 
 void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &maskfile,
-		std::string &outfile, unsigned int numSamples, double resolution) {
+		std::string &outfile, unsigned int numSamples, double resolution, bool print) {
 
 	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
 		throw "The output file must not be the same as any input file.";
@@ -513,12 +526,6 @@ void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &mask
 	if(samples.size() == 0)
 		throw "No samples collected.";
 
-	std::cerr << "Computing sample differences." << std::endl;
-	// Compute sample differences.
-	computeSampleDifferences(base, adj, samples);
-
-	//printSamples(samples);
-
 	double **xymtx = minit(samples.size(), 3);
 	double **zmtx = minit(samples.size(), 1);
 	int i = 0;
@@ -526,7 +533,7 @@ void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &mask
 		xymtx[i][0] = 1.0;
 		xymtx[i][1] = it->x;
 		xymtx[i][2] = it->y;
-		zmtx[i][0] = it->diff;
+		zmtx[i][0] = it->diff();
 		++i;
 	}
 
@@ -554,31 +561,171 @@ void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &mask
 	mfree(a, 3);
 	mfree(b, 3);
 
+	std::cerr << "Computing..." << std::endl;
 	for(int r = 0; r < out.rows(); ++r) {
-		std::cerr << "Row " << r << " of " << out.rows() << std::endl;
+		//std::cerr << "Row " << r << " of " << out.rows() << std::endl;
 		for(int c = 0; c < out.cols(); ++c) 
 			out.set(c, r, params[0][0] + (out.toX(c) - cx) * params[1][0] + (out.toY(r) - cy) * params[2][0]);
 	}
 
 	mfree(params, 3);
+
+	if(print) {
+		for(auto it = samples.begin(); it != samples.end(); ++it)
+			it->change = out.get(it->x, it->y);
+		printSamples(samples);
+	}
 }
 
+void adjustAvg(std::string &basefile, std::string &adjfile, std::string &maskfile,
+		std::string &outfile, unsigned int numSamples, double resolution, bool print) {
+
+	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
+		throw "The output file must not be the same as any input file.";
+
+	if(numSamples < 2)
+		throw "Too few samples.";
+
+	if(resolution <= 0.0)
+		throw "Invalid resolution.";
+
+	// Initializes source, destination rasters.
+	Raster<float> base(basefile, 1, false);
+	Raster<float> adj(adjfile, 1, false);
+	Raster<char> mask(maskfile, 1, false);
+	std::string proj;
+	adj.projection(proj);
+	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, proj.c_str());
+
+	base.get(0,0);
+	adj.get(0,0);
+	std::list<Point> samples;
+
+	// Generate a list of samples, shuffle it and clip it to the
+	// desired count.
+	std::cerr << "Generating samples." << std::endl;
+	if(maskfile.empty() || maskfile == "-") {
+		double bounds[4];
+		computeBounds(base, adj, bounds);
+		generateRandomSamples(samples, adj, base, bounds, numSamples);
+	} else {
+		generateMaskSamples(samples, mask, adj, base, numSamples);
+	}
+
+	if(samples.size() == 0)
+		throw "No samples collected.";
+
+	double z = 0.0;
+	for(auto it = samples.begin(); it != samples.end(); ++it)
+		z += it->diff();
+	z /= samples.size();
+
+	std::cerr << "Computing..." << std::endl;
+	for(int r = 0; r < out.rows(); ++r) {
+		//std::cerr << "Row " << r << " of " << out.rows() << std::endl;
+		for(int c = 0; c < out.cols(); ++c) 
+			out.set(c, r, z);
+	}
+
+	if(print) {
+		for(auto it = samples.begin(); it != samples.end(); ++it)
+			it->change = out.get(it->x, it->y);
+		printSamples(samples);
+	}
+
+}
+
+double _sdist(Point &a, Point &b) {
+	return _sq(a.x - b.x) + _sq(a.y - b.y);
+}
+
+double _sdist(Point &a, double x, double y) {
+	return _sq(a.x - x) + _sq(a.y - y);
+}
+
+void adjustIdw(std::string &basefile, std::string &adjfile, std::string &maskfile,
+		std::string &outfile, unsigned int numSamples, double resolution, double idwExp, bool print) {
+
+	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
+		throw "The output file must not be the same as any input file.";
+
+	if(numSamples < 2)
+		throw "Too few samples.";
+
+	if(resolution <= 0.0)
+		throw "Invalid resolution.";
+
+	if(idwExp <= 0.0)
+		throw "IDW exponent should be >0.";
+
+	// Initializes source, destination rasters.
+	Raster<float> base(basefile, 1, false);
+	Raster<float> adj(adjfile, 1, false);
+	Raster<char> mask(maskfile, 1, false);
+	std::string proj;
+	adj.projection(proj);
+	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, proj.c_str());
+
+	base.get(0,0);
+	adj.get(0,0);
+	std::list<Point> samples;
+
+	// Generate a list of samples, shuffle it and clip it to the
+	// desired count.
+	std::cerr << "Generating samples." << std::endl;
+	if(maskfile.empty() || maskfile == "-") {
+		double bounds[4];
+		computeBounds(base, adj, bounds);
+		generateRandomSamples(samples, adj, base, bounds, numSamples);
+	} else {
+		generateMaskSamples(samples, mask, adj, base, numSamples);
+	}
+
+	if(samples.size() == 0)
+		throw "No samples collected.";
+
+	std::cerr << "Computing..." << std::endl;
+	for(int r = 0; r < out.rows(); ++r) {
+		//std::cerr << "Row " << r << " of " << out.rows() << std::endl;
+		for(int c = 0; c < out.cols(); ++c) {
+			double z = 0.0;
+			double t = 0.0;
+			for(auto it = samples.begin(); it != samples.end(); ++it)
+				t += _sdist(*it, out.toX(c), out.toY(r));
+			for(auto it = samples.begin(); it != samples.end(); ++it)
+				z += it->diff() * _sdist(*it, out.toX(c), out.toY(r)) / t;
+			out.set(c, r, z);
+		}
+			
+	}
+
+	if(print) {
+		for(auto it = samples.begin(); it != samples.end(); ++it)
+			it->change = out.get(it->x, it->y);
+		printSamples(samples);
+	}
+
+}
 void usage() {
-	std::cout << "Usage: rastfit [options]" << std::endl
+	std::cerr << "Usage: rastfit [options]" << std::endl
 			<< "This program will produce an adjustment raster to adjust one raster's " << std::endl
 			<< "elevations to match another's using a selected algorithm. The mask is " << std::endl
 			<< "optional and used to limit the placement of samples to where elevations are " << std::endl
 			<< "known to be good. The output is an adjustment raster with the same extent " << std::endl
 			<< "as the input raster, with the new resolution. " << std::endl
-			<< " -t -- type:        The type of adjustment. " << std::endl
-			<< "                    nn     - natural neighbours." << std::endl
-			<< "                    planar - plane fit. " << std::endl
-			<< " -m -- mask:        an optional raster whose non-zero pixels dictate the locations of allowable samples." << std::endl
-			<< " -r -- resolution:  the pixel size of the output." << std::endl
-			<< " -s -- samples:     the number of samples." << std::endl
-			<< " -b -- base file:   the raster to adjust the adjustment raster to." << std::endl
-			<< " -a -- adjustment   file: the raster to adjust." << std::endl
-			<< " -o -- output file: the output file." << std::endl;
+			<< " -t -- type:         The type of adjustment. " << std::endl
+			<< "                     nn  - natural neighbours." << std::endl
+			<< "                     pl  - plane fit. " << std::endl
+			<< "                     avg - shift vertically by the average difference. " << std::endl
+			<< "                     idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
+			<< " -m -- mask:         an optional raster whose non-zero pixels dictate the locations of allowable samples." << std::endl
+			<< " -r -- resolution:   the pixel size of the output." << std::endl
+			<< " -s -- samples:      the number of samples." << std::endl
+			<< " -b -- base file:    the raster to adjust the adjustment raster to." << std::endl
+			<< " -a -- adjustment    file: the raster to adjust." << std::endl
+			<< " -o -- output file:  the output file." << std::endl
+			<< " -p -- print:        print a table with the points, samples, deltas and residuals." << std::endl
+			<< " -e -- idw exponent." << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -592,6 +739,8 @@ int main(int argc, char **argv) {
   		std::string type;
  		unsigned int numSamples = 0;
  		double resolution = 0.0;
+ 		bool print = false;
+ 		double idwExp = 1.0;
 
  		for(int i = 0; i < argc; ++i) {
  			std::string p(argv[i]);
@@ -609,6 +758,10 @@ int main(int argc, char **argv) {
  				resolution = atof(argv[++i]);
  			} else if(p == "-b") {
  				basefile = argv[++i];
+ 			} else if(p == "-p") {
+ 				print = true;
+ 			} else if(p == "-e") {
+ 				idwExp = atof(argv[++i]);
  			}
  		}
 
@@ -624,9 +777,13 @@ int main(int argc, char **argv) {
  			throw "Adjustment file is required.";
 
  		if(type == "nn") {
- 			adjustNN(basefile, adjfile, maskfile, outfile, numSamples, resolution);
- 		} else if(type == "plane") {
- 			adjustPlanar(basefile, adjfile, maskfile, outfile, numSamples, resolution);
+ 			adjustNN(basefile, adjfile, maskfile, outfile, numSamples, resolution, print);
+ 		} else if(type == "pl") {
+ 			adjustPlanar(basefile, adjfile, maskfile, outfile, numSamples, resolution, print);
+ 		} else if(type == "avg") {
+ 			adjustAvg(basefile, adjfile, maskfile, outfile, numSamples, resolution, print);
+ 		} else if(type == "idw") {
+ 			adjustIdw(basefile, adjfile, maskfile, outfile, numSamples, resolution, idwExp, print);
  		} else {
  			throw "Unknown type.";
  		}
