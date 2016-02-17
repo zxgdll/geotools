@@ -2,12 +2,12 @@
  * rastfit
  *
  * This program adjusts a raster's elevations to match another's using natural
- * neighbour interpolation. It does this by collecting a configurable number of
- * random samples (constrained by an optional mask) and using these as sites in the 
- * triangulation. 
+ * neighbour interpolation or plane fitting. It does this by collecting a configurable
+ * number of random samples constrained by an optional mask and using these as sites
+ * to compute differences.
  *
  *  Created on: Jan 16, 2016
- *      Author: rob
+ *  Author: rob
  */
 
 #include <vector>
@@ -39,7 +39,6 @@
 
 #include "Util.hpp"
 #include "Raster.hpp"
-#include "mtx.h"
 //#include "ShapeWriter.hpp"
 
 typedef CGAL::Exact_predicates_exact_constructions_kernel                             K;
@@ -373,7 +372,6 @@ void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile
 			double area = faceArea(*fh, vt0, bounds);
 			if(area == 0.0)
 				throw "Invalid face area.";
-			// TODO: Not adjusting now; just making a difference raster.
 			double z0 = 0.0;
 			VCcb_halfedge_circulator hc = vt0.ccb_halfedges(fh), done(hc);
 			do {
@@ -381,7 +379,6 @@ void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile
 				DVertex_handle v = f->dual();
 				double a = faceArea(*f, vt0, bounds);
 				unsigned int id = v->info();
-				//std::cerr << "area " << id << ": " << a << ", " << areas[id] << ", " << (areas[id] - a) << ", " << ((areas[id] - a) / area)<< std::endl;
 				if((areas[id] - a) < -0.00001) // TODO: Precision problem -- look into it.
 					throw "The modified area cannot be larger than the original area.";
 				z0 += ((areas[id] - a) / area) * diffs[id];
@@ -392,9 +389,12 @@ void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile
 }
 
 void determinant3(double *d, double **m) {
-   *d = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]);
-   *d -= m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]);
-   *d += m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+	*d = m[0][0] * m[1][1] * m[2][2]
+		+ m[0][1] * m[1][2] * m[2][0]
+		+ m[0][2] * m[1][0] * m[2][1]
+		- m[0][2] * m[1][1] * m[2][0]
+		- m[0][1] * m[1][0] * m[2][2]
+		- m[0][0] * m[1][2] * m[2][1];
 }
 
 void scaleadjoint3(double **a, double s, double **m) {
@@ -408,17 +408,11 @@ void scaleadjoint3(double **a, double s, double **m) {
    a[1][2] = (s) * (m[0][2] * m[1][0] - m[0][0] * m[1][2]);
    a[2][2] = (s) * (m[0][0] * m[1][1] - m[0][1] * m[1][0]);
 }
-
-/* ========================================================== */
-/* inverse of matrix 
- *
- * Compute inverse of matrix a, returning determinant m and 
- * inverse b
- */
  
 double minvert3(double **a, double **b) {
 	double det = 0;
 	determinant3(&det, a);
+	std::cerr << "det " << det << std::endl;
 	double tmp = 1.0 / det;
 	scaleadjoint3(b, tmp, a);
 	return det;
@@ -438,12 +432,23 @@ void mmult(double **a, int amaj, int amin, double **b, int bmaj, int bmin, doubl
 	for(int ar = 0; ar < amaj; ++ar) {
 		for(int bc = 0; bc < bmin; ++bc) {
 			dst[ar][bc] = 0.0;
-			for(int ac = 0; ac < amin; ++ac) {
-				for(int br = 0; br < bmaj; ++ br) {
-					dst[ar][bc] += a[ar][ac] * b[br][bc];
-				}
-			}
+			for(int i = 0; i < amin; ++i)
+				dst[ar][bc] += a[ar][i] * b[i][bc];
 		}
+	}
+}
+
+void mcentroid(double **mtx, int rows, int xcol, int ycol, double *x, double *y) {
+	*x = 0, *y = 0;
+	for(int r = 0; r < rows; ++r) {
+		*x += mtx[r][xcol];
+		*y += mtx[r][ycol];
+	}
+	*x /= rows;
+	*y /= rows;
+	for(int r = 0; r < rows; ++r) {
+		mtx[r][xcol] -= *x;
+		mtx[r][ycol] -= *y;
 	}
 }
 
@@ -458,6 +463,16 @@ void mfree(double **mtx, int rows) {
 	for(int r = 0; r < rows; ++r)
 		delete mtx[r];
 	delete mtx;
+}
+
+void mprint(double **mtx, int rows, int cols) {
+	std::cerr << "mtx " << rows << "," << cols << std::endl;
+	for(int r = 0; r < rows; ++r) {
+		for(int c = 0; c < cols; ++c) {
+			std::cerr << mtx[r][c] << " ";
+		}
+		std::cerr << std::endl;
+	}
 }
 
 void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &maskfile,
@@ -486,12 +501,12 @@ void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &mask
 
 	// Generate a list of samples, shuffle it and clip it to the
 	// desired count.
+	std::cerr << "Generating samples." << std::endl;
 	if(maskfile.empty() || maskfile == "-") {
 		double bounds[4];
 		computeBounds(base, adj, bounds);
 		generateRandomSamples(samples, adj, base, bounds, numSamples);
 	} else {
-		std::cerr << "Generating samples." << std::endl;
 		generateMaskSamples(samples, mask, adj, base, numSamples);
 	}
 
@@ -502,7 +517,7 @@ void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &mask
 	// Compute sample differences.
 	computeSampleDifferences(base, adj, samples);
 
-	printSamples(samples);
+	//printSamples(samples);
 
 	double **xymtx = minit(samples.size(), 3);
 	double **zmtx = minit(samples.size(), 1);
@@ -514,6 +529,9 @@ void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &mask
 		zmtx[i][0] = it->diff;
 		++i;
 	}
+
+	double cx, cy;
+	mcentroid(xymtx, samples.size(), 1, 2, &cx, &cy);
 
 	double **xymtxt = minit(3, samples.size());
 	mtranspose(xymtx, samples.size(), 3, xymtxt);
@@ -530,39 +548,88 @@ void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &mask
 	double **params = minit(3, 1);
 	mmult(ai, 3, 3, b, 3, 1, params);
 
+	mfree(xymtx, samples.size());
+	mfree(xymtxt, 3);
+	mfree(zmtx, samples.size());
+	mfree(a, 3);
+	mfree(b, 3);
+
 	for(int r = 0; r < out.rows(); ++r) {
 		std::cerr << "Row " << r << " of " << out.rows() << std::endl;
 		for(int c = 0; c < out.cols(); ++c) 
-			out.set(c, r, params[0][0] + out.toX(c) * params[1][0] + out.toY(r) * params[2][0]);
+			out.set(c, r, params[0][0] + (out.toX(c) - cx) * params[1][0] + (out.toY(r) - cy) * params[2][0]);
 	}
+
+	mfree(params, 3);
 }
 
 void usage() {
-	std::cout << "Usage: rastfit [options]<base file> <file to adjust> <mask file | \"-\"> <output file> <samples> <resolution>" << std::endl;
-	std::cout << "	This program will adjust one raster's elevations to match another's " << std::endl;
-	std::cout << "	using a natural neighbours interpoled adjustment to all pixels. The mask is " << std::endl;
-	std::cout << "  optional and used to limit the placement of samples to where elevations are " << std::endl;
-	std::cout << "	known to be good. The output is an adjustment raster with the same extent " << std::endl;
-	std::cout << "	as the input raster, with the new resolution. " << std::endl;
-	std::cout << "-t Type: nn, planar -- The type of adjustment. 'nn' is natural neighbours, planar is a plane fit. " << std::endl;
+	std::cout << "Usage: rastfit [options]" << std::endl
+			<< "This program will produce an adjustment raster to adjust one raster's " << std::endl
+			<< "elevations to match another's using a selected algorithm. The mask is " << std::endl
+			<< "optional and used to limit the placement of samples to where elevations are " << std::endl
+			<< "known to be good. The output is an adjustment raster with the same extent " << std::endl
+			<< "as the input raster, with the new resolution. " << std::endl
+			<< " -t -- type:        The type of adjustment. " << std::endl
+			<< "                    nn     - natural neighbours." << std::endl
+			<< "                    planar - plane fit. " << std::endl
+			<< " -m -- mask:        an optional raster whose non-zero pixels dictate the locations of allowable samples." << std::endl
+			<< " -r -- resolution:  the pixel size of the output." << std::endl
+			<< " -s -- samples:     the number of samples." << std::endl
+			<< " -b -- base file:   the raster to adjust the adjustment raster to." << std::endl
+			<< " -a -- adjustment   file: the raster to adjust." << std::endl
+			<< " -o -- output file: the output file." << std::endl;
 }
 
 int main(int argc, char **argv) {
 
  	try {
 
- 		if(argc < 7)
- 			throw "Too few arguments.";
+ 		std::string basefile;
+ 		std::string adjfile;
+ 		std::string maskfile;
+  		std::string outfile;
+  		std::string type;
+ 		unsigned int numSamples = 0;
+ 		double resolution = 0.0;
 
- 		std::string basefile = argv[1];
- 		std::string adjfile = argv[2];
- 		std::string maskfile = argv[3];
-  		std::string outfile = argv[4];
- 		unsigned int samples = atoi(argv[5]);
- 		double resolution = atof(argv[6]);
+ 		for(int i = 0; i < argc; ++i) {
+ 			std::string p(argv[i]);
+ 			if(p == "-t") {
+ 				type = argv[++i];
+ 			} else if(p == "-m") {
+ 				maskfile = argv[++i];
+ 			} else if(p == "-s") {
+ 				numSamples = atoi(argv[++i]);
+ 			} else if(p == "-o") {
+ 				outfile = argv[++i];
+ 			} else if(p == "-a") {
+ 				adjfile = argv[++i];
+ 			} else if(p == "-r") {
+ 				resolution = atof(argv[++i]);
+ 			} else if(p == "-b") {
+ 				basefile = argv[++i];
+ 			}
+ 		}
 
- 		//adjustNN(basefile, adjfile, maskfile, outfile, samples, resolution);
- 		adjustPlanar(basefile, adjfile, maskfile, outfile, samples, resolution);
+ 		if(numSamples <= 1)
+ 			throw "Please try more than one sample.";
+ 		if(resolution <= 0)
+ 			throw "Invalid resolution.";
+ 		if(basefile.empty())
+ 			throw "Base file is required.";
+ 		if(outfile.empty())
+ 			throw "Output file is required.";
+ 		if(adjfile.empty())
+ 			throw "Adjustment file is required.";
+
+ 		if(type == "nn") {
+ 			adjustNN(basefile, adjfile, maskfile, outfile, numSamples, resolution);
+ 		} else if(type == "plane") {
+ 			adjustPlanar(basefile, adjfile, maskfile, outfile, numSamples, resolution);
+ 		} else {
+ 			throw "Unknown type.";
+ 		}
 
  		std::cerr << "END" << std::endl;
 
