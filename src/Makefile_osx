@@ -4,7 +4,8 @@ CFLAGS=-I../include -I/usr/include
 CPP=g++
 CC=gcc
 
-# -lboost_system -lboost_iostreams -lboost_program_options -lboost_thread -lproj -lboost_filesystem -lgdal -lgeos -llas -lgmp -lmpfr
+all: mosaic lasstats lasmerge lasgrid
+debug: mosaic_debug laststats_debug lasmerge_debug lasgrid_debug
 
 mosaic:
 	$(CPP) $(CXXFLAGS) -Wall -O3 mosaic.cpp $(LIB) -lgdal -o ../bin/mosaic
@@ -45,8 +46,6 @@ rastfit_debug:
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips
 
-all: mosaic, lasstats, lasmerge, lasgrid
-debug: mosaic_debug, laststats_debug, lasmerge_debug, lasgrid_debug
 
 clean:
 	rm ../bin/*

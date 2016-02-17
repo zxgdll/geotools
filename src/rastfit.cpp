@@ -39,6 +39,7 @@
 
 #include "Util.hpp"
 #include "Raster.hpp"
+#include "mtx.h"
 //#include "ShapeWriter.hpp"
 
 typedef CGAL::Exact_predicates_exact_constructions_kernel                             K;
@@ -159,8 +160,7 @@ void generateMaskSamples(std::list<Point> &samples, Raster<char> &mask,
 		for(int c = 0; c < mask.cols(); ++c) {
 			if(mask.get(c, r) != 0 && adj.isValid(mask.toX(c), mask.toY(r))
 					&& base.isValid(mask.toX(c), mask.toY(r))) {
-				Point p(mask.toX(c), mask.toY(r));
-				pts.push_back(p);
+				pts.push_back(Point(mask.toX(c), mask.toY(r)));
 			}
 		}
 	}
@@ -216,7 +216,7 @@ void getSegmentPoints(const VHalfedge &he, std::list<Point_2> &pts, double d) {
 /**
  * Convert a Voronoi face to a polygon clipped to the given boundary.
  */
-std::unique_ptr<Polygon_2> faceToPoly(const VFace &f, const Voronoi &vor, const Polygon_2 &bounds) {
+double faceArea(const VFace &f, const Voronoi &vor, const Polygon_2 &bounds) {
 	// Compute a length for unbounded segments.
 	double d = _max(bounds.bbox().xmax() - bounds.bbox().xmin(),
 			bounds.bbox().ymax() - bounds.bbox().ymin()) * 2.0;
@@ -247,19 +247,10 @@ std::unique_ptr<Polygon_2> faceToPoly(const VFace &f, const Voronoi &vor, const 
 
 	// Return the poly, or none.
 	if(out.size() > 0) {
-		return std::unique_ptr<Polygon_2>(new Polygon_2(out[0].outer_boundary()));
+		return CGAL::to_double(out[0].outer_boundary().area());
 	} else {
-		return std::unique_ptr<Polygon_2>(nullptr);
+		return 0.0;
 	}
-}
-
-/**
- * Returns the area of the clipped face.
- */
-double faceArea(const VFace f, const Voronoi &vor, const Polygon_2 &bounds) {
-	std::unique_ptr<Polygon_2> poly = faceToPoly(f, vor, bounds);
-	return _abs(CGAL::to_double(poly->area()));
-
 }
 
 void printSamples(std::list<Point> &samples) {
@@ -280,7 +271,7 @@ void computeBounds(Raster<float> &a, Raster<float> &b, double *bounds) {
  * Compute an adjustment for adjfile, based on basefile, maskfile and a number of samples. Write the 
  * result to outfile.
  */
-void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile,
+void adjustNN(std::string &basefile, std::string &adjfile, std::string &maskfile,
 		std::string &outfile, unsigned int numSamples, double resolution) {
 
 	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
@@ -400,13 +391,160 @@ void adjust(std::string &basefile, std::string &adjfile, std::string &maskfile,
 	}
 }
 
+void determinant3(double *d, double **m) {
+   *d = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]);
+   *d -= m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]);
+   *d += m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+}
+
+void scaleadjoint3(double **a, double s, double **m) {
+   a[0][0] = (s) * (m[1][1] * m[2][2] - m[1][2] * m[2][1]);
+   a[1][0] = (s) * (m[1][2] * m[2][0] - m[1][0] * m[2][2]);
+   a[2][0] = (s) * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+   a[0][1] = (s) * (m[0][2] * m[2][1] - m[0][1] * m[2][2]);
+   a[1][1] = (s) * (m[0][0] * m[2][2] - m[0][2] * m[2][0]);
+   a[2][1] = (s) * (m[0][1] * m[2][0] - m[0][0] * m[2][1]);
+   a[0][2] = (s) * (m[0][1] * m[1][2] - m[0][2] * m[1][1]);
+   a[1][2] = (s) * (m[0][2] * m[1][0] - m[0][0] * m[1][2]);
+   a[2][2] = (s) * (m[0][0] * m[1][1] - m[0][1] * m[1][0]);
+}
+
+/* ========================================================== */
+/* inverse of matrix 
+ *
+ * Compute inverse of matrix a, returning determinant m and 
+ * inverse b
+ */
+ 
+double minvert3(double **a, double **b) {
+	double det = 0;
+	determinant3(&det, a);
+	double tmp = 1.0 / det;
+	scaleadjoint3(b, tmp, a);
+	return det;
+}
+
+void mtranspose(double **src, int maj, int min, double **dst) {
+	for(int r = 0; r < maj; ++r) {
+		for(int c = 0; c < min; ++c) {
+			dst[c][r] = src[r][c];
+		}
+	}
+}
+
+void mmult(double **a, int amaj, int amin, double **b, int bmaj, int bmin, double **dst) {
+	if(amin != bmaj)
+		throw "Incompatible row/column sizes.";
+	for(int ar = 0; ar < amaj; ++ar) {
+		for(int bc = 0; bc < bmin; ++bc) {
+			dst[ar][bc] = 0.0;
+			for(int ac = 0; ac < amin; ++ac) {
+				for(int br = 0; br < bmaj; ++ br) {
+					dst[ar][bc] += a[ar][ac] * b[br][bc];
+				}
+			}
+		}
+	}
+}
+
+double **minit(int rows, int cols) {
+	double **mtx = new double*[rows];
+	for(int r = 0; r < rows; ++r)
+		mtx[r] = new double[cols];
+	return mtx;
+}
+
+void mfree(double **mtx, int rows) {
+	for(int r = 0; r < rows; ++r)
+		delete mtx[r];
+	delete mtx;
+}
+
+void adjustPlanar(std::string &basefile, std::string &adjfile, std::string &maskfile,
+		std::string &outfile, unsigned int numSamples, double resolution) {
+
+	if(basefile == outfile || adjfile == outfile || maskfile == outfile)
+		throw "The output file must not be the same as any input file.";
+
+	if(numSamples < 2)
+		throw "Too few samples.";
+
+	if(resolution <= 0.0)
+		throw "Invalid resolution.";
+
+	// Initializes source, destination rasters.
+	Raster<float> base(basefile, 1, false);
+	Raster<float> adj(adjfile, 1, false);
+	Raster<char> mask(maskfile, 1, false);
+	std::string proj;
+	adj.projection(proj);
+	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, proj.c_str());
+
+	base.get(0,0);
+	adj.get(0,0);
+	std::list<Point> samples;
+
+	// Generate a list of samples, shuffle it and clip it to the
+	// desired count.
+	if(maskfile.empty() || maskfile == "-") {
+		double bounds[4];
+		computeBounds(base, adj, bounds);
+		generateRandomSamples(samples, adj, base, bounds, numSamples);
+	} else {
+		std::cerr << "Generating samples." << std::endl;
+		generateMaskSamples(samples, mask, adj, base, numSamples);
+	}
+
+	if(samples.size() == 0)
+		throw "No samples collected.";
+
+	std::cerr << "Computing sample differences." << std::endl;
+	// Compute sample differences.
+	computeSampleDifferences(base, adj, samples);
+
+	printSamples(samples);
+
+	double **xymtx = minit(samples.size(), 3);
+	double **zmtx = minit(samples.size(), 1);
+	int i = 0;
+	for(auto it = samples.begin(); it != samples.end(); ++it) {
+		xymtx[i][0] = 1.0;
+		xymtx[i][1] = it->x;
+		xymtx[i][2] = it->y;
+		zmtx[i][0] = it->diff;
+		++i;
+	}
+
+	double **xymtxt = minit(3, samples.size());
+	mtranspose(xymtx, samples.size(), 3, xymtxt);
+
+	double **a = minit(3, 3);
+	mmult(xymtxt, 3, samples.size(), xymtx, samples.size(), 3, a);
+
+	double **ai = minit(3, 3);
+	minvert3(a, ai);
+
+	double **b = minit(3, 3);
+	mmult(xymtxt, 3, samples.size(), zmtx, samples.size(), 1, b);
+
+	double **params = minit(3, 1);
+	mmult(ai, 3, 3, b, 3, 1, params);
+
+	for(int r = 0; r < out.rows(); ++r) {
+		std::cerr << "Row " << r << " of " << out.rows() << std::endl;
+		for(int c = 0; c < out.cols(); ++c) 
+			out.set(c, r, params[0][0] + out.toX(c) * params[1][0] + out.toY(r) * params[2][0]);
+	}
+}
+
 void usage() {
-	std::cout << "Usage: rastfit <base file> <file to adjust> <mask file | \"-\"> <output file> <samples> <resolution>" << std::endl;
+	std::cout << "Usage: rastfit [options]<base file> <file to adjust> <mask file | \"-\"> <output file> <samples> <resolution>" << std::endl;
 	std::cout << "	This program will adjust one raster's elevations to match another's " << std::endl;
 	std::cout << "	using a natural neighbours interpoled adjustment to all pixels. The mask is " << std::endl;
 	std::cout << "  optional and used to limit the placement of samples to where elevations are " << std::endl;
 	std::cout << "	known to be good. The output is an adjustment raster with the same extent " << std::endl;
 	std::cout << "	as the input raster, with the new resolution. " << std::endl;
+	std::cout << "-t Type: nn, planar -- The type of adjustment. 'nn' is natural neighbours, planar is a plane fit. " << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -423,7 +561,8 @@ int main(int argc, char **argv) {
  		unsigned int samples = atoi(argv[5]);
  		double resolution = atof(argv[6]);
 
- 		adjust(basefile, adjfile, maskfile, outfile, samples, resolution);
+ 		//adjustNN(basefile, adjfile, maskfile, outfile, samples, resolution);
+ 		adjustPlanar(basefile, adjfile, maskfile, outfile, samples, resolution);
 
  		std::cerr << "END" << std::endl;
 
