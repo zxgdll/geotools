@@ -59,7 +59,7 @@ las2csrs_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
 	
 rastfit:
-	$(CPP) $(CXXFLAGS) -Wall -O3 rastfit.cpp $(LIB) -frounding-math -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
 
 rastfit_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g rastfit.cpp $(LIB) -frounding-math -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit

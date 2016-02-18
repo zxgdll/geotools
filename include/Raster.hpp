@@ -8,6 +8,9 @@
 #ifndef INCLUDE_RASTER_HPP_
 #define INCLUDE_RASTER_HPP_
 
+#include <gdal_priv.h>
+#include <ogr_spatialref.h>
+
 template <class T>
 class Raster {
 private:
