@@ -165,7 +165,7 @@ void adjust(std::string &basefile, std::string &adjfile,
 	Raster<char> mask(maskfile, 1, false);
 	std::string proj;
 	adj.projection(proj);
-	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, proj.c_str());
+	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, adj.nodata(), proj.c_str());
 
 	base.get(0,0);
 	adj.get(0,0);
