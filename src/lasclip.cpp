@@ -32,6 +32,8 @@
 
 #include <liblas/liblas.hpp>
 
+#include "Util.hpp"
+
 namespace las = liblas;
 namespace gg = geos::geom;
 
@@ -41,6 +43,7 @@ void usage() {
 	std::cerr << " -o Speficy an output file." << std::endl;
 	std::cerr << " -s Specify a shapefile. Points inside any polygon will be preserved." << std::endl;	
 	std::cerr << " -l Specify a layer name." << std::endl;	
+	std::cerr << " -c A comma-delimited list of classes to accept." << std::endl;	
 	std::cerr << " -q Supress output." << std::endl;	
 }
 
@@ -50,6 +53,7 @@ int main(int argc, char ** argv) {
 	std::string outfile;
 	std::string shapefile;
 	std::string layername;
+	std::set<int> classes;
 	bool quiet = false;
 
 	/* Parse and check input. */
@@ -64,6 +68,8 @@ int main(int argc, char ** argv) {
 			layername = argv[++i];
 		} else if(arg == "-q") {
 			quiet = true;
+		} else if(arg == "-c") {
+			Util::intSplit(classes, argv[++i]);
 		} else {
 			files.push_back(argv[i]);
 		}
@@ -85,6 +91,10 @@ int main(int argc, char ** argv) {
 		std::cerr << "At least one input file is required." << std::endl;
 		usage();
 		return 1;
+	}
+
+	if(classes.size() == 0) {
+		std::cerr << "WARNING: No classes specified, matching all classes." << std::endl;
 	}
 
 	/* Attempt to open and load geometries from the shape file. */
@@ -146,11 +156,8 @@ int main(int argc, char ** argv) {
 
 	/* Loop over files and figure out which ones are relevant. */
 
-	las::Header * dsth = NULL;
-	las::Header::RecordsByReturnArray recs;
 	las::ReaderFactory rf;
-
-	int count = 0;
+	las::Header *dsth = nullptr;
 	std::vector<unsigned int> indices;
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
@@ -160,8 +167,11 @@ int main(int argc, char ** argv) {
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 
-		if(!quiet)
-			std::cerr << "Checking file " << filename << std::endl;
+		if(i == 0)
+			dsth = new las::Header(h);
+
+		//if(!quiet)
+		//	std::cerr << "Checking file " << filename << std::endl;
 
 		std::vector<gg::Coordinate> coords;
 		coords.push_back(gg::Coordinate(h.GetMinX(), h.GetMinY()));
@@ -174,28 +184,8 @@ int main(int argc, char ** argv) {
 		gg::LinearRing *lr = gf->createLinearRing(cs);
 		gg::Polygon *bounds = gf->createPolygon(lr, NULL);
 
-		if(bounds->intersects(geomColl)) {
-			
+		if(bounds->intersects(geomColl)) 
 			indices.push_back(i);
-
-			las::Header::RecordsByReturnArray rr = h.GetPointRecordsByReturnCount();
-
-			if(dsth == NULL) {
-				// Create the destination header from the first source header. 
-				// Initialize the return counts to zero.
-				dsth = new las::Header(h);
-				for(unsigned int i=0;i<rr.size();++i)
-					recs.push_back(0);
-			}
-
-			// Increment the return counts.
-			for(unsigned int j=0;j<rr.size();++j)
-				recs[j] += rr[j];
-
-			// Increment the total point record count.
-			count += h.GetPointRecordsCount();
-
-		}
 
 		in.close();
 	}
@@ -205,22 +195,23 @@ int main(int argc, char ** argv) {
 		return 1;
 	}
 
-	// Set the total count and update the point record counts.
-	dsth->SetPointRecordsCount(count);
-	for(unsigned int i=0;i<recs.size();++i)
-		dsth->SetPointRecordsByReturnCount(i, recs[i]);
-
 	std::ofstream out(outfile, std::ios::out | std::ios::binary);
 	las::WriterFactory wf;
 	las::Writer w(out, *dsth);
+	las::Header::RecordsByReturnArray recs;
+	int count = 0;
 
 	double bounds[] = { FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX };
 
-	if(!quiet) {
+	if(!quiet) 
 		std::cerr << "Using points from " << indices.size() << " files." << std::endl;
-		std::cerr << "Computing bounds..." << std::endl;
-	}
-	for(unsigned int i = 0; i < indices.size(); ++i) {
+
+	for(int i = 0; i < 5; ++i)
+		recs.push_back(0);
+
+	std::cerr << "Starting" << std::endl;
+
+   	for(unsigned int i = 0; i < indices.size(); ++i) {
 
 		const char * filename = files[indices[i]];
 		std::ifstream in(filename, std::ios::in | std::ios::binary);
@@ -232,9 +223,14 @@ int main(int argc, char ** argv) {
 
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
+			int cls = pt.GetClassification().GetClass();
+			if(!Util::inList(classes, cls)) continue;
 			const gg::Coordinate c(pt.GetX(), pt.GetY());
 			gg::Point *p = gf->createPoint(c);
 			if(geomColl->contains(p)) {
+				++recs[cls];
+				++count;
+				w.WritePoint(pt);
 				if(pt.GetX() < bounds[0]) bounds[0] = pt.GetX();
 				if(pt.GetX() > bounds[1]) bounds[1] = pt.GetX();
 				if(pt.GetY() < bounds[2]) bounds[2] = pt.GetY();
@@ -247,35 +243,16 @@ int main(int argc, char ** argv) {
 		in.close();
 	}
 
+	// Set the total count and update the point record counts.
+	dsth->SetPointRecordsCount(count);
+	for(unsigned int i=0;i<recs.size();++i)
+		dsth->SetPointRecordsByReturnCount(i, recs[i]);
+
 	dsth->SetMin(bounds[0], bounds[2], bounds[4]);
 	dsth->SetMax(bounds[1], bounds[3], bounds[5]);
 
-	if(!quiet)
-		std::cerr << "Writing points." << std::endl;
-	for(unsigned int i = 0; i < indices.size(); ++i) {
-
-		const char * filename = files[indices[i]];
-		std::ifstream in(filename, std::ios::in | std::ios::binary);
-		las::Reader r = rf.CreateWithStream(in);
-		las::Header h = r.GetHeader();
-
-		if(!quiet)
-			std::cerr << "Processing file " << filename << std::endl;
-
-		while(r.ReadNextPoint()) {
-			las::Point pt = r.GetPoint();
-			const gg::Coordinate c(pt.GetX(), pt.GetY());
-			gg::Point *p = gf->createPoint(c);
-			if(geomColl->contains(p)) {
-				w.WritePoint(r.GetPoint());
-			}
-		}
-
-		in.close();
-	}
-
 	out.close();
-	delete dsth;	
+	//delete dsth;	
 
 	return 0;
 
