@@ -42,7 +42,7 @@ public:
 
 	}
 	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolution, const char *proj) : Raster() {
+			double resolution, double nodata, const char *proj = NULL) : Raster() {
 		GDALAllRegister();
 		int width = (int) ((maxx - minx) / resolution) + 1;
 		int height = (int) ((maxy - miny) / resolution) + 1;
@@ -62,6 +62,7 @@ public:
 		if(r_band == NULL)
 			throw "Failed to get band.";
 		r_band->GetBlockSize(&r_bw, &r_bh);
+		r_band->SetNoDataValue(nodata);
 		r_nodata = r_band->GetNoDataValue();
 		r_bcols = (r_cols + r_bw - 1) / r_bw;
 		r_brows = (r_rows + r_bh - 1) / r_bh;
@@ -86,6 +87,15 @@ public:
 		r_brows = (r_rows + r_bh - 1) / r_bh;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = writable;
+	}
+	double resolution() {
+		return r_trans[1];
+	}
+	double resolutionX() {
+		return r_trans[1];
+	}
+	double resolutionY() {
+		return r_trans[5];
 	}
 	void projection(std::string &proj) const {
 		proj.assign(r_ds->GetProjectionRef());
