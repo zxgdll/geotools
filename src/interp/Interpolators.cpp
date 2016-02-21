@@ -17,13 +17,40 @@
 #include <CGAL/Polygon_2_algorithms.h>
 #include <CGAL/number_utils.h>
 
+#include "QtGui/QApplication"
+
 #include "interp/IDWInterpolator.hpp"
 #include "interp/AvgInterpolator.hpp"
 #include "interp/PlanarInterpolator.hpp"
 #include "interp/NaturalNeighbourInterpolator.hpp"
-
+#include "interp/SimpleKrigingInterpolator.hpp"
+#include "interp/krigeplot/KrigePlot.hpp"
 
 namespace interp {
+
+	namespace kriging {
+
+		namespace detail {
+
+		}
+
+		void SimpleKrigingInterpolator::showVariogram(std::list<InterpPoint> &samples) {
+			int _argc = argc();
+			char **_argv = argv();
+			QApplication qa(_argc, _argv);
+			QDialog qd;
+			interp::kriging::ui::KrigePlot kp;
+			kp.setupUi(&qd);
+			std::cerr << samples.size() << " samples" << std::endl;
+			kp.setSamples(samples);
+			qd.show();
+			qa.exec();
+		}
+
+		void SimpleKrigingInterpolator::interpolate(Raster<float> &out, std::list<InterpPoint > &samples) {
+ 			showVariogram(samples);
+		}
+	}
 
 	namespace idw {
 
@@ -57,19 +84,20 @@ namespace interp {
 		 */
 		void IDWInterpolator::interpolate(Raster<float> &out, std::list<InterpPoint > &samples) {
 			using namespace detail;
-			for(int r = 0; r < out.rows(); ++r) {
-				for(int c = 0; c < out.cols(); ++c) {
-					double z = 0.0;
-					double t = 0.0;
-					for(auto it = samples.begin(); it != samples.end(); ++it)
-						t += _sdist(*it, out.toX(c), out.toY(r));
-					for(auto it = samples.begin(); it != samples.end(); ++it)
-						z += it->diff() * _sdist(*it, out.toX(c), out.toY(r)) / t;
-					out.set(c, r, z);
+			std::unique_ptr<Block<float>> blk = out.block();
+			while(blk->next()) {
+				for(int r = blk->startRow(); r < blk->endRow(); ++r) {
+					for(int c = blk->startCol(); c < blk->endCol(); ++c) {
+						double z = 0.0;
+						double t = 0.0;
+						for(auto it = samples.begin(); it != samples.end(); ++it)
+							t += _sdist(*it, out.toX(c), out.toY(r));
+						for(auto it = samples.begin(); it != samples.end(); ++it)
+							z += it->diff() * _sdist(*it, out.toX(c), out.toY(r)) / t;
+						out.set(c, r, z);
+					}
 				}
-
 			}
-
 		}
 
 	} // idw
