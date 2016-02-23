@@ -82,17 +82,18 @@ void interpolate(std::string &datafile, std::string &templatefile, std::string &
 }
 void usage() {
 	std::cerr << "Usage: interp [options]" << std::endl
-			<< " -t -- type:          The type of adjustment. " << std::endl
-			<< "                      nn  - natural neighbours." << std::endl
-			<< "                      pl  - plane fit. " << std::endl
-			<< "                      avg - shift vertically by the average difference. " << std::endl
-			<< "                      idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
-			<< "                      sk  - Simple Kriging." << std::endl
-			<< " -r -- resolution:    the pixel size of the output." << std::endl
-			<< " -i -- template file: A template file to produce the output file." << std::endl
-			<< " -o -- output file:   The output file." << std::endl
-			<< " -d -- data file:     A CSV file with data." << std::endl
-			<< " -e -- idw exponent." << std::endl;
+			<< " -t  -- type            The type of adjustment. " << std::endl
+			<< "                         nn  - natural neighbours." << std::endl
+			<< "                         pl  - plane fit. " << std::endl
+			<< "                         avg - shift vertically by the average difference. " << std::endl
+			<< "                         idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
+			<< "                         sk  - Simple Kriging." << std::endl
+			<< " -r  -- resolution      The pixel size of the output." << std::endl
+			<< " -i  -- template file   A template file to produce the output file." << std::endl
+			<< " -o  -- output file     The output file." << std::endl
+			<< " -d  -- data file       A CSV file with data." << std::endl
+			<< " -ie -- idw exponent    The IDW decay value." << std::endl;
+			<< " -ip -- idw neighbours  Number of neighbours to consider. Leave out to consider all." << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -106,6 +107,7 @@ int main(int argc, char **argv) {
  		double resolution = 0.0;
  		bool print = false;
  		double idwExp = 1.0;
+ 		int idwNeigh = 0;
 
  		for(int i = 0; i < argc; ++i) {
  			std::string p(argv[i]);
@@ -119,8 +121,11 @@ int main(int argc, char **argv) {
  				resolution = atof(argv[++i]);
  			} else if(p == "-p") {
  				print = true;
- 			} else if(p == "-e") {
+ 			} else if(p == "-ie") {
  				idwExp = atof(argv[++i]);
+ 			} else if(p == "-ip") {
+ 				idwNeigh = atoi(argv[++i]);
+ 			}
  			} else if(p == "-d") {
  				datafile = argv[++i];
  			}
@@ -144,7 +149,7 @@ int main(int argc, char **argv) {
  		} else if(type == "avg") {
  			inter = new interp::avg::AvgInterpolator();
  		} else if(type == "idw") {
- 			inter = new interp::idw::IDWInterpolator(idwExp);
+ 			inter = new interp::idw::IDWInterpolator(idwExp, idwNeigh);
  		} else if(type == "sk") {
  			interp::kriging::SimpleKrigingInterpolator *sk = new interp::kriging::SimpleKrigingInterpolator(argc, argv);
  			inter = sk;

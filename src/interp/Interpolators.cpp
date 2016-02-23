@@ -152,7 +152,9 @@ namespace interp {
 			using namespace detail;
 			using namespace nanoflann;
 
-			const int num = samples.size() >= 10 ? 10 : samples.size();
+			// Set the number of neighbours to use. If the config is for <= 0, use them all.
+			// Otherwise, pick the smaller of sample size and neighbours.
+			const int num = i_neighbours <= 0 ? samples.size() : (samples.size() >= i_neighbours ? i_neighbours : samples.size());
 
 			// Prepare a kdtree to find neighbours for computing idw.
 			PointCloud pc;
