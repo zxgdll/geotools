@@ -57,5 +57,8 @@ proj_ellips:
 findmin:
 	$(CPP) $(CXXFLAGS) -Wall -O3 utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
 
+findpits:
+	$(CPP) $(CXXFLAGS) -Wall -O3 utils/findpits.cpp $(LIB) -lgdal -o ../bin/findpits
+
 clean:
 	rm ../bin/*
