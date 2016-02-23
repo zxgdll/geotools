@@ -164,7 +164,7 @@ namespace interp {
 				PointCloud,
 				2
 			> kd_tree;
-			kd_tree index(2, pc, KDTreeSingleIndexAdaptorParams(10));
+			kd_tree index(2, pc, KDTreeSingleIndexAdaptorParams(num));
 			index.buildIndex();
 
 			std::vector<unsigned long> idx(num); 	// Point indices
