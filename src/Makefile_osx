@@ -39,6 +39,12 @@ las2csrs:
 las2csrs_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
 	
+lasclip:
+	$(CPP) $(CXXFLAGS) -Wall -O3 lasclip.cpp $(LIB) -llas -lgeos -lgdal -lboost_system -o ../bin/lasclip
+
+lasclip_debug:
+	$(CPP) $(CXXFLAGS) -Wall -g lasclip.cpp $(LIB) -llas -lgeos -lgdal -lboost_system -o ../bin/lasclip
+
 rastfit:
 	$(CPP) $(CXXFLAGS) -Wall -O3 -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
 

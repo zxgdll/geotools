@@ -27,15 +27,16 @@ int main(int argc, char **argv) {
 		int block = (int) (resolution / inrast.resolution());
 		std::cerr << "Block size: " << block << std::endl;
 
-		Grid<double> grid(inrast.cols() / block, inrast.rows() / block);
+		Grid<double> grid(inrast.cols() / block + 1, inrast.rows() / block + 1);
 		grid.fill(-9999);
 
 		for(int r = 0; r < inrast.rows(); r += block) {
 			std::cerr << "Row " << r << " of " << inrast.rows() << std::endl;
 			for(int c = 0; c < inrast.cols(); c += block) {
 				if(!inrast.isValid(c, r)) continue;
+				//std::cerr << c << "," << r << std::endl;
 				double z = inrast.get(c, r);
-				int lc, lr;
+				int lc = c, lr = r;
 				for(int rr = r; rr < _min(r + block, inrast.rows()); ++rr) {
 					for(int cc = c; cc < _min(c + block, inrast.cols()); ++cc) {
 						if(cc == c || rr == r || !inrast.isValid(cc, rr)) continue;
@@ -47,15 +48,17 @@ int main(int argc, char **argv) {
 						}
 					}
 				}
+				//std::cerr << lc / block << "," << lr / block << "," << block << "," << lc << "," << lr << std::endl;
 				grid(lc / block, lr / block, z);
 			}
 		}
 
+		std::cerr << "Output..." << std::endl;
 		std::cout << std::setprecision(9);
 		for(int r = 0; r < grid.rows(); ++r) {
 			for(int c = 0; c < grid.cols(); ++c) {
 				if(grid(c, r) > -9999)
-					std::cout << inrast.toX(c) << "," << inrast.toY(r) << "," << grid(c, r) << std::endl;
+					std::cout << inrast.toX(c * block) << "," << inrast.toY(r * block) << "," << grid(c, r) << std::endl;
 			}
 		}
 		
