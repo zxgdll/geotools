@@ -19,6 +19,8 @@
 #include <CGAL/number_utils.h>
 #endif
 
+#include "nanoflann.hpp"
+
 #ifdef WITH_QT
 #include "QtGui/QApplication"
 
@@ -105,6 +107,42 @@ namespace interp {
 				return _sq(a.x - x) + _sq(a.y - y);
 			}
 
+			// See nanoflann examples: https://github.com/jlblancoc/nanoflann/blob/master/examples/pointcloud_kdd_radius.cpp#L119
+			struct PointCloud
+			{
+				std::vector<InterpPoint> pts;
+
+				// Must return the number of data points
+				inline size_t kdtree_get_point_count() const { return pts.size(); }
+
+				// Returns the distance between the vector "p1[0:size-1]" and the data point with index "idx_p2" stored in the class:
+				inline double kdtree_distance(const double *p1, const size_t idx_p2,size_t /*size*/) const
+				{
+					const double d0=p1[0]-pts[idx_p2].x;
+					const double d1=p1[1]-pts[idx_p2].y;
+					const double d2=p1[2]-pts[idx_p2].z;
+					return d0*d0+d1*d1+d2*d2;
+				}
+
+				// Returns the dim'th component of the idx'th point in the class:
+				// Since this is inlined and the "dim" argument is typically an immediate value, the
+				//  "if/else's" are actually solved at compile time.
+				inline double kdtree_get_pt(const size_t idx, int dim) const
+				{
+					if (dim==0) return pts[idx].x;
+					else if (dim==1) return pts[idx].y;
+					else return pts[idx].z;
+				}
+
+				// Optional bounding-box computation: return false to default to a standard bbox computation loop.
+				//   Return true if the BBOX was already computed by the class and returned in "bb" so it can be avoided to redo it again.
+				//   Look at bb.size() to find out the expected dimensionality (e.g. 2 or 3 for point clouds)
+				template <class BBOX>
+				bool kdtree_get_bbox(BBOX& /*bb*/) const { return false; }
+
+			};
+
+
 		}
 
 		/**
@@ -112,17 +150,39 @@ namespace interp {
 		 */
 		void IDWInterpolator::interpolate(Raster<float> &out, std::list<InterpPoint > &samples) {
 			using namespace detail;
+			using namespace nanoflann;
+
+			const int num = samples.size() >= 10 ? 10 : samples.size();
+
+			// Prepare a kdtree to find neighbours for computing idw.
+			PointCloud pc;
+			pc.pts.assign(samples.begin(), samples.end());
+			typedef KDTreeSingleIndexAdaptor<
+				L2_Simple_Adaptor<double, PointCloud>,
+				PointCloud,
+				2
+			> kd_tree;
+			kd_tree index(2, pc, KDTreeSingleIndexAdaptorParams(10));
+			index.buildIndex();
+
+			std::vector<unsigned long> idx(num); 	// Point indices
+			std::vector<double> dist(num);			// Distance from query point.
+
 			std::unique_ptr<Block<float>> blk = out.block();
 			while(blk->next()) {
 				for(int r = blk->startRow(); r < blk->endRow(); ++r) {
+					std::cerr << "row " << r << std::endl;
 					for(int c = blk->startCol(); c < blk->endCol(); ++c) {
+						const double query[2] = {out.toX(c), out.toY(r)};
+						index.knnSearch(query, num, &idx[0], &dist[0]);
 						double z = 0.0;
 						double t = 0.0;
-						for(auto it = samples.begin(); it != samples.end(); ++it) {
-							// TODO: Overflow?
-							double dist = pow(_sdist(*it, out.toX(c), out.toY(r)), i_exponent);
-							z += it->z / dist;
-							t += 1 / dist;
+						//for(auto it = samples.begin(); it != samples.end(); ++it) {
+						for(int i = 0; i < num; ++i) {
+							InterpPoint pt = pc.pts[idx[i]];
+							double d = pow(dist[i], i_exponent);
+							z += pt.z / d;
+							t += 1 / d;
 						}
 						out.set(c, r, z / t);
 					}
