@@ -50,10 +50,12 @@ interp:
 
 interp_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g -DWITH_CGAL interp/Interpolators.cpp interp.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
-	
+
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips
 
+findmin:
+	$(CPP) $(CXXFLAGS) -Wall -O3 utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
 
 clean:
 	rm ../bin/*

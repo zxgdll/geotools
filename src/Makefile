@@ -75,3 +75,6 @@ interp_debug:
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips
 
+findmin:
+	$(CPP) $(CXXFLAGS) -Wall -O3 utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
+

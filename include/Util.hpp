@@ -271,13 +271,13 @@ public:
 	}
 
 	void init(int cols, int rows) {
-		if(cols * rows <= 0)
+		if((unsigned long) cols * rows <= 0)
 			throw "Size of grid must be >0.";
 		if(g_grid != NULL)
 			free(g_grid);
 		g_cols = cols;
 		g_rows = rows;
-		g_grid = (T *) calloc(sizeof(T), cols * rows);
+		g_grid = (T *) calloc(sizeof(T), (unsigned long) cols * rows);
 	}
 
 	void fill(T value) {
@@ -297,10 +297,17 @@ public:
 	}
 
 	T &operator()(int col, int row) {
-		int idx = row * g_cols + col;
+		unsigned long idx = row * g_cols + col;
 		if(idx < 0 || idx >= size())
 			throw "Index out of bounds.";
 		return g_grid[idx];
+	}
+
+	void operator()(int col, int row, T value) {
+		unsigned long idx = row * g_cols + col;
+		if(idx < 0 || idx >= size())
+			throw "Index out of bounds.";
+		g_grid[idx] = value;
 	}
 
 };
