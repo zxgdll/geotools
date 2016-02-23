@@ -46,20 +46,10 @@ double _sq(double a) {
 
 void loadSamples(std::string &datafile, std::list<interp::InterpPoint> &samples) {
 	io::CSVReader<3> in(datafile.c_str());
-	in.read_header(io::ignore_extra_column, "x", "y", "max");
+	in.read_header(io::ignore_extra_column, "x", "y", "z");
 	double x, y, z;
 	while(in.read_row(x, y, z))
 		samples.push_back(interp::InterpPoint(x, y, z));
-}
-
-/**
- * Compute the intersection of the bounds of the two rasters.
- */
-void computeBounds(Raster<float> &a, Raster<float> &b, double *bounds) {
-	bounds[0] = _max(a.toX(0), b.toX(0));
-	bounds[1] = _max(a.toY(a.rows()), b.toY(b.rows()));
-	bounds[2] = _min(a.toX(a.cols()), b.toX(b.cols()));
-	bounds[3] = _min(a.toY(0), b.toY(0));
 }
 
 void interpolate(std::string &datafile, std::string &templatefile, std::string &outfile,

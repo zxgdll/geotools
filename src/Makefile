@@ -61,16 +61,16 @@ las2csrs_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
 	
 rastfit:
-	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp rastfit.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -Wall -O3 -DWITH_CGAL -DWITH_QT interp/Interpolators.cpp rastfit.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
 
 rastfit_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -Wall -g -DWITH_CGAL -DWITH_QT interp/Interpolators.cpp rastfit.cpp $(LIB) -lQtCire -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
 	
 interp:
-	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp interp.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/interp
+	$(CPP) $(CXXFLAGS) -Wall -O3 -DWITH_CGAL -DWITH_QT interp/Interpolators.cpp interp.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/interp
 
 interp_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g interp/Interpolators.cpp interp.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/interp
+	$(CPP) $(CXXFLAGS) -Wall -g -DWITH_CGAL -DWITH_QT interp/Interpolators.cpp interp.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/interp
 	
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cmath>
 
+#ifdef WITH_CGAL
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Delaunay_triangulation_2.h>
 #include <CGAL/Delaunay_triangulation_adaptation_traits_2.h>
@@ -16,15 +17,19 @@
 #include <CGAL/Boolean_set_operations_2.h>
 #include <CGAL/Polygon_2_algorithms.h>
 #include <CGAL/number_utils.h>
+#endif
 
+#ifdef WITH_QT
 #include "QtGui/QApplication"
+
+#include "interp/krigeplot/KrigePlot.hpp"
+#endif
 
 #include "interp/IDWInterpolator.hpp"
 #include "interp/AvgInterpolator.hpp"
 #include "interp/PlanarInterpolator.hpp"
 #include "interp/NaturalNeighbourInterpolator.hpp"
 #include "interp/SimpleKrigingInterpolator.hpp"
-#include "interp/krigeplot/KrigePlot.hpp"
 
 namespace interp {
 
@@ -52,6 +57,7 @@ namespace interp {
 		}
 
 		void SimpleKrigingInterpolator::showVariogram(std::list<VariogramPoint> &variogram) {
+#ifdef WITH_QT
 			int _argc = argc();
 			char **_argv = argv();
 			QApplication qa(_argc, _argv);
@@ -62,6 +68,9 @@ namespace interp {
 			kp.setVariogram(variogram);
 			qd.show();
 			qa.exec();
+#else
+			throw "Must be compiled with Qt for Kriging.";
+#endif
 		}
 
 		void SimpleKrigingInterpolator::interpolate(Raster<float> &out, std::list<InterpPoint > &samples) {
@@ -286,6 +295,7 @@ namespace interp {
 
 	namespace naturalneighbour {
 
+#ifdef WITH_CGAL
 		typedef CGAL::Exact_predicates_exact_constructions_kernel                             K;
 		typedef CGAL::Triangulation_vertex_base_with_info_2<unsigned int, K>                  Vb; // Vertex can store its area
 		typedef CGAL::Triangulation_data_structure_2<Vb>                                      Tds;
@@ -388,11 +398,13 @@ namespace interp {
 			}
 
 		} // detail
-
+#endif
 		/**
 		 * Performs a natural neighbours interpolation.
 		 */
 		void NaturalNeighbourInterpolator::interpolate(Raster<float> &out, std::list<InterpPoint > &samples) {
+
+#ifdef WITH_CGAL
 			using namespace detail;
 
 			// Build a boundary for clipping the voronoi.
@@ -466,7 +478,9 @@ namespace interp {
 					out.set(c, r, z0);
 				}
 			}
-
+#else
+			throw "Must be compiled with CGAL for natural neighbours.";
+#endif
 		}
 
 	} // naturalneighbour
