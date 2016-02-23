@@ -26,6 +26,7 @@
 #include "interp/AvgInterpolator.hpp"
 #include "interp/PlanarInterpolator.hpp"
 #include "interp/NaturalNeighbourInterpolator.hpp"
+#include "interp/SimpleKrigingInterpolator.hpp"
 
 //#include "ShapeWriter.hpp"
 
@@ -89,8 +90,7 @@ void generateMaskSamples(std::list<InterpPoint> &samples, Raster<char> &mask,
 					&& adj.isValid(mask.toX(c), mask.toY(r))
 					&& base.isValid(mask.toX(c), mask.toY(r))) {
 				InterpPoint p(mask.toX(c), mask.toY(r));
-				p.adj = adj.get(mask.toX(c), mask.toY(r));
-				p.base = base.get(mask.toX(c), mask.toY(r));
+				p.z = adj.get(mask.toX(c), mask.toY(r)) - base.get(mask.toX(c), mask.toY(r));
 				pts.push_back(p);
 			}
 		}
@@ -110,8 +110,7 @@ void generateRandomSamples(std::list<InterpPoint> &samples, Raster<float> &adj, 
 		double y = bounds[1] + (bounds[3] - bounds[1]) * _random();
 		if(adj.isValid(x, y) && base.isValid(x, y)) {
 			InterpPoint p(x, y);
-			p.adj = adj.get(x, y);
-			p.base = base.get(x, y);
+			p.z = adj.get(x, y) - base.get(x, y);
 			samples.push_back(p);
 		}
 	}
@@ -126,11 +125,10 @@ void printSamples(std::list<InterpPoint> &samples) {
 	std::cout << "x,y,base,adj,diff,final,resid" << std::endl;
 	double d = 0.0, r = 0.0;
 	for(auto it = samples.begin(); it != samples.end(); ++it) {
-		d += _sq(it->diff());
-		r += _sq(it->resid());
+		d += _sq(it->z);
+		r += _sq(it->resid);
 		std::cout << std::setprecision(9) 
-			<< it->x << "," << it->y << "," << it->base << "," << it->adj << ","
-			<< it->diff() << "," << it->change << "," << it->resid() << std::endl;
+			<< it->x << "," << it->y << "," << it->z << "," << it->resid << std::endl;
 	}
 	std::cout << "Var before: " << (d / samples.size()) << ", after: " << (r / samples.size()) << std::endl;
 }
@@ -190,7 +188,7 @@ void adjust(std::string &basefile, std::string &adjfile,
 
 	if(print) {
 		for(auto it = samples.begin(); it != samples.end(); ++it)
-			it->change = out.get(it->x, it->y);
+			it->z = out.get(it->x, it->y);
 		printSamples(samples);
 	}
 
@@ -207,6 +205,7 @@ void usage() {
 			<< "                     pl  - plane fit. " << std::endl
 			<< "                     avg - shift vertically by the average difference. " << std::endl
 			<< "                     idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
+			<< "                     sk  - Simple Kriging." << std::endl
 			<< " -m -- mask:         an optional raster whose non-zero pixels dictate the locations of allowable samples." << std::endl
 			<< " -r -- resolution:   the pixel size of the output." << std::endl
 			<< " -s -- samples:      the number of samples." << std::endl
@@ -275,11 +274,16 @@ int main(int argc, char **argv) {
  			inter = new interp::avg::AvgInterpolator();
  		} else if(type == "idw") {
  			inter = new interp::idw::IDWInterpolator(idwExp);
+ 		} else if(type == "sk") {
+ 			interp::kriging::SimpleKrigingInterpolator *sk = new interp::kriging::SimpleKrigingInterpolator(argc, argv);
+ 			inter = sk;
  		} else {
  			throw "Unknown interpolator type.";
  		}
 
 		adjust(basefile, adjfile, maskfile, outfile, *inter, numSamples, resolution, print);
+
+		delete inter;
 
  		std::cerr << "Done." << std::endl;
 

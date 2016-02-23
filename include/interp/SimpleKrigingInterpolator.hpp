@@ -7,6 +7,23 @@ namespace interp {
 
 	namespace kriging {
 
+		class VariogramPoint {
+		private:
+			double v_dist;
+			double v_diff;
+		public:
+			VariogramPoint(double distance, double difference) {
+				v_dist = distance;
+				v_diff = difference;
+			}
+			double distance() {
+				return v_dist;
+			}
+			double difference() {
+				return v_diff;
+			}
+		};
+
 		class SimpleKrigingInterpolator : public interp::Interpolator {
 		private:
 			int s_argc;
@@ -24,7 +41,9 @@ namespace interp {
 				s_argv = argv;
 			}
 
-			void showVariogram(std::list<InterpPoint> &samples);
+			void computeVariogram(std::list<InterpPoint> &samples, std::list<VariogramPoint> &variogram);
+
+			void showVariogram(std::list<VariogramPoint> &variogram);
 
 			void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
 

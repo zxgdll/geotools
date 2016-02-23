@@ -32,23 +32,42 @@ namespace interp {
 
 		namespace detail {
 
+			double _sq(double a) {
+				return a*a;
+			}
+
 		}
 
-		void SimpleKrigingInterpolator::showVariogram(std::list<InterpPoint> &samples) {
+		void SimpleKrigingInterpolator::computeVariogram(std::list<InterpPoint> &samples,
+				std::list<VariogramPoint> &variogram) {
+			using namespace interp::kriging::detail;
+			for(auto it0 = samples.begin(); it0 != samples.end(); ++it0) {
+				for(auto it1 = samples.begin(); it1 != samples.end(); ++it1) {
+					if(it0->equals(*it1)) continue;
+					double dist = sqrt(_sq(it0->x - it1->x) + _sq(it0->y - it1->y));
+					double diff = _sq(it0->z - it1->z);
+					variogram.push_back(VariogramPoint(dist, diff));
+				}
+			}
+		}
+
+		void SimpleKrigingInterpolator::showVariogram(std::list<VariogramPoint> &variogram) {
 			int _argc = argc();
 			char **_argv = argv();
 			QApplication qa(_argc, _argv);
 			QDialog qd;
 			interp::kriging::ui::KrigePlot kp;
 			kp.setupUi(&qd);
-			std::cerr << samples.size() << " samples" << std::endl;
-			kp.setSamples(samples);
+			std::cerr << variogram.size() << " variogram points" << std::endl;
+			kp.setVariogram(variogram);
 			qd.show();
 			qa.exec();
 		}
 
 		void SimpleKrigingInterpolator::interpolate(Raster<float> &out, std::list<InterpPoint > &samples) {
- 			showVariogram(samples);
+			std::list<VariogramPoint> variogram;
+			computeVariogram(samples, variogram);
+ 			showVariogram(variogram);
 		}
 	}
 
@@ -90,11 +109,13 @@ namespace interp {
 					for(int c = blk->startCol(); c < blk->endCol(); ++c) {
 						double z = 0.0;
 						double t = 0.0;
-						for(auto it = samples.begin(); it != samples.end(); ++it)
-							t += _sdist(*it, out.toX(c), out.toY(r));
-						for(auto it = samples.begin(); it != samples.end(); ++it)
-							z += it->diff() * _sdist(*it, out.toX(c), out.toY(r)) / t;
-						out.set(c, r, z);
+						for(auto it = samples.begin(); it != samples.end(); ++it) {
+							// TODO: Overflow?
+							double dist = pow(_sdist(*it, out.toX(c), out.toY(r)), i_exponent);
+							z += it->z / dist;
+							t += 1 / dist;
+						}
+						out.set(c, r, z / t);
 					}
 				}
 			}
@@ -111,7 +132,7 @@ namespace interp {
 		void AvgInterpolator::interpolate(Raster<float> &out, std::list<InterpPoint > &samples) {
 			double z = 0.0;
 			for(auto it = samples.begin(); it != samples.end(); ++it)
-				z += it->diff();
+				z += it->z;
 			z /= samples.size();
 			for(int r = 0; r < out.rows(); ++r) {
 				for(int c = 0; c < out.cols(); ++c)
@@ -224,7 +245,7 @@ namespace interp {
 				xymtx[i][0] = 1.0;
 				xymtx[i][1] = it->x;
 				xymtx[i][2] = it->y;
-				zmtx[i][0] = it->diff();
+				zmtx[i][0] = it->z;
 				++i;
 			}
 
@@ -397,7 +418,7 @@ namespace interp {
 				Point_2 p(pt->x, pt->y);
 				DVertex_handle h = dt.insert(p);
 				h->info() = id;
-				diffs[id] = pt->diff();
+				diffs[id] = pt->z;
 				++id;
 			}
 

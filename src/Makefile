@@ -1,8 +1,10 @@
-LIB=-L/usr/lib
-CXXFLAGS=-I../include -I/usr/include -I/usr/include/gdal -std=c++11
+LIB=-L/usr/lib -L/usr/lib/qt4
+CXXFLAGS=-I../include -I/usr/include -I/usr/include/gdal -I/usr/include/qt4 -I/usr/include/qt4/Qt -I/usr/include/qwt -std=c++11
 CFLAGS=-I../include -I/usr/include -std=c++11
 CPP=g++
 CC=gcc
+
+.PHONY: interp
 
 all: mosaic lasstats lasmerge lasgrid las2csrs rastfit lasclip lasboundary lasreclass
 debug: mosaic_debug laststats_debug lasmerge_debug lasgrid_debug las2csrs_debug rastfit_debug lasclip_debug lasboundary_debug lasreclass_debug
@@ -59,10 +61,16 @@ las2csrs_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
 	
 rastfit:
-	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp rastfit.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
 
 rastfit_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g rastfit.cpp $(LIB) -frounding-math -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -Wall -g interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/rastfit
+	
+interp:
+	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp interp.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/interp
+
+interp_debug:
+	$(CPP) $(CXXFLAGS) -Wall -g interp/Interpolators.cpp interp.cpp $(LIB) -lQtCore -lQtGui -lqwt -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread -o ../bin/interp
 	
 proj_ellips:
 	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips

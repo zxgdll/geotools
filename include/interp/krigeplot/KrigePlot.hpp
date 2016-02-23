@@ -42,7 +42,7 @@ public:
         buttonBox->setOrientation(Qt::Horizontal);
         buttonBox->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
         qwtVariogram = new QwtPlot(dlgSemivariogram);
-        qwtVariogram->setObjectName(QString::fromUtf8("qwtVariogram"));
+        //qwtVariogram->setObjectName(QString::fromUtf8("qwtVariogram"));
         qwtVariogram->setGeometry(QRect(0, 10, 731, 391));
 
         retranslateUi(dlgSemivariogram);
@@ -52,14 +52,20 @@ public:
         QMetaObject::connectSlotsByName(dlgSemivariogram);
     } // setupUi
 
-    void setSamples(std::list<interp::InterpPoint> &samples) {
-    	QwtSymbol *sym=new QwtSymbol(QwtSymbol::Ellipse, QBrush(Qt::white), QPen(Qt::black), QSize(5,5));
-    	for(auto it = samples.begin(); it != samples.end(); ++it) {
+    void setVariogram(std::list<interp::kriging::VariogramPoint> &variogram) {
+    	double maxx = -FLT_MAX, maxy = -FLT_MAX;
+    	for(auto it = variogram.begin(); it != variogram.end(); ++it) {
+        	QwtSymbol *sym=new QwtSymbol(QwtSymbol::Ellipse, QBrush(Qt::white), QPen(Qt::black), QSize(5,5));
     		QwtPlotMarker *m = new QwtPlotMarker("Test");
     		m->setSymbol(sym);
-    		m->setValue(it->x, it->y);
+    		m->setValue(it->distance(), it->difference());
     		m->attach(qwtVariogram);
+    		if(it->distance() > maxx) maxx = it->distance();
+    		if(it->difference() > maxy) maxy = it->difference();
+    		std::cerr << it->distance() << ", " << it->difference() << std::endl;
     	}
+    	qwtVariogram->setAxisScale(QwtPlot::xBottom, 0, maxx);
+    	qwtVariogram->setAxisScale(QwtPlot::yLeft, 0, maxy);
     	qwtVariogram->replot();
     }
 
