@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
 		int block = (int) (resolution / inrast.resolution());
 		std::cerr << "Block size: " << block << std::endl;
 
-		Grid<double> grid(inrast.cols() / block + 1, inrast.rows() / block + 1);
+		Grid<double> grid(inrast.cols() + 1, inrast.rows() + 1);
 		grid.fill(-9999);
 
 		for(int r = 0; r < inrast.rows(); r += block) {
@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
 						}
 					}
 				}
-				//std::cerr << lc / block << "," << lr / block << "," << block << "," << lc << "," << lr << std::endl;
-				grid(lc / block, lr / block, z);
+				//std::cerr << lc / block << "," << lr / block << "," << block << "," << lc << "," << lr << "," << grid.cols() << "," << grid.rows() << std::endl;
+				grid(lc, lr, z);
 			}
 		}
 
@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
 		for(int r = 0; r < grid.rows(); ++r) {
 			for(int c = 0; c < grid.cols(); ++c) {
 				if(grid(c, r) > -9999)
-					std::cout << inrast.toX(c * block) << "," << inrast.toY(r * block) << "," << grid(c, r) << std::endl;
+					std::cout << inrast.toX(c) << "," << inrast.toY(r) << "," << grid(c, r) << std::endl;
 			}
 		}
 		

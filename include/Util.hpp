@@ -262,8 +262,8 @@ public:
 		return g_cols;
 	}
 
-	int size() const {
-		return g_rows * g_cols;
+	unsigned long size() const {
+		return (unsigned long) g_rows * g_cols;
 	}
 
 	void init(int elements) {
@@ -297,14 +297,14 @@ public:
 	}
 
 	T &operator()(int col, int row) {
-		unsigned long idx = row * g_cols + col;
+		unsigned long idx = (unsigned long) row * g_cols + col;
 		if(idx < 0 || idx >= size())
 			throw "Index out of bounds.";
 		return g_grid[idx];
 	}
 
 	void operator()(int col, int row, T value) {
-		unsigned long idx = row * g_cols + col;
+		unsigned long idx = (unsigned long) row * g_cols + col;
 		if(idx < 0 || idx >= size())
 			throw "Index out of bounds.";
 		g_grid[idx] = value;
