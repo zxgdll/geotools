@@ -92,7 +92,7 @@ void usage() {
 			<< " -i  -- template file   A template file to produce the output file." << std::endl
 			<< " -o  -- output file     The output file." << std::endl
 			<< " -d  -- data file       A CSV file with data." << std::endl
-			<< " -ie -- idw exponent    The IDW decay value." << std::endl;
+			<< " -ie -- idw exponent    The IDW decay value." << std::endl
 			<< " -ip -- idw neighbours  Number of neighbours to consider. Leave out to consider all." << std::endl;
 }
 
@@ -125,12 +125,13 @@ int main(int argc, char **argv) {
  				idwExp = atof(argv[++i]);
  			} else if(p == "-ip") {
  				idwNeigh = atoi(argv[++i]);
- 			}
  			} else if(p == "-d") {
  				datafile = argv[++i];
  			}
  		}
 
+ 		if(idwNeigh < 0)
+ 			throw "IDW neighbour count must be >= 0.";
  		if(resolution <= 0)
  			throw "Invalid resolution.";
  		if(outfile.empty())

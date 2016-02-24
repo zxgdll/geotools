@@ -20,7 +20,10 @@
 #include <qwt_plot_marker.h>
 #include <qwt_symbol.h>
 
+#include <limits>
 #include <list>
+
+#include "interp/SimpleKrigingInterpolator.hpp"
 #include "interp/InterpPoint.hpp"
 
 QT_BEGIN_NAMESPACE
@@ -53,7 +56,8 @@ public:
     } // setupUi
 
     void setVariogram(std::list<interp::kriging::VariogramPoint> &variogram) {
-    	double maxx = -FLT_MAX, maxy = -FLT_MAX;
+    	double maxx, maxy;
+    	maxx = maxy = std::numeric_limits<double>::lowest();
     	for(auto it = variogram.begin(); it != variogram.end(); ++it) {
         	QwtSymbol *sym=new QwtSymbol(QwtSymbol::Ellipse, QBrush(Qt::white), QPen(Qt::black), QSize(5,5));
     		QwtPlotMarker *m = new QwtPlotMarker("Test");
