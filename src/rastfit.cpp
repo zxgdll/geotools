@@ -160,7 +160,6 @@ void adjust(std::string &basefile, std::string &adjfile,
 	// Initializes source, destination rasters.
 	Raster<float> base(basefile, 1, false);
 	Raster<float> adj(adjfile, 1, false);
-	Raster<char> mask(maskfile, 1, false);
 	std::string proj;
 	adj.projection(proj);
 	Raster<float> out(outfile, adj.minx(), adj.miny(), adj.maxx(), adj.maxy(), resolution, adj.nodata(), proj.c_str());
@@ -177,6 +176,7 @@ void adjust(std::string &basefile, std::string &adjfile,
 		computeBounds(base, adj, bounds);
 		generateRandomSamples(samples, adj, base, bounds, numSamples);
 	} else {
+		Raster<char> mask(maskfile, 1, false);
 		generateMaskSamples(samples, mask, adj, base, numSamples);
 	}
 
@@ -188,7 +188,7 @@ void adjust(std::string &basefile, std::string &adjfile,
 
 	if(print) {
 		for(auto it = samples.begin(); it != samples.end(); ++it)
-			it->z = out.get(it->x, it->y);
+			it->resid = out.get(it->x, it->y);
 		printSamples(samples);
 	}
 
@@ -200,20 +200,21 @@ void usage() {
 			<< "optional and used to limit the placement of samples to where elevations are " << std::endl
 			<< "known to be good. The output is an adjustment raster with the same extent " << std::endl
 			<< "as the input raster, with the new resolution. " << std::endl
-			<< " -t -- type:         The type of adjustment. " << std::endl
-			<< "                     nn  - natural neighbours." << std::endl
-			<< "                     pl  - plane fit. " << std::endl
-			<< "                     avg - shift vertically by the average difference. " << std::endl
-			<< "                     idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
-			<< "                     sk  - Simple Kriging." << std::endl
-			<< " -m -- mask:         an optional raster whose non-zero pixels dictate the locations of allowable samples." << std::endl
-			<< " -r -- resolution:   the pixel size of the output." << std::endl
-			<< " -s -- samples:      the number of samples." << std::endl
-			<< " -b -- base file:    the raster to adjust the adjustment raster to." << std::endl
-			<< " -a -- adjustment    file: the raster to adjust." << std::endl
-			<< " -o -- output file:  the output file." << std::endl
-			<< " -p -- print:        print a table with the points, samples, deltas and residuals." << std::endl
-			<< " -e -- idw exponent." << std::endl;
+			<< " -t  -- type            The type of adjustment. " << std::endl
+			<< "                        nn  - natural neighbours." << std::endl
+			<< "                        pl  - plane fit. " << std::endl
+			<< "                        avg - shift vertically by the average difference. " << std::endl
+			<< "                        idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
+			<< "                        sk  - Simple Kriging." << std::endl
+			<< " -m  -- mask            an optional raster whose non-zero pixels dictate the locations of allowable samples." << std::endl
+			<< " -r  -- resolution      the pixel size of the output." << std::endl
+			<< " -s  -- samples         the number of samples." << std::endl
+			<< " -b  -- base file       the raster to adjust the adjustment raster to." << std::endl
+			<< " -a  -- adjustment      file: the raster to adjust." << std::endl
+			<< " -o  -- output file     the output file." << std::endl
+			<< " -p  -- print           print a table with the points, samples, deltas and residuals." << std::endl
+			<< " -ie -- idw exponent    The IDW decay value." << std::endl
+			<< " -ip -- idw neighbours  Number of neighbours to consider. Leave out to consider all." << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -229,6 +230,7 @@ int main(int argc, char **argv) {
  		double resolution = 0.0;
  		bool print = false;
  		double idwExp = 1.0;
+ 		int idwNeigh = 0;
 
  		for(int i = 0; i < argc; ++i) {
  			std::string p(argv[i]);
@@ -248,11 +250,15 @@ int main(int argc, char **argv) {
  				basefile = argv[++i];
  			} else if(p == "-p") {
  				print = true;
- 			} else if(p == "-e") {
+ 			} else if(p == "-ie") {
  				idwExp = atof(argv[++i]);
+ 			} else if(p == "-ip") {
+ 				idwNeigh = atoi(argv[++i]);
  			}
  		}
 
+ 		if(type == "idw" && idwNeigh < 0)
+ 			throw "IDW neighbour count must be >= 0.";
  		if(numSamples <= 1)
  			throw "Please try more than one sample.";
  		if(resolution <= 0)
@@ -273,7 +279,7 @@ int main(int argc, char **argv) {
  		} else if(type == "avg") {
  			inter = new interp::avg::AvgInterpolator();
  		} else if(type == "idw") {
- 			inter = new interp::idw::IDWInterpolator(idwExp);
+ 			inter = new interp::idw::IDWInterpolator(idwExp, idwNeigh);
  		} else if(type == "sk") {
  			interp::kriging::SimpleKrigingInterpolator *sk = new interp::kriging::SimpleKrigingInterpolator(argc, argv);
  			inter = sk;
