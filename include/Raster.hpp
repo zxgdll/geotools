@@ -73,21 +73,7 @@ private:
 	GDALDataset *r_ds;			// GDAL dataset
 	GDALRasterBand *r_band;		// GDAL band
 	double r_trans[6];			// Raster transform
-
-	/**
-	 * Basic constructor.
-	 */
-	Raster() :
-		r_cols(-1), r_rows(-1),
-		r_bcols(-1), r_brows(-1),
-		r_curcol(-1), r_currow(-1),
-		r_bandn(1),
-		r_bw(-1), r_bh(-1),
-		r_writable(false), r_dirty(false) {
-		r_ds = nullptr;
-		r_band = nullptr;
-		r_block = nullptr;
-	}
+	bool r_inited = false;
 
 	/**
 	 * Loads the block that contains the given row and column.
@@ -122,10 +108,30 @@ private:
 public:
 
 	/**
+	 * Basic constructor.
+	 */
+	Raster() :
+		r_cols(-1), r_rows(-1),
+		r_bcols(-1), r_brows(-1),
+		r_curcol(-1), r_currow(-1),
+		r_bandn(1),
+		r_bw(-1), r_bh(-1),
+		r_writable(false), r_dirty(false) {
+		r_ds = nullptr;
+		r_band = nullptr;
+		r_block = nullptr;
+	}
+
+	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolution, double nodata, const char *proj = NULL) : Raster() {
+			init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
+	}
+
+	void init(std::string &filename, double minx, double miny, double maxx, double maxy,
+			double resolution, double nodata, const char *proj = NULL) {
 		GDALAllRegister();
 		int width = (int) ((maxx - minx) / resolution) + 1;
 		int height = (int) ((maxy - miny) / resolution) + 1;
@@ -151,6 +157,7 @@ public:
 		r_brows = (r_rows + r_bh - 1) / r_bh;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = true;
+		r_inited = true;
 	}
 
 	/**
@@ -158,6 +165,10 @@ public:
 	 * to enable writing.
 	 */
 	Raster(std::string &filename, int band = 1, bool writable = false) : Raster() {
+		init(filename, band, writable);
+	}
+
+	void init(std::string &filename, int band = 1, bool writable = false) {
 		GDALAllRegister();
 		r_ds = (GDALDataset *) GDALOpen(filename.c_str(), writable ? GA_Update : GA_ReadOnly);
 		if(r_ds == NULL)
@@ -175,8 +186,12 @@ public:
 		r_brows = (r_rows + r_bh - 1) / r_bh;
 		r_block = (T *) malloc(sizeof(T) * r_bw * r_bh);
 		r_writable = writable;
+		r_inited = true;
 	}
 
+	bool inited() {
+		return r_inited;
+	}
 	/**
 	 * Return a "Block" which just stores indices of pixels that
 	 * comprise a block. Calling next on the block adjusts the indices
