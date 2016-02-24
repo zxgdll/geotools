@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
  			}
  		}
 
- 		if(idwNeigh < 0)
+ 		if(type == "idw" && idwNeigh < 0)
  			throw "IDW neighbour count must be >= 0.";
  		if(resolution <= 0)
  			throw "Invalid resolution.";
