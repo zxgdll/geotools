@@ -1,7 +1,3 @@
-.settings
 bin
 data
-.pydevproject
-.project
-.cproject
 .DS_Store
