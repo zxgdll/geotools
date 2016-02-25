@@ -210,60 +210,60 @@ public:
 template <class T>
 class Grid {
 private:
-	int g_cols;
-	int g_rows;
-	T *g_grid;
-	void (*g_item_dealloc)(T);
+	int m_cols;
+	int m_rows;
+	T *m_grid;
+	void (*m_item_dealloc)(T);
 
 public:
 	Grid() {
-		g_grid = NULL;
-		g_cols = 0;
-		g_rows = 0;
-		g_item_dealloc = NULL;
+		m_grid = NULL;
+		m_cols = 0;
+		m_rows = 0;
+		m_item_dealloc = NULL;
 	}
 
 	Grid(int cols, int rows) {
-		g_grid = NULL;
-		g_cols = 0;
-		g_rows = 0;
-		g_item_dealloc = NULL;
+		m_grid = NULL;
+		m_cols = 0;
+		m_rows = 0;
+		m_item_dealloc = NULL;
 		init(cols, rows);
 	}
 
 	Grid(int elements) {
-		g_grid = NULL;
-		g_cols = 0;
-		g_rows = 0;
+		m_grid = NULL;
+		m_cols = 0;
+		m_rows = 0;
 		init(elements);
 	}
 
 	~Grid() {
-		if(g_item_dealloc != NULL) {
-			for(int i = 0; i < g_cols * g_rows; ++i)
-				g_item_dealloc(g_grid[i]);
+		if(m_item_dealloc != NULL) {
+			for(int i = 0; i < m_cols * m_rows; ++i)
+				m_item_dealloc(m_grid[i]);
 		}
-		free(g_grid);
+		free(m_grid);
 	}
 
 	void setDeallocator(void (*item_dealloc)(T)) {
-		g_item_dealloc = item_dealloc;
+		m_item_dealloc = item_dealloc;
 	}
 
 	T *grid() {
-		return g_grid;
+		return m_grid;
 	}
 
 	int rows() const {
-		return g_rows;
+		return m_rows;
 	}
 
 	int cols() const {
-		return g_cols;
+		return m_cols;
 	}
 
 	unsigned long size() const {
-		return (unsigned long) g_rows * g_cols;
+		return (unsigned long) m_rows * m_cols;
 	}
 
 	void init(int elements) {
@@ -273,41 +273,41 @@ public:
 	void init(int cols, int rows) {
 		if((unsigned long) cols * rows <= 0)
 			throw "Size of grid must be >0.";
-		if(g_grid != NULL)
-			free(g_grid);
-		g_cols = cols;
-		g_rows = rows;
-		g_grid = (T *) calloc(sizeof(T), (unsigned long) cols * rows);
+		if(m_grid != NULL)
+			free(m_grid);
+		m_cols = cols;
+		m_rows = rows;
+		m_grid = (T *) calloc(sizeof(T), (unsigned long) cols * rows);
 	}
 
 	void fill(T value) {
-		std::fill_n(g_grid, size(), value);
+		std::fill_n(m_grid, size(), value);
 	}
 
 	T &operator[](int idx) {
 		if(idx < 0 || idx >= size())
 			throw "Index out of bounds.";
-		return g_grid[idx];
+		return m_grid[idx];
 	}
 
 	T &operator()(int idx) {
 		if(idx < 0 || idx >= size())
 			throw "Index out of bounds.";
-		return g_grid[idx];
+		return m_grid[idx];
 	}
 
 	T &operator()(int col, int row) {
-		unsigned long idx = (unsigned long) row * g_cols + col;
+		unsigned long idx = (unsigned long) row * m_cols + col;
 		if(idx < 0 || idx >= size())
 			throw "Index out of bounds.";
-		return g_grid[idx];
+		return m_grid[idx];
 	}
 
 	void operator()(int col, int row, T value) {
-		unsigned long idx = (unsigned long) row * g_cols + col;
+		unsigned long idx = (unsigned long) row * m_cols + col;
 		if(idx < 0 || idx >= size())
 			throw "Index out of bounds.";
-		g_grid[idx] = value;
+		m_grid[idx] = value;
 	}
 
 };

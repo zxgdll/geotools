@@ -47,43 +47,43 @@ typedef Voronoi::Vertex_handle              VVertex_handle;
 
 class ShapeWriter {
 private:
-	std::string s_filename;
-	bool s_needWrite;
-	bool s_on = true;
-	int s_id = 0;
+	std::string m_filename;
+	bool m_needWrite;
+	bool m_on = true;
+	int m_id = 0;
 	std::vector<float> pts;
 public:
 	ShapeWriter(const char *filename) {
-		s_filename = filename;
-		s_needWrite = false;
+		m_filename = filename;
+		m_needWrite = false;
 	}
 	void on() {
-		s_on = true;
+		m_on = true;
 	}
 	void off() {
-		s_on = false;
+		m_on = false;
 	}
 	void put(Ray_2 &r) {
-		if(!s_on) return;
+		if(!m_on) return;
 		double x = CGAL::to_double(r.source().x());
 		double  y = CGAL::to_double(r.source().y());
 		pts.push_back(2);
-		pts.push_back(++s_id);
+		pts.push_back(++m_id);
 		pts.push_back(x);
 		pts.push_back(y);
 		pts.push_back(x + CGAL::to_double(r.direction().dx()) * 1000.0);
 		pts.push_back(y + CGAL::to_double(r.direction().dy()) * 1000.0);
-		s_needWrite = true;
+		m_needWrite = true;
 	}
 	void put(Segment_2 &r) {
-		if(!s_on) return;
+		if(!m_on) return;
 		pts.push_back(2);
-		pts.push_back(++s_id);
+		pts.push_back(++m_id);
 		pts.push_back(CGAL::to_double(r.source().x()));
 		pts.push_back(CGAL::to_double(r.source().y()));
 		pts.push_back(CGAL::to_double(r.target().x()));
 		pts.push_back(CGAL::to_double(r.target().y()));
-		s_needWrite = true;
+		m_needWrite = true;
 	}
 	void put(Segment_2 &r, std::vector<float> &pts) {
 		pts.push_back(CGAL::to_double(r.source().x()));
@@ -92,9 +92,9 @@ public:
 		pts.push_back(CGAL::to_double(r.target().y()));
 	}
 	void put(Point_2 &r) {
-		if(!s_on) return;
+		if(!m_on) return;
 		pts.push_back(5);
-		pts.push_back(++s_id);
+		pts.push_back(++m_id);
 		pts.push_back(CGAL::to_double(r.x()));
 		pts.push_back(CGAL::to_double(r.y()));
 		
@@ -109,16 +109,16 @@ public:
 
 		pts.push_back(CGAL::to_double(r.x()));
 		pts.push_back(CGAL::to_double(r.y()));
-		s_needWrite = true;
+		m_needWrite = true;
 	}
 	void put(Iso_rectangle_2 &r) {
-		if(!s_on) return;
+		if(!m_on) return;
 		float x1 = CGAL::to_double(r.min().x());
 		float y1 = CGAL::to_double(r.min().y());
 		float x2 = CGAL::to_double(r.max().x());
 		float y2 = CGAL::to_double(r.max().y());
 		pts.push_back(5);
-		pts.push_back(++s_id);
+		pts.push_back(++m_id);
 		pts.push_back(x1);
 		pts.push_back(y1);
 		
@@ -133,10 +133,10 @@ public:
 		
 		pts.push_back(x1);
 		pts.push_back(y1);
-		s_needWrite = true;
+		m_needWrite = true;
 	}
 	void put(Polygon_2 &p) {
-		if(!s_on) return;
+		if(!m_on) return;
 		Polygon_2::Vertex_const_circulator c = p.vertices_circulator(), done(c);
 		std::list<float> tmp;
 		Point_2 pt0 = *c;
@@ -152,17 +152,17 @@ public:
 		tmp.push_back(CGAL::to_double(pt0.x()));
 		tmp.push_back(CGAL::to_double(pt0.y()));
 		pts.push_back((float) tmp.size() / 2);
-		pts.push_back(++s_id);
+		pts.push_back(++m_id);
 		pts.insert(pts.end(), tmp.begin(), tmp.end());
-		s_needWrite = true;
+		m_needWrite = true;
 	}
 	void write() {
-		if(!s_needWrite) return;
+		if(!m_needWrite) return;
 		OGRRegisterAll();
 		OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName("ESRI Shapefile");
 		if(!drv)
 			throw "Couldn't find shapefile driver.";
-		OGRDataSource *ds = drv->CreateDataSource(s_filename.c_str(), NULL);
+		OGRDataSource *ds = drv->CreateDataSource(m_filename.c_str(), NULL);
 		if(!ds)
 			throw "Failed to open shapefile.";
 		OGRLayer *ly = ds->CreateLayer("shapes", NULL, wkbLineString, NULL);
@@ -188,7 +188,7 @@ public:
 			OGRFeature::DestroyFeature(feat);
 		}
 		OGRDataSource::DestroyDataSource(ds);
-		s_needWrite = false;
+		m_needWrite = false;
 	}
 	~ShapeWriter() {
 		write();	

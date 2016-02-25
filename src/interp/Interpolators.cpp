@@ -154,7 +154,7 @@ namespace interp {
 
 			// Set the number of neighbours to use. If the config is for <= 0, use them all.
 			// Otherwise, pick the smaller of sample size and neighbours.
-			const int num = i_neighbours <= 0 ? samples.size() : (samples.size() >= i_neighbours ? i_neighbours : samples.size());
+			const int num = m_neighbours <= 0 ? samples.size() : (samples.size() >= m_neighbours ? m_neighbours : samples.size());
 
 			// Prepare a kdtree to find neighbours for computing idw.
 			PointCloud pc;
@@ -182,7 +182,7 @@ namespace interp {
 						//for(auto it = samples.begin(); it != samples.end(); ++it) {
 						for(int i = 0; i < num; ++i) {
 							InterpPoint pt = pc.pts[idx[i]];
-							double d = pow(dist[i], i_exponent);
+							double d = pow(dist[i], m_exponent);
 							z += pt.z / d;
 							t += 1 / d;
 						}

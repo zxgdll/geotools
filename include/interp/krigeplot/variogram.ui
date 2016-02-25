@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>739</width>
-    <height>469</height>
+    <height>587</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -32,14 +32,14 @@
         <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
        </property>
        <item row="0" column="0">
-        <widget class="QLabel" name="variogramModelLabel">
+        <widget class="QLabel" name="vModelLabel">
          <property name="text">
           <string>Variogram Model</string>
          </property>
         </widget>
        </item>
        <item row="0" column="1">
-        <widget class="QComboBox" name="variogramModelComboBox">
+        <widget class="QComboBox" name="vModelComboBox">
          <item>
           <property name="text">
            <string>Spherical</string>

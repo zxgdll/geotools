@@ -9,36 +9,36 @@ namespace interp {
 
 		class VariogramPoint {
 		private:
-			double v_dist;
-			double v_diff;
+			double m_dist;
+			double m_diff;
 		public:
 			VariogramPoint(double distance, double difference) {
-				v_dist = distance;
-				v_diff = difference;
+				m_dist = distance;
+				m_diff = difference;
 			}
 			double distance() {
-				return v_dist;
+				return m_dist;
 			}
 			double difference() {
-				return v_diff;
+				return m_diff;
 			}
 		};
 
 		class SimpleKrigingInterpolator : public interp::Interpolator {
 		private:
-			int s_argc;
-			char **s_argv;
+			int m_argc;
+			char **m_argv;
 			int argc() const {
-				return s_argc;
+				return m_argc;
 			}
 			char **argv() const {
-				return s_argv;
+				return m_argv;
 			}
 		public:
 
 			SimpleKrigingInterpolator(int argc, char **argv) {
-				s_argc = argc;
-				s_argv = argv;
+				m_argc = argc;
+				m_argv = argv;
 			}
 
 			void computeVariogram(std::list<InterpPoint> &samples, std::list<VariogramPoint> &variogram);
