@@ -52,7 +52,7 @@ rastfit_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
 	
 interp:
-	$(CPP) $(CXXFLAGS) -Wall -O3 -DWITH_CGAL interp/Interpolators.cpp interp.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
+	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp interp.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
 
 interp_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g -DWITH_CGAL interp/Interpolators.cpp interp.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
@@ -63,8 +63,9 @@ proj_ellips:
 findmin:
 	$(CPP) $(CXXFLAGS) -Wall -O3 utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
 
-findpits:
-	$(CPP) $(CXXFLAGS) -Wall -O3 utils/findpits.cpp $(LIB) -lgdal -o ../bin/findpits
+findmin_debug:
+	$(CPP) $(CXXFLAGS) -Wall -g utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
+
 
 clean:
 	rm ../bin/*
