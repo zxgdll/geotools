@@ -213,12 +213,10 @@ public:
 	 * Caller is responsible for correctly initializing the array,
 	 * and freeing it.
 	 */
-	void loadBlock(int bcol, int brow, T *block) {
-		int i = 0;
-		for(int r = brow * m_bh; r < brow * m_bh + m_bh; ++r) {
-			for(int c = bcol * m_bw; c < bcol * m_bw + m_bw; ++c)
-				block[i++] = get(c, r);
-		}
+	void loadBlock(int col, int row, int cols, int rows, T *block) {
+		// TODO: Determine gdt type from T.
+		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block, cols, rows, GDT_Float32, 0, 0) != CE_None)
+			throw "Error reading block.";
 	}
 
 	/**
@@ -475,9 +473,6 @@ public:
 
 	~Raster() {
 		flush();
-		m_band = NULL;
-		m_ds = NULL;
-		std::cerr << "Flushed" << std::endl;
 	}
 
 };
