@@ -15,6 +15,7 @@
 #include <gdal_priv.h>
 
 #include "Util.hpp"
+#include "Raster.hpp"
 
 #define PI 3.14159265358979323846
 

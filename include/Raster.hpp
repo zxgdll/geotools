@@ -11,6 +11,148 @@
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
 
+/**
+ * A convenience class for managing a grid of values.
+ * Handles allocation and deallocation of memory.
+ */
+template <class T>
+class Grid {
+private:
+	int m_cols;
+	int m_rows;
+	T *m_grid;
+	void (*m_item_dealloc)(T);
+
+	/**
+	 * Checks if the grid has been initialized. Throws exception otherwise.
+	 */
+	void checkInit() {
+		if(m_grid == nullptr)
+			throw "This instance has not been initialized.";
+	}
+public:
+	Grid() {
+		m_grid = nullptr;
+		m_cols = -1;
+		m_rows = -1;
+		m_item_dealloc = nullptr;
+	}
+
+	Grid(int cols, int rows) : Grid() {
+		init(cols, rows);
+	}
+
+	~Grid() {
+		if(m_item_dealloc != nullptr) {
+			for(unsigned long i = 0; i < (unsigned long) m_cols * m_rows; ++i)
+				m_item_dealloc(m_grid[i]);
+		}
+		if(m_grid != nullptr)
+			free(m_grid);
+	}
+
+	/**
+	 * A pointer to a function that can deallocate the grid
+	 * items. Not necessary if a primitive type is used (the usual case.)
+	 */
+	void setDeallocator(void (*item_dealloc)(T)) {
+		m_item_dealloc = item_dealloc;
+	}
+
+	/**
+	 * Return a pointer to the allocated memory.
+	 */
+	T *grid() {
+		return m_grid;
+	}
+
+	int rows() const {
+		return m_rows;
+	}
+
+	int cols() const {
+		return m_cols;
+	}
+
+	unsigned long size() const {
+		return (unsigned long) m_rows * m_cols;
+	}
+
+	/**
+	 * Initialize with the given number of cols and rows.
+	 * (Re)allocates memory for the internal grid.
+	 */
+	void init(int cols, int rows) {
+		if(cols <= 0 || rows <= 0)
+			throw "Invalid row or column count.";
+		m_cols = cols;
+		m_rows = rows;
+		if(m_grid != nullptr)
+			free(m_grid);
+		m_grid = (T *) malloc(sizeof(T) * cols * rows);
+	}
+
+	/**
+	 * Fill the grid with the given value.
+	 */
+	void fill(T value) {
+		checkInit();
+		std::fill_n(m_grid, size(), value);
+	}
+
+	T &get(unsigned long idx) {
+		checkInit();
+		if(idx >= size())
+			throw "Index out of bounds.";
+		return m_grid[idx];
+	}
+
+	void set(unsigned long idx, T value) {
+		if(idx >= size())
+			throw "Index out of bounds.";
+		checkInit();
+		m_grid[idx] = value;
+	}
+
+	/**
+	 * Return the element at the given index.
+	 */
+	T &operator[](unsigned long idx) {
+		return get(idx);
+	}
+
+	/**
+	 * Return the element at the given index.
+	 */
+	T &operator()(unsigned long idx) {
+		return get(idx);
+	}
+
+	/**
+	 * Return the element at the given column/row.
+	 */
+	T &operator()(int col, int row) {
+		unsigned long idx = (unsigned long) row * m_cols + col;
+		return get(idx);
+	}
+
+	/**
+	 * Set the element at the given column/row.
+	 */
+	void operator()(int col, int row, T value) {
+		unsigned long idx = (unsigned long) row * m_cols + col;
+		set(idx, value);
+	}
+
+	/**
+	 * Set the element at the given index.
+	 */
+	void operator()(unsigned long idx, T value) {
+		set(idx, value);
+	}
+
+};
+
 template <class T>
 class Block {
 private:
@@ -61,19 +203,20 @@ public:
 template <class T>
 class Raster {
 private:
-	int m_cols, m_rows;			// Raster cols/rows
+	int m_cols, m_rows;		// Raster cols/rows
 	int m_bcols, m_brows;		// Block cols/rows -- not the number of cols/rows in a block
-	int m_curcol, m_currow;		// The current block column
+	int m_curcol, m_currow;	// The current block column
 	int m_bandn;				// The band number
-	int m_bw, m_bh;				// Block width/height in pixels
-	bool m_writable;			// True if the raster is writable
-	bool m_dirty;
-	T m_nodata;					// Nodata value.
-	T *m_block;					// Block storage
-	GDALDataset *m_ds;			// GDAL dataset
-	GDALRasterBand *m_band;		// GDAL band
-	double m_trans[6];			// Raster transform
-	bool m_inited = false;
+	int m_bw, m_bh;			// Block width/height in pixels
+	bool m_writable;					// True if the raster is writable
+	bool m_dirty;						// True if there is a modification that should be flushed.
+	T m_nodata;							// Nodata value.
+	T *m_block;							// Block storage
+	GDALDataset *m_ds;					// GDAL dataset
+	GDALRasterBand *m_band;				// GDAL band
+	double m_trans[6];					// Raster transform
+	bool m_inited = false;				// True if the instance is initialized.
+	GDALDataType m_type;				// GDALDataType -- limits the possible template types.
 
 	/**
 	 * Loads the block that contains the given row and column.
@@ -105,6 +248,33 @@ private:
 		}
 	}
 
+	GDALDataType getType(double v) {
+		return GDT_Float64;
+	}
+
+	GDALDataType getType(float v) {
+		return GDT_Float32;
+	}
+
+	GDALDataType getType(unsigned int v) {
+		return GDT_UInt32;
+	}
+	GDALDataType getType(int v) {
+		return GDT_Int32;
+	}
+
+	GDALDataType getType(unsigned short v) {
+		return GDT_UInt16;
+	}
+
+	GDALDataType getType(short v) {
+		return GDT_Int16;
+	}
+
+	GDALDataType getType(char v) {
+		return GDT_Byte;
+	}
+
 public:
 
 	/**
@@ -120,31 +290,36 @@ public:
 		m_ds = nullptr;
 		m_band = nullptr;
 		m_block = nullptr;
+		m_type = getType((T) 0);
 	}
 
 	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolution, double nodata, const char *proj = NULL) : Raster() {
+			double resolution, double nodata, std::string &proj) : Raster() {
 			init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
 	}
 
 	void init(std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolution, double nodata, const char *proj = NULL) {
-		GDALAllRegister();
+			double resolution, double nodata, std::string proj) {
+		if(minx >= maxx || miny >= maxy)
+			throw "Invalid boundaries.";
+		if(resolution <= 0.0)
+			throw "Invalid resolution.";
 		int width = (int) ((maxx - minx) / resolution) + 1;
 		int height = (int) ((maxy - miny) / resolution) + 1;
+		GDALAllRegister();
 		m_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(),
-				width, height, 1, GDT_Float32, NULL);
+				width, height, 1, m_type, NULL);
 		if(m_ds == nullptr)
 			throw "Failed to create file.";
 		// TODO: Proper type.
 		m_trans[0] = minx, m_trans[1] = resolution, m_trans[2] = 0.0,
 				m_trans[3] = maxy, m_trans[4] = 0.0, m_trans[5] = -resolution;
 		m_ds->SetGeoTransform(m_trans);
-		if(proj != NULL)
-			m_ds->SetProjection(proj);
+		if(!proj.empty())
+			m_ds->SetProjection(proj.c_str());
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
 		m_band = m_ds->GetRasterBand(1);
@@ -197,15 +372,16 @@ public:
 	 * comprise a block. Calling next on the block adjusts the indices
 	 * to correspond to the next block.
 	 */
-	std::unique_ptr<Block<T> > block() {
-		return std::unique_ptr<Block<T> >(new Block<T>(m_bcols, m_brows, m_bw, m_bh, m_cols, m_rows));
+	Block<T> block() {
+		return Block<T>(m_bcols, m_brows, m_bw, m_bh, m_cols, m_rows);
+		// https://en.wikipedia.org/wiki/Return_value_optimization
 	}
 
 	/**
 	 * Return the number of blocks in this raster.
 	 */
-	int numBlocks() {
-		return m_bcols * m_brows;
+	unsigned int numBlocks() {
+		return (unsigned int) m_bcols * m_brows;
 	}
 
 	/**
@@ -213,9 +389,8 @@ public:
 	 * Caller is responsible for correctly initializing the array,
 	 * and freeing it.
 	 */
-	void loadBlock(int col, int row, int cols, int rows, T *block) {
-		// TODO: Determine gdt type from T.
-		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block, cols, rows, GDT_Float32, 0, 0) != CE_None)
+	void loadBlock(int col, int row, int cols, int rows, Grid<T> &block) {
+		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
 			throw "Error reading block.";
 	}
 
@@ -375,6 +550,13 @@ public:
 	}
 
 	/**
+	 * The number of elements in the grid.
+	 */
+	unsigned long size() {
+		return (unsigned long) m_cols * m_rows;
+	}
+
+	/**
 	 * Returns true if the pixel is nodata.
 	 */
 	bool isNoData(int col, int row) {
@@ -436,7 +618,8 @@ public:
 	 */
 	T get(int col, int row) {
 		loadBlock(col, row);
-		T v = m_block[(row % m_bh) * m_bw + (col % m_bw)];
+		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
+		T v = m_block[idx];
 		return v;
 	}
 
@@ -446,7 +629,8 @@ public:
 	void set(int col, int row, T v) {
 		if(!m_writable) return;
 		loadBlock(col, row);
-		m_block[(row % m_bh) * m_bw + (col % m_bw)] = v;
+		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
+		m_block[idx] = v;
 		m_dirty = true;
 	}
 

@@ -40,6 +40,7 @@
 #include <liblas/liblas.hpp>
  
 #include "Util.hpp"
+#include "Raster.hpp"
 
 namespace las = liblas;
 namespace geom = geos::geom;

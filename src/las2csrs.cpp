@@ -13,6 +13,7 @@
 #include <cpl_conv.h> // for CPLMalloc()
 
 #include "Util.hpp"
+#include "Raster.hpp"
 
 #define PI 3.14159265358979323846
 #define LAS2CSRS_DATA "LAS2CSRS_DATA"

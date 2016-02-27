@@ -170,11 +170,11 @@ namespace interp {
 			std::vector<unsigned long> idx(num); 	// Point indices
 			std::vector<double> dist(num);			// Distance from query point.
 
-			std::unique_ptr<Block<float>> blk = out.block();
-			while(blk->next()) {
-				for(int r = blk->startRow(); r < blk->endRow(); ++r) {
+			Block<float> blk = out.block();
+			while(blk.next()) {
+				for(int r = blk.startRow(); r < blk.endRow(); ++r) {
 					std::cerr << "row " << r << std::endl;
-					for(int c = blk->startCol(); c < blk->endCol(); ++c) {
+					for(int c = blk.startCol(); c < blk.endCol(); ++c) {
 						const double query[2] = {out.toX(c), out.toY(r)};
 						index.knnSearch(query, num, &idx[0], &dist[0]);
 						double z = 0.0;

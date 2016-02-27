@@ -27,6 +27,7 @@
 #include <liblas/liblas.hpp>
 
 #include "Util.hpp"
+#include "Raster.hpp"
 
 #define TYPE_MIN 1
 #define TYPE_MAX 2
