@@ -102,6 +102,7 @@ void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, int co
  * overviews argument, if true, forces the construction of new overviews. If this is not
  * used, the existing overviews may obscure the fact that the image has changed (when zoomed out.)
  */
+ // TODO: Background must be larger than other files. Remedy this.
 void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, bool overviews) {
 	
 	if(distance <= 0.0)
