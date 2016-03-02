@@ -63,6 +63,51 @@ double _sq(double a) {
  * statistics for its polygon.
  */
 class Stat {
+
+private:
+	// A pointer to the geometry.
+	geom::Geometry *m_geom;
+	// A reference to the feature containing the geometry and attributes.
+	OGRFeature *m_feat;
+	// The list of point z values.
+	std::vector<double> m_values;
+	// Point class.
+	int m_ptClass;
+	// Cell ID (for rasters).
+	int m_cellId;
+
+	bool m_sorted;
+	double m_sum;
+	double m_min;
+	double m_max;
+	double m_mean;
+	double m_median;
+	double m_stddev;
+	double m_variance;
+	bool m_reset;
+
+	void reset() {
+		if(m_reset) {
+			m_sorted = false;
+			m_sum = nan("");
+			m_min = nan("");
+			m_max = nan("");
+			m_mean = nan("");
+			m_median = nan("");
+			m_stddev = nan("");
+			m_variance = nan("");
+			m_reset = false;
+		}
+	}
+
+	void init() {
+		m_feat = nullptr;
+		m_geom = nullptr;
+		m_ptClass = 0;
+		m_cellId = 0;
+		m_reset = true;
+		reset();
+	}
 public:
 
 	/**
@@ -71,9 +116,9 @@ public:
 	 */
 	Stat(int ptClass, geom::Geometry *geom, OGRFeature *feat) {
 		init();
-		_ptClass = ptClass;
-		_geom = geom->clone();
-		_feat = feat->Clone();
+		m_ptClass = ptClass;
+		m_geom = geom; //->clone();
+		m_feat = feat; //->Clone();
 	}
 
 	/**
@@ -82,44 +127,44 @@ public:
 	 */
 	Stat(int ptClass, int cellId) {
 		init();
-		_ptClass = ptClass;
-		_cellId = cellId;
+		m_ptClass = ptClass;
+		m_cellId = cellId;
 	}
 
 	static int numBands(int numQuantiles) {
 		return 8 + numQuantiles + 2; // plus 2 for the 0th and nth.
 	}
 
-	static void bandNames(std::string *names, int numQuantiles) {
+	static void bandNames(std::vector<std::string> &names, int numQuantiles) {
 		std::string n[8] = {"count", "sum", "min", "max", "mean", "median", "variance", "stddev"};
 		for(int i = 0; i < 8; ++i)
-			names[i] = n[i];
+			names.push_back(n[i]);
 		for(int i = 0; i < numQuantiles + 2; ++i)
-			names[i + 8] = "q" + std::to_string(i);
+			names.push_back("q" + std::to_string(i));
 	}
 
-	void bandValues(double *values, int numQuantiles) {
-		values[0] = this->count();
-		values[1] = this->sum();
-		values[2] = this->min();
-		values[3] = this->max();
-		values[4] = this->mean();
-		values[5] = this->median();
-		values[6] = this->variance();
-		values[7] = this->stddev();
+	void bandValues(std::vector<double> &values, int numQuantiles) {
+		values.push_back(this->count());
+		values.push_back(this->sum());
+		values.push_back(this->min());
+		values.push_back(this->max());
+		values.push_back(this->mean());
+		values.push_back(this->median());
+		values.push_back(this->variance());
+		values.push_back(this->stddev());
 		double q[numQuantiles];
 		quantiles(q, numQuantiles);
 		for(int i = 0; i < numQuantiles + 2; ++i)
-			values[i + 8] = q[i];
+			values.push_back(q[i]);
 	}
 
 	/**
 	 * Sorts the values.
 	 */
 	void sort() {
-		if(!_sorted) {
-			std::sort(values.begin(), values.end());
-			_sorted = true;
+		if(!m_sorted) {
+			std::sort(m_values.begin(), m_values.end());
+			m_sorted = true;
 		}
 	}
 
@@ -127,7 +172,7 @@ public:
 	 * Add a point value to the list.
 	 */
 	void add(double value) {
-		values.push_back(value);
+		m_values.push_back(value);
 		reset();
 	}
 
@@ -135,181 +180,133 @@ public:
 	 * Return the number of values.
 	 */
 	int count() {
-		return values.size();
+		return m_values.size();
 	}
 
 	double min() {
-		if(std::isnan(_min)) {
-			_reset = true;
-			if(count() == 0)
-				throw "No values to compute.";
+		if(std::isnan(m_min) && count() > 0) {
+			m_reset = true;
 			sort();
-			_min = values[0];
+			m_min = m_values[0];
 		}
-		return _min;
+		return m_min;
 	}
 
 	double max() {
-		if(std::isnan(_max)) {
-			_reset = true;
-			if(count() == 0)
-				throw "No values to compute.";
+		if(std::isnan(m_max) && count() > 0) {
+			m_reset = true;
 			sort();
-			_max = values[values.size() - 1];
+			m_max = m_values[m_values.size() - 1];
 		}
-		return _max;
+		return m_max;
 	}
 
 	/**
 	 * Return the sum of values.
 	 */
 	double sum() {
-		if(std::isnan(_sum)) {
-			_reset = true;
-			if(count() == 0)
-				throw "No values to compute.";
-			_sum = 0.0;
-			for(std::vector<double>::iterator it = values.begin(); it != values.end(); ++it)
-				_sum += (*it);
+		if(std::isnan(m_sum) && count() > 0) {
+			m_reset = true;
+			m_sum = 0.0;
+			for(auto it = m_values.begin(); it != m_values.end(); ++it)
+				m_sum += (*it);
 		}
-		return _sum;
+		return m_sum;
 	}
 
 	/**
 	 * Return the mean of values.
 	 */
 	double mean () {
-		if(std::isnan(_mean)) {
-			_reset = true;
-			_mean = sum() / count();
+		if(std::isnan(m_mean)) {
+			m_reset = true;
+			m_mean = sum() / count();
 		}
-		return _mean;
+		return m_mean;
 	}
 
 	/**
 	 * Return the median of values.
 	 */
 	double median() {
-		if(std::isnan(_median)) {
-			_reset = true;
-			int num;
-			if((num = count()) == 0)
-				throw "No values to compute.";
-			sort();
-			if(num % 2 == 0) {
-				_median = (values[num / 2] + values[num / 2 - 1]) / 2.0;
-			} else {
-				_median = values[num / 2];
+		int num;
+		if(std::isnan(m_median) && (num = count()) > 0) {
+			m_reset = true;
+			if(num > 0) {
+				sort();
+				if(num % 2 == 0) {
+					m_median = (m_values[num / 2] + m_values[num / 2 - 1]) / 2.0;
+				} else {
+					m_median = m_values[num / 2];
+				}
 			}
 		}
-		return _median;
+		return m_median;
 	}
 
 	/**
 	 * Return the variance of values.
 	 */
 	double variance() {
-		if(std::isnan(_variance)) {
-			_reset = true;
+		if(std::isnan(m_variance)) {
+			m_reset = true;
 			double m = mean();
 			double s = 0.0;
-			for(std::vector<double>::iterator it = values.begin(); it != values.end(); ++it)
+			for(auto it = m_values.begin(); it != m_values.end(); ++it)
 				s += _sq((*it) - m);
-			_variance = s / count();
+			m_variance = s / count();
 		}
-		return _variance;
+		return m_variance;
 	}
 
 	/**
 	 * Return the standard deviation of values.
 	 */
 	double stddev() {
-		if(std::isnan(_stddev)) {
-			_reset = true;
-			_stddev = sqrt(variance());
+		if(std::isnan(m_stddev)) {
+			m_reset = true;
+			m_stddev = sqrt(variance());
 		}
-		return _stddev;
+		return m_stddev;
 	}
 
 	/**
 	 * Return the given number of quantiles.
 	 * This populates the given array with n+1
 	 * values, so a 4-quantile has five values corresponding
-	 * to the lower and upper limits, and the tree
+	 * to the lower and upper limits, and the three
 	 * quartiles.
 	 */
 	void quantiles(double *q, int num) {
 		if(num < 1)
 			throw "Less than one quantile doesn't make sense.";
-		int cnt;
-		if((cnt = count()) == 0)
-			throw "No values to compute.";
-		_reset = true;
+		int cnt = count();
+		m_reset = true;
 		for(int i = 0; i < num + 2; ++i) {
-			int c = (int) ceil(((double) i / (num + 1)) * (cnt - 1));
-			q[i] = values[c];
+			if(cnt == 0) {
+				q[i] = nan("");
+			} else {
+				int c = (int) ceil(((double) i / (num + 1)) * (cnt - 1));
+				q[i] = m_values[c];
+			}
 		}
 	}
 
 	geom::Geometry *geom() {
-		return _geom;
+		return m_geom;
 	}
 
 	OGRFeature *feat() {
-		return _feat;
+		return m_feat;
 	}
 
 	~Stat() {
-		if(_geom != NULL)
-			delete _geom;
-		if(_feat != NULL)
-			OGRFeature::DestroyFeature(_feat);
+		//if(m_geom != nullptr)
+		//	delete m_geom;
+		//if(m_feat != nullptr)
+		//	OGRFeature::DestroyFeature(m_feat);
 	}
 
-private:
-	// A pointer to the geometry.
-	geom::Geometry *_geom;
-	// A reference to the feature containing the geometry and attributes.
-	OGRFeature *_feat;
-	// The list of point z values.
-	std::vector<double> values;
-	// Point class.
-	int _ptClass;
-	// Cell ID (for rasters).
-	int _cellId;
-
-	bool _sorted;
-	double _sum;
-	double _min;
-	double _max;
-	double _mean;
-	double _median;
-	double _stddev;
-	double _variance;
-	bool _reset;
-
-	void reset() {
-		if(_reset) {
-			_sorted = false;
-			_sum = nan("");
-			_min = nan("");
-			_max = nan("");
-			_mean = nan("");
-			_median = nan("");
-			_stddev = nan("");
-			_variance = nan("");
-			_reset = false;
-		}
-	}
-
-	void init() {
-		_feat = NULL;
-		_geom = NULL;
-		_ptClass = 0;
-		_cellId = 0;
-		_reset = true;
-		reset();
-	}
 
 };
 
@@ -320,17 +317,20 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 	const geom::GeometryFactory *gf = geom::GeometryFactory::getDefaultInstance();
 	const geom::CoordinateSequenceFactory *cf = gf->getCoordinateSequenceFactory();
 
-	OGRDataSource *srcDs, *dstDs;
 	OGRLayer *layer;
 	OGRFeature *feat;
 	OGRFeatureDefn *featDefn;
 	OGRwkbGeometryType type;
 	geom::Geometry *geom;
 	geom::Geometry *roi = NULL;
-	std::vector<Stat* > stats;
+	std::vector<Stat> stats;
+
+	std::cerr << "Opening " << shapefile << std::endl;
+
+ 	OGRRegisterAll();
 
 	// Load the shapefile and get the polygons from it.
-	srcDs = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
+	OGRDataSource *srcDs = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
 	if(srcDs == NULL)
 		throw "Couldn't open shapefile.";
 
@@ -362,7 +362,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 		}
 		// Add a new Stat object.
 		// TODO: Point classes for vectors. Setting to 0 for now.
-		stats.push_back(new Stat(0, geom, feat));
+		stats.push_back(Stat(0, geom, feat));
 	}
 
 	// If there are no geometries, just quit.
@@ -393,17 +393,18 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 
 		// If the boundary intersectes the region of interest..
 		if(roi->intersects(bounds)) {
+			std::cerr << "...file intersects." << std::endl;
 			while(r.ReadNextPoint()) {
 				las::Point pt = r.GetPoint();
 				// ... and this point has a class of interest.
-				if(!Util::inList(classes, pt.GetClassification().GetClass()))
+				if(classes.size() != 0 && !Util::inList(classes, pt.GetClassification().GetClass()))
 					continue;
 				const geom::Coordinate c(pt.GetX(), pt.GetY(), pt.GetZ());
 				geom::Point *p = gf->createPoint(c);
 				// Add it to each Stat whose polygon contains it.
 				for(unsigned int j = 0; j < stats.size(); ++j) {
-					if(stats[j]->geom()->contains(p)) {
-						stats[j]->add(c.z);
+					if(stats[j].geom()->contains(p)) {
+						stats[j].add(c.z);
 					}
 				}
 				delete p;
@@ -419,7 +420,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 	if(drv == NULL)
 		throw "Shapefile driver is not available.";
 
-	dstDs = drv->CreateDataSource(outfile.c_str(), NULL);
+	OGRDataSource *dstDs = drv->CreateDataSource(outfile.c_str(), NULL);
 	if(dstDs == NULL)
 		throw "Couldn't create shapefile.";
 
@@ -455,7 +456,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 		throw "Failed to create sum field.";
 
 	if(numQuantiles > 0) {
-		for(int qt = 0; qt <= numQuantiles; ++qt) {
+		for(int qt = 0; qt < numQuantiles + 2; ++qt) {
 			OGRFieldDefn fqt(("qt" + std::to_string(qt)).c_str(), OFTReal);
 			if(layer->CreateField(&fqt) != OGRERR_NONE)
 				throw "Failed to create quantile field.";
@@ -467,28 +468,28 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 	// Copy the stats and geometries to the new shapefile for
 	// each Stat.
 	OGRPolygon *poly;
-	for(std::vector<Stat*>::iterator it = stats.begin(); it != stats.end(); ++it) {
+	for(auto it = stats.begin(); it != stats.end(); ++it) {
 		feat = OGRFeature::CreateFeature(layer->GetLayerDefn());
 		// Set original fields first.
-		for(int i = 0; i < (*it)->feat()->GetFieldCount(); ++i)
-			feat->SetField(i, (*it)->feat()->GetRawFieldRef(i));
-		feat->SetField("stddev", (*it)->stddev());
-		feat->SetField("median", (*it)->median());
-		feat->SetField("sum", (*it)->sum());
-		feat->SetField("mean", (*it)->mean());
-		feat->SetField("count", (*it)->count());
+		for(int i = 0; i < it->feat()->GetFieldCount(); ++i)
+			feat->SetField(i, it->feat()->GetRawFieldRef(i));
+		feat->SetField("stddev", it->stddev());
+		feat->SetField("median", it->median());
+		feat->SetField("sum", it->sum());
+		feat->SetField("mean", it->mean());
+		feat->SetField("count", it->count());
 		if(numQuantiles > 0) {
-			(*it)->quantiles(quantiles, numQuantiles);
+			it->quantiles(quantiles, numQuantiles);
 			for(int qt = 0; qt < numQuantiles + 2; ++qt)
 				feat->SetField(("qt" + std::to_string(qt)).c_str(), quantiles[qt]);
 		}
-		poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) (*it)->geom());
+		poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) it->geom());
 		feat->SetGeometry(poly);
 		OGRErr err = layer->CreateFeature(feat);
 		if(0 != err)
 			throw "Failed to create feature.";
+		layer->SetFeature(feat);
 		OGRFeature::DestroyFeature(feat);
-		delete (*it);
 	}
 
 }
@@ -598,9 +599,9 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 	} else if(outType == RASTER) {
 
 		int numBands = Stat::numBands(numQuantiles);
-		std::string bandNames[numBands];
+		std::vector<std::string> bandNames(numBands);
 		Stat::bandNames(bandNames, numQuantiles);
-		double values[numBands];
+		std::vector<double> values(numBands);
 
 		int numRasterBands = numBands * classes.size();
 		GDALDriver *drv = GetGDALDriverManager()->GetDriverByName("GTiff");
@@ -612,7 +613,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 
 		Grid<float> fg(cols, rows);
 
-		for(std::map<int, std::map<int, Stat *> >::iterator it = stats.begin(); it != stats.end(); ++it) {
+		for(auto it = stats.begin(); it != stats.end(); ++it) {
 			for(unsigned int c = 0; c < classes.size(); ++c) {
 				int id = it->first;
 				int cls = classes[c];
