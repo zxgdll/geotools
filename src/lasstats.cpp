@@ -13,7 +13,7 @@
  *  Author: Rob Skelly rob@dijital.ca
  */
 
-#include <cstdio>
+//#include <cstdio>
 #include <iostream>
 #include <fstream>
 #include <list>
@@ -117,8 +117,8 @@ public:
 	Stat(int ptClass, geom::Geometry *geom, OGRFeature *feat) {
 		init();
 		m_ptClass = ptClass;
-		m_geom = geom; //->clone();
-		m_feat = feat; //->Clone();
+		m_geom = geom;
+		m_feat = feat;
 	}
 
 	/**
@@ -152,7 +152,7 @@ public:
 		values.push_back(this->median());
 		values.push_back(this->variance());
 		values.push_back(this->stddev());
-		double q[numQuantiles];
+		std::vector<double> q(numQuantiles);
 		quantiles(q, numQuantiles);
 		for(int i = 0; i < numQuantiles + 2; ++i)
 			values.push_back(q[i]);
@@ -277,7 +277,7 @@ public:
 	 * to the lower and upper limits, and the three
 	 * quartiles.
 	 */
-	void quantiles(double *q, int num) {
+	void quantiles(std::vector<double> &q, int num) {
 		if(num < 1)
 			throw "Less than one quantile doesn't make sense.";
 		int cnt = count();
@@ -301,10 +301,6 @@ public:
 	}
 
 	~Stat() {
-		//if(m_geom != nullptr)
-		//	delete m_geom;
-		//if(m_feat != nullptr)
-		//	OGRFeature::DestroyFeature(m_feat);
 	}
 
 
@@ -402,10 +398,9 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 				const geom::Coordinate c(pt.GetX(), pt.GetY(), pt.GetZ());
 				geom::Point *p = gf->createPoint(c);
 				// Add it to each Stat whose polygon contains it.
-				for(unsigned int j = 0; j < stats.size(); ++j) {
-					if(stats[j].geom()->contains(p)) {
-						stats[j].add(c.z);
-					}
+				for(auto stat = stats.begin(); stat != stats.end(); ++stat) {
+					if(stat->geom()->contains(p))
+						stat->add(c.z);
 				}
 				delete p;
 			}
@@ -463,27 +458,27 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 		}
 	}
 
-	double quantiles[numQuantiles > 0 ? numQuantiles + 2 : 0];
+	std::vector<double> quantiles(numQuantiles > 0 ? numQuantiles + 2 : 0);
 
 	// Copy the stats and geometries to the new shapefile for
 	// each Stat.
 	OGRPolygon *poly;
-	for(auto it = stats.begin(); it != stats.end(); ++it) {
+	for(auto stat = stats.begin(); stat != stats.end(); ++stat) {
 		feat = OGRFeature::CreateFeature(layer->GetLayerDefn());
 		// Set original fields first.
-		for(int i = 0; i < it->feat()->GetFieldCount(); ++i)
-			feat->SetField(i, it->feat()->GetRawFieldRef(i));
-		feat->SetField("stddev", it->stddev());
-		feat->SetField("median", it->median());
-		feat->SetField("sum", it->sum());
-		feat->SetField("mean", it->mean());
-		feat->SetField("count", it->count());
+		for(int i = 0; i < stat->feat()->GetFieldCount(); ++i)
+			feat->SetField(i, stat->feat()->GetRawFieldRef(i));
+		feat->SetField("stddev", stat->stddev());
+		feat->SetField("median", stat->median());
+		feat->SetField("sum", stat->sum());
+		feat->SetField("mean", stat->mean());
+		feat->SetField("count", stat->count());
 		if(numQuantiles > 0) {
-			it->quantiles(quantiles, numQuantiles);
+			stat->quantiles(quantiles, numQuantiles);
 			for(int qt = 0; qt < numQuantiles + 2; ++qt)
 				feat->SetField(("qt" + std::to_string(qt)).c_str(), quantiles[qt]);
 		}
-		poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) it->geom());
+		poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) stat->geom());
 		feat->SetGeometry(poly);
 		OGRErr err = layer->CreateFeature(feat);
 		if(0 != err)
@@ -574,11 +569,11 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 		out << head.str();
 		out << std::setprecision(9);
 
-		double quantiles[numQuantiles > 0 ? numQuantiles + 2 : 0];
+		std::vector<double> quantiles(numQuantiles > 0 ? numQuantiles + 2 : 0);
 
-		for(std::map<int, std::map<int, Stat*> >::iterator it = stats.begin(); it != stats.end(); ++it) {
+		for(auto stat = stats.begin(); stat != stats.end(); ++stat) {
 			for(unsigned int c = 0; c < classes.size(); ++c) {
-				int id = it->first;
+				int id = stat->first;
 				int cls = classes[c];
 				Stat *st = stats[id][cls];
 				out << id << "," << cls << "," << st->count() << "," << st->sum() << ","
