@@ -18,22 +18,15 @@
 #include "Raster.hpp"
 
 #define PI 3.14159265358979323846
-
-float _min(float a, float b) {
-	return a > b ? b : a;
-}
-
-float _max(float a, float b) {
-	return a < b ? b : a;
-}
+#define _min(a, b) (a > b ? b : a)
+#define _max(a, b) (a < b ? b : a)
 
 /**
  * Returns a value between 0 and 1 following the tan curve.
  * The range of step is expected to be 0 -> steps and is clamped.
  */
 float _tanCurve(float step, float steps) {
-	if(step <= 0.0) return 0.0;
-	if(step >= steps) return 1.0;
+	step = _min(steps, _max(0.0, step));
 	return tanh(((step - steps / 2.0) / (steps / 2.0)) * PI) * 0.5 + 0.5;
 }
 
@@ -60,7 +53,7 @@ void feather(Grid<float> &srcGrid, Grid<float> &dstGrid, int cols, int rows, flo
 	// Fill grid is used to keep track of where the edges are as they're "snowed in"
 	// Starts out as a mask of non-nodata pixels from the source.
 	Grid<char> fillGrid(cols, rows);
-	for(int i = 0; i < rows * cols; ++i)
+	for(unsigned long i = 0; i < (unsigned long) rows * cols; ++i)
 		fillGrid[i] = srcGrid[i] == nodata ? 0 : 1;
 	// The number of steps is just the number of pixels needed to 
 	// cover the distance of the fade.
