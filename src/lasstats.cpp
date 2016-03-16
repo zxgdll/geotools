@@ -307,18 +307,11 @@ public:
 };
 
 void doVector(std::string &shapefile, std::string &outfile, std::string &layername,
-		std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType) {
+		std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType, int scanAngle) {
 
 	const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
 	const geom::GeometryFactory *gf = geom::GeometryFactory::getDefaultInstance();
 	const geom::CoordinateSequenceFactory *cf = gf->getCoordinateSequenceFactory();
-
-	OGRLayer *layer;
-	OGRFeature *feat;
-	OGRFeatureDefn *featDefn;
-	OGRwkbGeometryType type;
-	geom::Geometry *geom;
-	geom::Geometry *roi = NULL;
 	std::vector<Stat> stats;
 
 	std::cerr << "Opening " << shapefile << std::endl;
@@ -327,31 +320,33 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 
 	// Load the shapefile and get the polygons from it.
 	OGRDataSource *srcDs = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
-	if(srcDs == NULL)
+	if(srcDs == nullptr)
 		throw "Couldn't open shapefile.";
 
+	OGRLayer *layer;
 	if(layername.empty()) {
 		layer = srcDs->GetLayer(0);
 	} else {
 		layer = srcDs->GetLayerByName(layername.c_str());
 	}
-	if(layer == NULL)
+	if(layer == nullptr)
 		throw "Couldn't get layer.";
 
-	type = layer->GetGeomType();
+	OGRwkbGeometryType type = layer->GetGeomType();
 	if(type != wkbPolygon)
 		throw "Geometry must be polygon.";
-
-	featDefn = layer->GetLayerDefn();
 
 	// For each polygon, create a Stat instance.
 	// Also create a unified geometry representing the bounds of
 	// all polygons.
-	while((feat = layer->GetNextFeature()) != NULL) {
+	OGRFeatureDefn *featDefn = layer->GetLayerDefn();
+	OGRFeature *feat = nullptr;
+	geom::Geometry *roi = nullptr;
+	while((feat = layer->GetNextFeature()) != nullptr) {
 		// Export the geometry for querying.
-		geom = (geom::Geometry *) feat->GetGeometryRef()->exportToGEOS(gctx);
+		geom::Geometry *geom = (geom::Geometry *) feat->GetGeometryRef()->exportToGEOS(gctx);
 		// Create a unioned geom to filter las files.
-		if(roi == NULL) {
+		if(roi == nullptr) {
 			roi = geom;
 		} else {
 			roi = roi->Union(geom);
@@ -385,7 +380,7 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 		coords.push_back(geom::Coordinate(h.GetMinX(), h.GetMinY()));
 		geom::CoordinateSequence *cs = cf->create(&coords);
 		geom::LinearRing *lr = gf->createLinearRing(cs);
-		geom::Polygon *bounds = gf->createPolygon(lr, NULL);
+		geom::Polygon *bounds = gf->createPolygon(lr, nullptr);
 
 		// If the boundary intersectes the region of interest..
 		if(roi->intersects(bounds)) {
@@ -393,7 +388,10 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 			while(r.ReadNextPoint()) {
 				las::Point pt = r.GetPoint();
 				// ... and this point has a class of interest.
-				if(classes.size() != 0 && !Util::inList(classes, pt.GetClassification().GetClass()))
+				if(!Util::inList(classes, pt.GetClassification().GetClass()))
+					continue;
+				int sar = pt.GetScanAngleRank();
+				if(sar < -scanAngle || sar > scanAngle)
 					continue;
 				const geom::Coordinate c(pt.GetX(), pt.GetY(), pt.GetZ());
 				geom::Point *p = gf->createPoint(c);
@@ -412,15 +410,15 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 	std::cerr << "Updating shapefile." << std::endl;
 	OGRRegisterAll();
 	OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName("ESRI Shapefile");
-	if(drv == NULL)
+	if(drv == nullptr)
 		throw "Shapefile driver is not available.";
 
-	OGRDataSource *dstDs = drv->CreateDataSource(outfile.c_str(), NULL);
-	if(dstDs == NULL)
+	OGRDataSource *dstDs = drv->CreateDataSource(outfile.c_str(), nullptr);
+	if(dstDs == nullptr)
 		throw "Couldn't create shapefile.";
 
-	layer = dstDs->CreateLayer("stats", NULL, wkbPolygon, NULL);
-	if(layer == NULL)
+	layer = dstDs->CreateLayer("stats", nullptr, wkbPolygon, nullptr);
+	if(layer == nullptr)
 		throw "Couldn't create layer.";
 
 	// Copy the field definitions from the original layer.
@@ -462,7 +460,6 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 
 	// Copy the stats and geometries to the new shapefile for
 	// each Stat.
-	OGRPolygon *poly;
 	for(auto stat = stats.begin(); stat != stats.end(); ++stat) {
 		feat = OGRFeature::CreateFeature(layer->GetLayerDefn());
 		// Set original fields first.
@@ -478,26 +475,25 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 			for(int qt = 0; qt < numQuantiles + 2; ++qt)
 				feat->SetField(("qt" + std::to_string(qt)).c_str(), quantiles[qt]);
 		}
-		poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) stat->geom());
+		OGRPolygon *poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) stat->geom());
 		feat->SetGeometry(poly);
-		OGRErr err = layer->CreateFeature(feat);
-		if(0 != err)
+		if(layer->CreateFeature(feat) != OGRERR_NONE)
 			throw "Failed to create feature.";
-		layer->SetFeature(feat);
 		OGRFeature::DestroyFeature(feat);
 	}
 
+	OGRDataSource::DestroyDataSource(dstDs);
 }
 
 void doRaster(std::string &raster, std::string &outfile, int band,
-		std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType) {
+		std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType, int scanAngle) {
 
 	GDALDataset *ds = (GDALDataset *) GDALOpen(raster.c_str(), GA_ReadOnly);
-	if(ds == NULL)
+	if(ds == nullptr)
 		throw "Failed to open raster.";
 
 	GDALRasterBand *b = ds->GetRasterBand(band);
-	if(b == NULL)
+	if(b == nullptr)
 		throw "Failed to load band.";
 
 	int cols = ds->GetRasterXSize();
@@ -535,6 +531,9 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 
 			if(!Util::inList(classes, (cls = pt.GetClassification().GetClass())))
 				continue;
+			int sar = pt.GetScanAngleRank();
+			if(sar < -scanAngle || sar > scanAngle)
+				continue;
 
 			double x = pt.GetX();
 			double y = pt.GetY();
@@ -548,7 +547,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 			int val = (int) dg(c, r);
 
 			Stat *st = stats[val][cls];
-			if(st == NULL)
+			if(st == nullptr)
 				st = stats[val][cls] = new Stat(val, cls);
 			st->add(z);
 		}
@@ -600,8 +599,8 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 
 		int numRasterBands = numBands * classes.size();
 		GDALDriver *drv = GetGDALDriverManager()->GetDriverByName("GTiff");
-		GDALDataset *dst = drv->Create(outfile.c_str(), cols, rows, numRasterBands, GDT_Float32, NULL);
-		GDALRasterBand *band = NULL;
+		GDALDataset *dst = drv->Create(outfile.c_str(), cols, rows, numRasterBands, GDT_Float32, nullptr);
+		GDALRasterBand *band = nullptr;
 
 		dst->SetGeoTransform(trans);
 		dst->SetProjection(proj);
@@ -616,7 +615,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 				st->bandValues(values, numQuantiles);
 				for(int b = 0; b < numBands; ++b) {
 					band = dst->GetRasterBand((c * numBands) + (b + 1));
-					if(band == NULL)
+					if(band == nullptr)
 						throw "Failed to retrieve raster band.";
 					if(0 != band->RasterIO(GF_Read, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0))
 						throw "Failed to read band raster.";
@@ -647,6 +646,7 @@ void usage() {
 	std::cerr << "    classes are computed. Stats for all classes are computed" << std::endl;
 	std::cerr << "    separately in either case." << std::endl;
 	std::cerr << " -q If specified, is the number of quantiles to compute. Default 4." << std::endl;
+	std::cerr << " -a If specified, is the maximum scan angle. Default is all, nadir is 0." << std::endl;
 }
 
 int main(int argc, char ** argv) {
@@ -660,6 +660,7 @@ int main(int argc, char ** argv) {
 	int band = 1;
 	int numQuantiles = 4;
 	std::set<int> classSet;
+	int scanAngle = 180;
 
 	for(int i=1;i<argc;++i) {
 		std::string arg(argv[i]);
@@ -672,6 +673,8 @@ int main(int argc, char ** argv) {
 			Util::intSplit(classSet, argv[++i]);
 		} else if(arg == "-l") {
 			layername.assign(argv[++i]);
+		} else if(arg == "-a") {
+			scanAngle = atoi(argv[++i]);
 		} else if(arg == "-r") {
 			infile.assign(argv[++i]);
 			if(inType != 0)
@@ -723,7 +726,9 @@ int main(int argc, char ** argv) {
 	}
 
 	if(classes.size() == 0) {
-		std::cerr << "WARNING! No classes specified. Matching all classes!" << std::endl;
+		std::cerr << "No classes specified." << std::endl;
+		usage();
+		return 1;
 	}
 
 	if(band < 1) {
@@ -746,9 +751,9 @@ int main(int argc, char ** argv) {
 	int ret = 1;
 	try {
 		if(inType == RASTER) {
-			doRaster(infile, outfile, band, files, classes, numQuantiles, outType);
+			doRaster(infile, outfile, band, files, classes, numQuantiles, outType, scanAngle);
 		} else {
-			doVector(infile, outfile, layername, files, classes, numQuantiles, outType);
+			doVector(infile, outfile, layername, files, classes, numQuantiles, outType, scanAngle);
 		}
 		ret = 0;
 	} catch(const char *e) {
