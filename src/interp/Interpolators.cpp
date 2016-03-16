@@ -1,6 +1,8 @@
 #include <iostream>
 #include <cmath>
 
+#include <omp.h> 
+
 #ifdef WITH_CGAL
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
 #include <CGAL/Delaunay_triangulation_2.h>
@@ -142,7 +144,6 @@ namespace interp {
 
 			};
 
-
 		}
 
 		/**
@@ -170,26 +171,68 @@ namespace interp {
 			std::vector<unsigned long> idx(num); 	// Point indices
 			std::vector<double> dist(num);			// Distance from query point.
 
+			// Get the block to navigate the raster's internal block structure.
 			Block<float> blk = out.block();
-			while(blk.next()) {
-				for(int r = blk.startRow(); r < blk.endRow(); ++r) {
-					std::cerr << "row " << r << std::endl;
-					for(int c = blk.startCol(); c < blk.endCol(); ++c) {
-						const double query[2] = {out.toX(c), out.toY(r)};
-						index.knnSearch(query, num, &idx[0], &dist[0]);
-						double z = 0.0;
-						double t = 0.0;
-						//for(auto it = samples.begin(); it != samples.end(); ++it) {
-						for(int i = 0; i < num; ++i) {
-							InterpPoint pt = pc.pts[idx[i]];
-							double d = pow(dist[i], m_exponent);
-							z += pt.z / d;
-							t += 1 / d;
+
+			#pragma omp parallel
+			{
+
+			// Use a block instance for writing output in a thread-safe way.
+			Grid<float> grid;
+			int sr, sc, rows, cols;
+
+			while(true) {
+
+				bool run = true;
+				#pragma omp critical
+				{
+					// Try to advance the block. If it fails, quit the loop.
+					// Otherwise, get the limits.
+					run = blk.next();
+				} // omp
+
+				if(run) {
+					sr = blk.startRow(), sc = blk.startCol();
+					rows = blk.rows(), cols = blk.cols();
+					grid.init(cols, rows);
+
+					// Iterate over the cells in the 
+					for(int r = 0; r < rows; ++r) {
+						std::cerr << "row " << (r + sr) << std::endl;
+						for(int c = 0; c < cols; ++c) {
+							// Create a query point.
+							const double query[2] = {out.toX(c + sc), out.toY(r + sr)};
+							// Find the results in the knn tree.
+							index.knnSearch(query, num, &idx[0], &dist[0]);
+							double z = 0.0;
+							double t = 0.0;
+							for(int i = 0; i < num; ++i) {
+								InterpPoint pt = pc.pts[idx[i]];
+								double d = pow(dist[i], m_exponent);
+								if(d <= std::numeric_limits<float>::lowest()) {
+									// If distance is close to zero, use the value of the
+									// nearest point.
+									z = pt.z;
+									t = 1;
+									break;
+								} else {
+									z += pt.z / d;
+									t += 1 / d;
+								}
+							}
+							grid(c - sc, r - sr) = z / t;
 						}
-						out.set(c, r, z / t);
 					}
+			
+					#pragma omp critical
+					{
+						out.set(sc, sr, grid);
+					} // omp
+
 				}
 			}
+
+			} // omp
 		}
 
 	} // idw
