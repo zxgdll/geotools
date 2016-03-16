@@ -8,8 +8,12 @@
 #ifndef INCLUDE_RASTER_HPP_
 #define INCLUDE_RASTER_HPP_
 
+#include "geotools.h"
+
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
+
+#define _min(a, b) (a < b ? a : b)
 
 /**
  * A convenience class for managing a grid of values.
@@ -185,6 +189,12 @@ public:
 	void reset() {
 		m_col = m_row = 0;
 	}
+	int rows() {
+		return endRow() - startRow();
+	}
+	int cols() {
+		return endCol() - startCol();
+	}
 	int startCol() {
 		return m_col * m_bw;
 	}
@@ -294,6 +304,15 @@ public:
 	}
 
 	/**
+	 * Create a new raster for writing with a template.
+	 */
+	Raster(std::string &filename, Raster<T> &tpl) : Raster() {
+		std::string proj;
+		tpl.projection(proj);
+		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolution(), tpl.nodata(), proj);
+	}
+
+	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
@@ -389,11 +408,38 @@ public:
 	 * Caller is responsible for correctly initializing the array,
 	 * and freeing it.
 	 */
-	void loadBlock(int col, int row, int cols, int rows, Grid<T> &block) {
+	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
 			throw "Error reading block.";
 	}
 
+	/** Deprecated. */
+	DEPRECATED void loadBlock(int col, int row, int cols, int rows, Grid<T> &block) {
+		readBlock(col, row, cols, rows, block);
+	}
+
+	/**
+	 * Write a part of the given block to the raster.
+	 */
+	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
+		if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
+			throw "Error writing block.";
+	}
+
+	/**
+	 * Write the full block to the raster.
+	 */
+	void writeBlock(Grid<T> &block) {
+		writeBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+	}
+	
+	/**
+	 * Read the full block from the raster.
+	 */
+	void readBlock(Grid<T> &block) {
+		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+	}
+	
 	/**
 	 * Return the resolution. If the x and y resolution are different,
 	 * use resolutionX and resolutionY.
@@ -621,6 +667,17 @@ public:
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
 		T v = m_block[idx];
 		return v;
+	}
+
+	/**
+	 * Write the Grid into the raster with col and row as the
+	 * top left corner.
+	 */
+	DEPRECATED void set(int col, int row, Grid<T> &grid) {
+		for(int r = row; r < grid.rows() + row; ++r) {
+			for(int c = col; c < grid.cols() + col; ++c)
+				set(c, r, grid(c - col, r - row));
+		}
 	}
 
 	/**
