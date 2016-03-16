@@ -31,7 +31,8 @@ float _tanCurve(float step, float steps) {
 }
 
 /**
- * Returns true if the given pixel is next to a nodata pixel, or the edge of the grid.
+ * Returns true if the given pixel is next to a nodata pixel (but not if
+ * it is one), or the edge of the grid.
  */
 bool isEdgePixel(Grid<char> &fillGrid, int col, int row, int cols, int rows) {
 	if(fillGrid(col, row) == 0)
@@ -47,7 +48,7 @@ bool isEdgePixel(Grid<char> &fillGrid, int col, int row, int cols, int rows) {
 
 /**
  * Feathers the edges of data regions in a raster grid by setting the alpha
- * value for a pixel in proportion to its distance from the nearest null.
+ * value for a pixel in proportion to its distance from the nearest null or edge.
  */
 void feather(Grid<float> &srcGrid, Grid<float> &dstGrid, int cols, int rows, float distance, float nodata, float resolution) {
 	// Fill grid is used to keep track of where the edges are as they're "snowed in"
@@ -83,7 +84,7 @@ void feather(Grid<float> &srcGrid, Grid<float> &dstGrid, int cols, int rows, flo
  * Blends two rasters together using the alpha grid for blending.
  */
 void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, int cols, int rows, float imNodata, float bgNodata) {
-	for(int i = 0; i < cols * rows; ++i) {
+	for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 		if(!(bgGrid[i] == bgNodata || imgGrid[i] == imNodata))
 			bgGrid[i] = bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i];
 	}
@@ -173,6 +174,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			int bufRow0 = bufRow;
 			int rowHeight0 = rowHeight;
 			int rowOffset0 = rowOffset;
+			
 			if(bufRow0 < 0) {
 				bufRow0 = 0;
 				addrOffset = rowOffset * cols;
