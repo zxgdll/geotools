@@ -23,27 +23,20 @@
 #include "interp/NaturalNeighbourInterpolator.hpp"
 #include "interp/SimpleKrigingInterpolator.hpp"
 
-//#include "ShapeWriter.hpp"
-
-//ShapeWriter sw("/home/rob/Documents/geotools/data/out.shp");
-
-double _min(double a, double b) {
-	return a > b ? b : a;
-}
-
-double _max(double a, double b) {
-	return a < b ? b : a;
-}
+#define _min(a, b) (a > b ? b : a);
+#define _max(a, b) (a < b ? b : a);
 
 double _random() {
-	double r = ((double) std::rand()) / RAND_MAX;
-	return r;
+	return ((double) std::rand()) / RAND_MAX;
 }
 
 double _sq(double a) {
-	return a*a;
+	return a * a;
 }
 
+/**
+ * Load the samples from a csv file. The file must have x, y and z headers.
+ */
 void loadSamples(std::string &datafile, std::list<interp::InterpPoint> &samples) {
 	io::CSVReader<3> in(datafile.c_str());
 	in.read_header(io::ignore_extra_column, "x", "y", "z");
@@ -52,6 +45,11 @@ void loadSamples(std::string &datafile, std::list<interp::InterpPoint> &samples)
 		samples.push_back(interp::InterpPoint(x, y, z));
 }
 
+/**
+ * Interpolate points from the data file into outfile, using templatefile as
+ * the template. The parameterized interpolator performs the interpolation. The
+ * resolution overrides the template's resolution.
+ */
 void interpolate(std::string &datafile, std::string &templatefile, std::string &outfile,
 		interp::Interpolator &inter,
 		double resolution, bool print) {
@@ -67,10 +65,9 @@ void interpolate(std::string &datafile, std::string &templatefile, std::string &
 	std::string proj;
 	tpl.projection(proj);
 	Raster<float> out(outfile, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(),
-			resolution, tpl.nodata(), proj.c_str());
+			resolution, tpl.nodata(), proj);
 
 	std::list<interp::InterpPoint> samples;
-
 	loadSamples(datafile, samples);
 
 	if(samples.size() == 0)
