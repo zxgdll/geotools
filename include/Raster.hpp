@@ -13,8 +13,6 @@
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
 
-#define _min(a, b) (a < b ? a : b)
-
 /**
  * A convenience class for managing a grid of values.
  * Handles allocation and deallocation of memory.
