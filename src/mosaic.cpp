@@ -17,10 +17,6 @@
 #include "Util.hpp"
 #include "Raster.hpp"
 
-#define PI 3.14159265358979323846
-#define _min(a, b) (a > b ? b : a)
-#define _max(a, b) (a < b ? b : a)
-
 /**
  * Returns a value between 0 and 1 following the tan curve.
  * The range of step is expected to be 0 -> steps and is clamped.
