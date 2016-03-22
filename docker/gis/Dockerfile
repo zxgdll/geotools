@@ -1,3 +1,20 @@
+# This script prepares a debian instance for use as a GIS box.
+# Software installed:
+# - libtiff
+# - libgeotiff
+# - proj.4
+# - libgeos
+# - postgresql
+# - postgis
+# - [pgpointcloud]
+# - gdal
+# - pdal
+# - liblas
+# - [maybe others]
+
+# The default postgres user is postgres. DB-related files are owned by that user.
+
+# Use the latest debian image.
 FROM debian:latest
 
 # Choose a directory to install to, or just use the default
@@ -18,6 +35,10 @@ RUN apt-get install -y libpython2.7-dev python-dev
 RUN apt-get install -y libjson0-dev libxml2-dev libxml2-utils xsltproc docbook-xsl docbook-mathml
 RUN apt-get install -y libreadline-dev bison flex
 RUN apt-get install -y zlib1g-dev
+RUN apt-get install -y libcunit1-dev
+RUN apt-get install chkconfig
+RUN apt-get install -y libboost-dev
+RUN apt-get install -y libboost-program-options1.55-dev libboost-thread1.55-dev libboost-system1.55-dev libboost-iostreams1.55-dev libboost-filesystem1.55-dev
 
 # Make a directory to work from and go there.
 RUN mkdir -p /var/buildgis
@@ -55,12 +76,6 @@ RUN make
 RUN make install
 WORKDIR ../..
 
-# Install the GSC geoid models into proj.4's share directory.
-RUN wget http://dijital.ca/files/can_grids.tar.gz
-RUN tar -xzf can_grids.tar.gz
-RUN rm can_grids.tar.gz
-RUN cp can_grids/* ${install_dir}/share/proj
-
 # Install libgeos
 RUN git clone https://github.com/libgeos/libgeos.git
 RUN mkdir -p libgeos/makefiles
@@ -76,6 +91,7 @@ WORKDIR postgres
 RUN ./configure --prefix=${install_dir}
 RUN make
 RUN make install
+RUN echo "${install_dir}/pgsql/lib" >> /etc/ld.so.conf.d/gis.conf
 RUN ldconfig
 WORKDIR ..
 
@@ -87,12 +103,7 @@ WORKDIR gdal
 RUN ./configure --prefix=${install_dir} --with-python --with-geos=${install_dir}/bin/geos-config --with-pg=${install_dir}/bin/pg_config --with-geotiff=${install_dir}
 RUN make
 RUN make install
-RUN ldconfig
 WORKDIR ../..
-
-# Install vertcs override with Canadian GEOID references in gdal share.
-RUN wget http://dijital.ca/files/vertcs.override.csv
-RUN cp vertcs.override.csv ${install_dir}/share/gdal
 
 # Install PostGIS
 RUN git clone https://github.com/postgis/postgis.git
@@ -102,6 +113,55 @@ RUN ./configure --with-gdalconfig=${install_dir}/bin/gdal-config --with-projdir=
 RUN make
 RUN make install
 RUN make comments-install
-RUN ldconfig
 WORKDIR ..
+
+# Install PGPointCloud
+# Commented out for "atomics.h" [etc] cannot be included from front end code
+#RUN git clone https://github.com/pgpointcloud/pointcloud.git
+#RUN mkdir -p pointcloud/makefiles
+#WORKDIR pointcloud/makefiles
+#RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
+#RUN make
+#RUN make install
+#WORKDIR ../..
+
+# Install liblas
+RUN git clone https://github.com/libLAS/libLAS.git
+RUN mkdir -p libLAS/makefiles
+WORKDIR libLAS/makefiles
+RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
+RUN make
+RUN make install
+WORKDIR ../..
+
+
+# Install PDAL
+RUN git clone https://github.com/PDAL/PDAL.git
+RUN mkdir -p PDAL/makefiles
+WORKDIR PDAL/makefiles
+RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
+RUN make
+RUN make install
+WORKDIR ../..
+
+# Install the GSC geoid models into proj.4's share directory.
+RUN wget http://dijital.ca/files/can_grids.tar.gz
+RUN tar -xzf can_grids.tar.gz
+RUN rm can_grids.tar.gz
+RUN cp can_grids/* ${install_dir}/share/proj
+
+# Install vertcs override with Canadian GEOID references in gdal share.
+RUN wget http://dijital.ca/files/vertcs.override.csv
+RUN cp vertcs.override.csv ${install_dir}/share/gdal
+
+# Install PostgreSQL start script. Replace the bin path in the script.
+RUN groupadd postgres
+RUN useradd -g postgres postgres
+RUN cp postgres/contrib/start-scripts/linux /etc/init.d/postgres
+RUN sed -i '/^prefix=.*/c\prefix=/usr/local' /etc/init.d/postgres
+RUN chmod +x /etc/init.d/postgres
+RUN chkconfig --add postgres
+RUN mkdir -p /usr/local/pgsql/data
+RUN chown -R postgres:postgres /usr/local/pgsql
+RUN su -c "initdb -D /usr/local/pgsql/data" - postgres
 
