@@ -13,6 +13,7 @@
 
 #include "csv.h"
 
+#include "geotools.h"
 #include "Util.hpp"
 #include "Raster.hpp"
 #include "interp/InterpPoint.hpp"
@@ -23,15 +24,8 @@
 #include "interp/NaturalNeighbourInterpolator.hpp"
 #include "interp/SimpleKrigingInterpolator.hpp"
 
-#define _min(a, b) (a > b ? b : a);
-#define _max(a, b) (a < b ? b : a);
-
 double _random() {
 	return ((double) std::rand()) / RAND_MAX;
-}
-
-double _sq(double a) {
-	return a * a;
 }
 
 /**
@@ -73,9 +67,15 @@ void interpolate(std::string &datafile, std::string &templatefile, std::string &
 	if(samples.size() == 0)
 		throw "No samples loaded.";
 
+	// for(auto it = samples.begin(); it != samples.end(); ++it)
+	//	std::cerr << "sample " << it->x << ", " << it->y << std::endl;
+
 	std::cerr << "Interpolating..." << std::endl;
 	inter.interpolate(out, samples);
 
+	if(print) {
+		std::cerr << "You asked for it." << std::endl;
+	}
 }
 void usage() {
 	std::cerr << "Usage: interp [options]" << std::endl
@@ -85,12 +85,14 @@ void usage() {
 			<< "                         avg - shift vertically by the average difference. " << std::endl
 			<< "                         idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
 			<< "                         sk  - Simple Kriging." << std::endl
+			<< "                         lo  - LOESS Smoothing." << std::endl
 			<< " -r  -- resolution      The pixel size of the output." << std::endl
 			<< " -i  -- template file   A template file to produce the output file." << std::endl
 			<< " -o  -- output file     The output file." << std::endl
 			<< " -d  -- data file       A CSV file with data." << std::endl
 			<< " -ie -- idw exponent    The IDW decay value." << std::endl
-			<< " -ip -- idw neighbours  Number of neighbours to consider. Leave out to consider all." << std::endl;
+			<< " -ip -- idw neighbours  Number of neighbours to consider. Leave out to consider all." << std::endl
+			<< " -an -- avg neighbours  Number of neighbours for averaging. Default all." << std::endl;
 }
 
 int main(int argc, char **argv) {
@@ -105,6 +107,7 @@ int main(int argc, char **argv) {
  		bool print = false;
  		double idwExp = 1.0;
  		int idwNeigh = 0;
+ 		unsigned int avgNeigh = 0;
 
  		for(int i = 0; i < argc; ++i) {
  			std::string p(argv[i]);
@@ -124,6 +127,8 @@ int main(int argc, char **argv) {
  				idwNeigh = atoi(argv[++i]);
  			} else if(p == "-d") {
  				datafile = argv[++i];
+ 			} else if(p == "-an") {
+ 				avgNeigh = atoi(argv[++i]);
  			}
  		}
 
@@ -145,12 +150,11 @@ int main(int argc, char **argv) {
  		} else if(type == "pl") {
  			inter = new interp::planar::PlanarInterpolator();
  		} else if(type == "avg") {
- 			inter = new interp::avg::AvgInterpolator();
+ 			inter = new interp::avg::AvgInterpolator(avgNeigh);
  		} else if(type == "idw") {
  			inter = new interp::idw::IDWInterpolator(idwExp, idwNeigh);
  		} else if(type == "sk") {
- 			interp::kriging::SimpleKrigingInterpolator *sk = new interp::kriging::SimpleKrigingInterpolator(argc, argv);
- 			inter = sk;
+ 			inter = new interp::kriging::SimpleKrigingInterpolator(argc, argv);
  		} else {
  			throw "Unknown interpolator type.";
  		}

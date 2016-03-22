@@ -12,6 +12,7 @@
 
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
+#include <Eigen/Core>
 
 /**
  * A convenience class for managing a grid of values.
@@ -28,10 +29,11 @@ private:
 	/**
 	 * Checks if the grid has been initialized. Throws exception otherwise.
 	 */
-	void checkInit() {
+	void checkInit() const {
 		if(m_grid == nullptr)
 			throw "This instance has not been initialized.";
 	}
+
 public:
 	Grid() {
 		m_grid = nullptr;
@@ -64,7 +66,7 @@ public:
 	/**
 	 * Return a pointer to the allocated memory.
 	 */
-	T *grid() {
+	T *grid() const {
 		return m_grid;
 	}
 
@@ -97,19 +99,23 @@ public:
 	/**
 	 * Fill the grid with the given value.
 	 */
-	void fill(T value) {
+	void fill(const T value) {
 		checkInit();
 		std::fill_n(m_grid, size(), value);
 	}
 
-	T &get(unsigned long idx) {
+	/**
+	 * Return a reference to the value held at
+	 * the given index in the grid.
+	 */
+	T &get(unsigned long idx) const {
 		checkInit();
 		if(idx >= size())
 			throw "Index out of bounds.";
 		return m_grid[idx];
 	}
 
-	void set(unsigned long idx, T value) {
+	void set(unsigned long idx, const T value) {
 		if(idx >= size())
 			throw "Index out of bounds.";
 		checkInit();
@@ -119,21 +125,21 @@ public:
 	/**
 	 * Return the element at the given index.
 	 */
-	T &operator[](unsigned long idx) {
+	T &operator[](unsigned long idx) const {
 		return get(idx);
 	}
 
 	/**
 	 * Return the element at the given index.
 	 */
-	T &operator()(unsigned long idx) {
+	T &operator()(unsigned long idx) const {
 		return get(idx);
 	}
 
 	/**
 	 * Return the element at the given column/row.
 	 */
-	T &operator()(int col, int row) {
+	T &operator()(int col, int row) const {
 		unsigned long idx = (unsigned long) row * m_cols + col;
 		return get(idx);
 	}
@@ -141,7 +147,7 @@ public:
 	/**
 	 * Set the element at the given column/row.
 	 */
-	void operator()(int col, int row, T value) {
+	void operator()(int col, int row, const T value) {
 		unsigned long idx = (unsigned long) row * m_cols + col;
 		set(idx, value);
 	}
@@ -149,8 +155,26 @@ public:
 	/**
 	 * Set the element at the given index.
 	 */
-	void operator()(unsigned long idx, T value) {
+	void operator()(unsigned long idx, const T value) {
 		set(idx, value);
+	}
+
+	bool isSquare() const {
+		return cols() == rows();
+	}
+
+	void toMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
+		for(int r = 1; r < rows(); ++r) {
+			for(int c = 0; c < cols; ++c)
+				mtx(r, c) = this(c, r);
+		}
+	}
+
+	void fromMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
+		for(int r = 1; r < rows(); ++r) {
+			for(int c = 0; c < cols; ++c)
+				this(c, r) = mtx(r, c);
+		}
 	}
 
 };
@@ -212,19 +236,19 @@ template <class T>
 class Raster {
 private:
 	int m_cols, m_rows;		// Raster cols/rows
-	int m_bcols, m_brows;		// Block cols/rows -- not the number of cols/rows in a block
+	int m_bcols, m_brows;	// Block cols/rows -- not the number of cols/rows in a block
 	int m_curcol, m_currow;	// The current block column
-	int m_bandn;				// The band number
+	int m_bandn;			// The band number
 	int m_bw, m_bh;			// Block width/height in pixels
-	bool m_writable;					// True if the raster is writable
-	bool m_dirty;						// True if there is a modification that should be flushed.
-	T m_nodata;							// Nodata value.
-	T *m_block;							// Block storage
-	GDALDataset *m_ds;					// GDAL dataset
-	GDALRasterBand *m_band;				// GDAL band
-	double m_trans[6];					// Raster transform
-	bool m_inited = false;				// True if the instance is initialized.
-	GDALDataType m_type;				// GDALDataType -- limits the possible template types.
+	bool m_writable;		// True if the raster is writable
+	bool m_dirty;			// True if there is a modification that should be flushed.
+	T m_nodata;				// Nodata value.
+	T *m_block;				// Block storage
+	GDALDataset *m_ds;		// GDAL dataset
+	GDALRasterBand *m_band;	// GDAL band
+	double m_trans[6];		// Raster transform
+	bool m_inited = false;	// True if the instance is initialized.
+	GDALDataType m_type;	// GDALDataType -- limits the possible template types.
 
 	/**
 	 * Loads the block that contains the given row and column.
@@ -257,29 +281,37 @@ private:
 	}
 
 	GDALDataType getType(double v) {
+		(void) v;
 		return GDT_Float64;
 	}
 
 	GDALDataType getType(float v) {
+		(void) v;
 		return GDT_Float32;
 	}
 
 	GDALDataType getType(unsigned int v) {
+		(void) v;
 		return GDT_UInt32;
 	}
+
 	GDALDataType getType(int v) {
+		(void) v;
 		return GDT_Int32;
 	}
 
 	GDALDataType getType(unsigned short v) {
+		(void) v;
 		return GDT_UInt16;
 	}
 
 	GDALDataType getType(short v) {
+		(void) v;
 		return GDT_Int16;
 	}
 
 	GDALDataType getType(char v) {
+		(void) v;
 		return GDT_Byte;
 	}
 
@@ -318,6 +350,9 @@ public:
 			init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
 	}
 
+	/**
+	 * Initializes the raster with the given filename, bounds, resolution, nodata and projection.
+	 */
 	void init(std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolution, double nodata, std::string proj) {
 		if(minx >= maxx || miny >= maxy)
@@ -381,6 +416,9 @@ public:
 		m_inited = true;
 	}
 
+	/**
+	 * Returns true if the raster is initialized.
+	 */
 	bool inited() {
 		return m_inited;
 	}
@@ -402,9 +440,7 @@ public:
 	}
 
 	/**
-	 * Load the contents of a single block into the given array.
-	 * Caller is responsible for correctly initializing the array,
-	 * and freeing it.
+	 * Load the contents of a single block into the given Grid instance.
 	 */
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)

@@ -7,6 +7,28 @@ namespace interp {
 
 	namespace kriging {
 
+		class KrigeArgs {
+		public:
+			double range;
+			double sill;
+			double nugget;
+			int status;
+			double (* model)(double, double, double, double);
+
+			KrigeArgs() {
+				range = 0.1;
+				sill = 1.0;
+				nugget = 0.0;
+				status = 0;
+				model = nullptr;
+			}
+			KrigeArgs(double nugget, double range, double sill) : KrigeArgs() {
+				this->nugget = nugget;
+				this->range = range;
+				this->sill = sill;
+			}
+		};
+
 		class VariogramPoint {
 		private:
 			double m_dist;
@@ -43,7 +65,7 @@ namespace interp {
 
 			void computeVariogram(std::list<InterpPoint> &samples, std::list<VariogramPoint> &variogram);
 
-			void showVariogram(std::list<VariogramPoint> &variogram);
+			void showVariogram(interp::kriging::KrigeArgs &kargs, std::list<VariogramPoint> &variogram);
 
 			void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
 
