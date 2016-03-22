@@ -89,11 +89,13 @@ public:
 	void init(int cols, int rows) {
 		if(cols <= 0 || rows <= 0)
 			throw "Invalid row or column count.";
-		m_cols = cols;
-		m_rows = rows;
-		if(m_grid != nullptr)
-			free(m_grid);
-		m_grid = (T *) malloc(sizeof(T) * cols * rows);
+		if(cols != m_cols || rows != m_rows) {
+			m_cols = cols;
+			m_rows = rows;
+			if(m_grid != nullptr)
+				free(m_grid);
+			m_grid = (T *) malloc(sizeof(T) * cols * rows);
+		}
 	}
 
 	/**
