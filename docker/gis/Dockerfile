@@ -24,8 +24,8 @@ WORKDIR tiff-4.0.6
 RUN ./autogen.sh
 RUN ./configure --prefix=/opt
 RUN make
-RUN sudo make install
-RUN sudo ldconfig
+RUN make install
+RUN ldconfig
 WORKDIR ..
 
 # Install libgeotiff
@@ -36,7 +36,7 @@ RUN mkdir -p libgeotiff-1.4.0/makefiles
 WORKDIR libgeotiff-1.4.0/makefiles
 RUN cmake -DCMAKE_INSTALL_PREFIX=/opt ..
 RUN make
-RUN sudo make install
+RUN make install
 WORKDIR ../..
 
 # Install proj.4
@@ -45,14 +45,14 @@ RUN mkdir -p proj.4/makefiles
 WORKDIR proj.4/makefiles
 RUN cmake -DCMAKE_INSTALL_PREFIX=/opt ..
 RUN make
-RUN sudo make install
+RUN make install
 WORKDIR ../..
 
 # Install the GSC geoid models into proj.4's share directory.
 RUN wget http://dijital.ca/files/can_grids.tar.gz
 RUN tar -xzf can_grids.tar.gz
 RUN rm can_grids.tar.gz
-RUN sudo cp can_grids/* /opt/share/proj
+RUN cp can_grids/* /opt/share/proj
 
 # Install libgeos
 RUN git clone https://github.com/libgeos/libgeos.git
@@ -60,7 +60,7 @@ RUN mkdir -p libgeos/makefiles
 WORKDIR libgeos/makefiles
 RUN cmake -DCMAKE_INSTALL_PREFIX=/opt ..
 RUN make
-RUN sudo make install
+RUN make install
 WORKDIR ../..
 
 # Install PostgreSQL
@@ -68,23 +68,24 @@ RUN git clone https://github.com/postgres/postgres.git
 WORKDIR postgres
 RUN ./configure --prefix=/opt
 RUN make
-RUN sudo make install
-RUN sudo ldconfig
+RUN make install
+RUN ldconfig
 WORKDIR ..
 
 # Install GDAL 1.11.*
 RUN git clone https://github.com/OSGeo/gdal.git
+WORKDIR gdal
 RUN git checkout 1.11
-WORKDIR gdal/gdal
+WORKDIR gdal
 RUN ./configure --prefix=/opt --with-python --with-geos=/opt/bin/geos-config --with-pg=/opt/bin/pg_config --with-geotiff=/opt
 RUN make
-RUN sudo make install
-RUN sudo ldconfig
+RUN make install
+RUN ldconfig
 WORKDIR ../..
 
 # Install vertcs override with Canadian GEOID references in gdal share.
 RUN wget http://dijital.ca/files/vertcs.override.csv
-RUN sudo cp vertcs.override.csv /opt/share/gdal
+RUN cp vertcs.override.csv /opt/share/gdal
 
 # Install PostGIS
 RUN git clone https://github.com/postgis/postgis.git
@@ -92,8 +93,8 @@ WORKDIR postgis
 RUN ./autogen.sh
 RUN LDFLAGS=-lstdc++ ./configure --with-pgconfig=/opt/bin/pg_config --with-geosconfig=/opt/bin/geos-config
 RUN make
-RUN sudo make install
-RUN sudo ldconfig
-RUN sudo make comments-install
+RUN make install
+RUN ldconfig
+RUN make comments-install
 WORKDIR ..
 
