@@ -1,5 +1,12 @@
 FROM debian:latest
 
+# Choose a directory to install to, or just use the default
+ENV install_dir /usr/local
+
+# If a non-standard install_dir is used, it'll need to be added to the lib path. This does that.
+RUN echo "${install_dir}/lib" > /etc/ld.so.conf.d/gis.conf
+RUN ldconfig
+
 # Install some necessaries
 RUN apt-get clean
 RUN apt-get update
@@ -22,7 +29,7 @@ RUN tar -xzf tiff-4.0.6.tar.gz
 RUN rm tiff-4.0.6.tar.gz
 WORKDIR tiff-4.0.6
 RUN ./autogen.sh
-RUN ./configure --prefix=/opt
+RUN ./configure --prefix=${install_dir}
 RUN make
 RUN make install
 RUN ldconfig
@@ -34,7 +41,7 @@ RUN tar -xzf libgeotiff-1.4.0.tar.gz
 RUN rm libgeotiff-1.4.0.tar.gz
 RUN mkdir -p libgeotiff-1.4.0/makefiles
 WORKDIR libgeotiff-1.4.0/makefiles
-RUN cmake -DCMAKE_INSTALL_PREFIX=/opt ..
+RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
 RUN make
 RUN make install
 WORKDIR ../..
@@ -43,7 +50,7 @@ WORKDIR ../..
 RUN git clone https://github.com/OSGeo/proj.4.git
 RUN mkdir -p proj.4/makefiles
 WORKDIR proj.4/makefiles
-RUN cmake -DCMAKE_INSTALL_PREFIX=/opt ..
+RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
 RUN make
 RUN make install
 WORKDIR ../..
@@ -52,13 +59,13 @@ WORKDIR ../..
 RUN wget http://dijital.ca/files/can_grids.tar.gz
 RUN tar -xzf can_grids.tar.gz
 RUN rm can_grids.tar.gz
-RUN cp can_grids/* /opt/share/proj
+RUN cp can_grids/* ${install_dir}/share/proj
 
 # Install libgeos
 RUN git clone https://github.com/libgeos/libgeos.git
 RUN mkdir -p libgeos/makefiles
 WORKDIR libgeos/makefiles
-RUN cmake -DCMAKE_INSTALL_PREFIX=/opt ..
+RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
 RUN make
 RUN make install
 WORKDIR ../..
@@ -66,7 +73,7 @@ WORKDIR ../..
 # Install PostgreSQL
 RUN git clone https://github.com/postgres/postgres.git
 WORKDIR postgres
-RUN ./configure --prefix=/opt
+RUN ./configure --prefix=${install_dir}
 RUN make
 RUN make install
 RUN ldconfig
@@ -77,7 +84,7 @@ RUN git clone https://github.com/OSGeo/gdal.git
 WORKDIR gdal
 RUN git checkout 1.11
 WORKDIR gdal
-RUN ./configure --prefix=/opt --with-python --with-geos=/opt/bin/geos-config --with-pg=/opt/bin/pg_config --with-geotiff=/opt
+RUN ./configure --prefix=${install_dir} --with-python --with-geos=${install_dir}/bin/geos-config --with-pg=${install_dir}/bin/pg_config --with-geotiff=${install_dir}
 RUN make
 RUN make install
 RUN ldconfig
@@ -85,16 +92,16 @@ WORKDIR ../..
 
 # Install vertcs override with Canadian GEOID references in gdal share.
 RUN wget http://dijital.ca/files/vertcs.override.csv
-RUN cp vertcs.override.csv /opt/share/gdal
+RUN cp vertcs.override.csv ${install_dir}/share/gdal
 
 # Install PostGIS
 RUN git clone https://github.com/postgis/postgis.git
 WORKDIR postgis
 RUN ./autogen.sh
-RUN LDFLAGS=-lstdc++ ./configure --with-pgconfig=/opt/bin/pg_config --with-geosconfig=/opt/bin/geos-config
+RUN ./configure --with-gdalconfig=${install_dir}/bin/gdal-config --with-projdir=${install_dir} --with-pgconfig=${install_dir}/bin/pg_config --with-geosconfig=${install_dir}/bin/geos-config
 RUN make
 RUN make install
-RUN ldconfig
 RUN make comments-install
+RUN ldconfig
 WORKDIR ..
 
