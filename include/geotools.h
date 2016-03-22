@@ -13,5 +13,5 @@
 #define PI 3.14159265358979323846
 #define _min(a, b) (a > b ? b : a)
 #define _max(a, b) (a < b ? b : a)
-
+#define _sq(a) (a * a)
 #endif
