@@ -165,3 +165,7 @@ RUN mkdir -p /usr/local/pgsql/data
 RUN chown -R postgres:postgres /usr/local/pgsql
 RUN su -c "initdb -D /usr/local/pgsql/data" - postgres
 
+# Install and run NGINX
+#RUN apt-get install nginx
+#RUN /etc/init.d/nginx start
+
