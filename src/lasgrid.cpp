@@ -93,14 +93,15 @@ int _fcmp(const void * a, const void * b) {
 void usage() {
 	std::cerr << "Usage: lasgrid <options> <file [file [file]]>" << std::endl; 
 	std::cerr << " -o <output file>" << std::endl;
-	std::cerr << " -t <type>                   quantile, mean, max, min, variance, count, density, stddev (default mean)" << std::endl;
-	std::cerr << " -r <resolution>             (default 2)" << std::endl;
+	std::cerr << " -t <type>                   Output quantile, mean, max, min, variance, count, density, stddev (default mean)." << std::endl;
+	std::cerr << " -r <resolution>             Resolution (default 2)." << std::endl;
 	std::cerr << " -s <srid>                   The EPSG ID of the CRS." << std::endl;
-	std::cerr << " -c <classes>                comma-delimited (e.g. '2,0' (ground and unclassified))" << std::endl;
-	std::cerr << " -a <attribute>              height, intensity (default height)" << std::endl;	
-	std::cerr << " -d <radius>                 use zero for cell bounds" << std::endl;	
-	std::cerr << " -b <minx miny maxx maxy>    extract points from the given box and create a raster of this size" << std::endl;	
-	std::cerr << " -q <num-quantiles,quantile> gives the number of quantiles, and the index of the desired quantile. " << std::endl;
+	std::cerr << " -c <classes>                Comma-delimited (e.g. '2,0' (ground and unclassified))." << std::endl;
+	std::cerr << " -a <attribute>              Use height, intensity (default height)." << std::endl;
+	std::cerr << " -d <radius>                 Radius (not diameter); use zero for cell bounds." << std::endl;
+	std::cerr << "                             For example, if the cell size is 2, the circumcircle's radius is sqrt(2) (1.414213562)." << std::endl;
+	std::cerr << " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size." << std::endl;
+	std::cerr << " -q <num-quantiles,quantile> Gives the number of quantiles, and the index of the desired quantile. " << std::endl;
 	std::cerr << "                             If there are n quantiles, there are n+1 possible indices, with 0 being " << std::endl;
 	std::cerr << "                             the lower bound, and n+1 being the upper. For quartiles enter 4, for deciles 10, etc." << std::endl;
 	std::cerr << " -v                          Verbose output." << std::endl;
