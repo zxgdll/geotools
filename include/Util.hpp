@@ -20,7 +20,7 @@ public:
 	 * array to contain the result. If the dims argument is 2, the
 	 * horizontal coords are considered and if it's 3, all coords are.
 	 */
-	static bool computeLasBounds(las::Header &hdr, double *bounds, int dims) {
+	static bool computeLasBounds(las::Header &hdr, std::vector<double> &bounds, int dims) {
 		if((dims != 2 && dims != 3) || hdr.GetMaxX() == hdr.GetMinX() || hdr.GetMaxY() == hdr.GetMinY())
 			return false;
 		if(dims == 2 or dims == 3) {
@@ -42,7 +42,7 @@ public:
 	 * horizontal coords are considered and if it's 3, all coords are.
 	 * Use this method when the header bounds are bogus (it iterates over all the points.
 	 */
-	static bool computeLasBounds(las::Reader &rdr, double *bounds, int dims) {
+	static bool computeLasBounds(las::Reader &rdr, std::vector<double> &bounds, int dims) {
 		if(dims != 2 && dims != 3)
 			return false;
 		double x, y, z;
@@ -70,7 +70,7 @@ public:
 	 * the second (also an array of doubles). If the dims argument is 2,
 	 * only horizontal dimensions are used. If 3, the z dimension is included.
 	 */
-	static void expand(double *bounds, double *extra, int dims) {
+	static void expand(std::vector<double> &bounds, std::vector<double> &extra, int dims) {
 		if(dims == 2 || dims == 3) {
 			if(extra[0] < bounds[0]) bounds[0] = extra[0];
 			if(extra[1] < bounds[1]) bounds[1] = extra[1];
@@ -87,7 +87,7 @@ public:
 	 * Snaps the bounds to the given resolution. If the dims
 	 * argument is 2, considers x and y. If 3, considers z.
 	 */
-	static void snapBounds(double *bounds, double res, int dims) {
+	static void snapBounds(std::vector<double> &bounds, double res, int dims) {
 		if(dims == 2 || dims == 3) {
 			bounds[0] = floor(bounds[0] / res) * res;
 			bounds[1] = floor(bounds[1] / res) * res;
@@ -104,7 +104,7 @@ public:
 	 * Prints the bounds to stderr. If dims is 2, prints x and y.
 	 * If 3 prints z.
 	 */
-	static void printBounds(double *bounds, int dims) {
+	static void printBounds(std::vector<double> &bounds, int dims) {
 		if(dims == 2 || dims == 3) {
 			std::cerr << "Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3];
 			if(dims == 3)
@@ -117,7 +117,7 @@ public:
 	 * Returns true if the two bounds intersect. The dims argument
 	 * determines whether the comparison is 2d (2) or 3d (3).
 	 */
-	static bool intersects(double *a, double *b, int dims) {
+	static bool intersects(std::vector<double> &a, std::vector<double> &b, int dims) {
 		if(dims == 2)
 			return !(a[0] > b[2] || a[1] > b[3] || a[2] < b[0] || a[3] < b[1]);
 		if(dims == 3)
@@ -129,7 +129,7 @@ public:
 	* Returns true if the given coordinate is inside the bounds.
 	* Coordinates are assumed to have the same CRS as the bounds.
 	*/
-	static bool inBounds(double x, double y, double *bounds) {
+	static bool inBounds(double x, double y, std::vector<double> &bounds) {
 		return x >= bounds[0] && x < bounds[2] && y >= bounds[1] && y < bounds[3];
 	}
 
