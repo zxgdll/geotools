@@ -127,8 +127,18 @@ public:
 	/**
 	 * Return the element at the given index.
 	 */
-	T &operator[](unsigned long idx) const {
-		return get(idx);
+	const T &operator[](unsigned long idx) const {
+		checkInit();
+		if(idx >= size())
+			throw "Index out of bounds.";
+		return m_grid[idx];
+	}
+
+	T& operator[](unsigned long idx) {
+		checkInit();
+		if(idx >= size())
+			throw "Index out of bounds.";
+		return m_grid[idx];
 	}
 
 	/**
@@ -349,7 +359,13 @@ public:
 	 */
 	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolution, double nodata, std::string &proj) : Raster() {
-			init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
+		init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
+	}
+
+	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
+			double resolution, double nodata, int crs) : Raster() {
+		std::string proj = epsg2ProjText(crs);
+		init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
 	}
 
 	/**
@@ -416,6 +432,17 @@ public:
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		m_writable = writable;
 		m_inited = true;
+	}
+
+	/**
+	 * Converts a numerical (EPSG) crs code to a projection string.
+	 */
+	std::string epsg2ProjText(int crs) {
+		OGRSpatialReference ref;
+		char *wkt;
+		ref.importFromEPSG(crs);
+		ref.exportToWkt(&wkt);
+		return std::string(wkt);
 	}
 
 	/**
