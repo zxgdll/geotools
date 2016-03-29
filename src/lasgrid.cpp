@@ -111,15 +111,23 @@ void vector_dealloc(std::vector<float> *item) {
 	delete item;
 }
 
+/**
+ * Returns true if the point is within the radius associated with a cell's centroid.
+ * @param px The x coordinate of the point.
+ * @param py The y coordinate of the point.
+ * @param col The column of the cell of interest.
+ * @param row The row of the cell of interest.
+ * @param radius The radius around the cell's centroid.
+ * @param resolution The resolution of the output raster.
+ * @param bounds The bounds of the raster.
+ */
 bool inRadius(double px, double py, int col, int row, double radius,
 		double resolution, std::vector<double> &bounds){
+	if(radius == 0.0) return false;
 	// If a radius is given, extract the x and y of the current cell's centroid
 	// and measure its distance (squared) from the point.
-	// TODO: In UTM N, the resolution of the vertical is negative
-	// because the largest coordinate is at the top. We pretend that
-	// all projections are UTMN.
-	int x = col * resolution + bounds[0] + resolution * 0.5;
-	int y = row * resolution + bounds[1] + resolution * 0.5;
+	double x = col * resolution + bounds[0] + resolution * 0.5;
+	double y = row * resolution + bounds[1] + resolution * 0.5;
 	// If the cell is outside the radius, ignore it.
 	double a = _sq(x - px) + _sq(y - py);
 	double b = _sq(radius);
@@ -165,7 +173,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 
 	// Compute the radius given the cell size, if it is not given.
 	if(radius == -1.0)
-		radius = sqrt(_sq(resolution / 2.0) * 2);
+		radius = sqrt(_sq(resolution / 2.0) * 2.0);
 
 	if(!quiet) {
 		std::cerr << "Raster size: " << cols << ", " << rows << std::endl;
@@ -195,12 +203,12 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	counts.init(cols, rows);
 	counts.fill(0);
 
-	int current = 0;
 
 	if(!quiet)
 		std::cerr << "Using " << indices.size() << " of " << files.size() << " files." << std::endl;
 
 	// Process files
+	int current = 0; // Current file counter.
 	for(unsigned int j = 0; j < indices.size(); ++j) {
 		unsigned int i = indices[j];
 		std::ifstream in(files[i].c_str());
@@ -234,15 +242,12 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 			int offset = radius > 0.0 ? (int) ceil(radius / resolution) : 0;
 			for(int cc = c - offset; cc < c + offset + 1; ++cc) {
 				// Ignore out-of-bounds pixels.
-				if(cc < 0 || cc >= cols) 
-					continue;
+				if(cc < 0 || cc >= cols) continue;
 				for(int rr = r - offset; rr < r + offset + 1; ++rr) {
 					// Ignore out-of-bounds pixels.
-					if(rr < 0 || rr >= rows) 
-						continue;
+					if(rr < 0 || rr >= rows) continue;
 					// If the coordinate is out of the cell's radius, continue.
-					if(radius > 0.0 && !inRadius(px, py, cc, rr, radius, resolution, bounds))
-						continue;
+					if(radius > 0.0 && !inRadius(px, py, cc, rr, radius, resolution, bounds)) continue;
 					// Compute the grid index. The rows are assigned from the bottom.
 					int idx = (rows - rr - 1) * cols + cc;
 					switch(type){
