@@ -1,71 +1,56 @@
-LIB=-L/usr/local/Cellar/mpfr/3.1.3/lib -L/usr/local/Cellar/gmp/6.1.0/lib -L/usr/lib -L/usr/local/lib -L/usr/local/Cellar/gcc/5.3.0/lib/gcc/5/
-CXXFLAGS=-I../include -I/usr/local/Cellar/mpfr/3.1.3/include -I/usr/local/Cellar/mpfr/3.1.3/include -I/usr/include -I/usr/local/include -I/usr/local/Cellar/geos/3.5.0/include -I/usr/local/Cellar/boost/1.59.0/include -I/usr/local/Cellar/gcc/5.3.0/lib/gcc/5/gcc/x86_64-apple-darwin15.2.0/5.3.0/include -std=c++11
-CFLAGS=-I../include -I/usr/include
-CPP=g++
+CFLAGS=-I../include -I/usr/include 
+CXXFLAGS=-std=c++11 -Wall -I../include -I/usr/local/include -I/usr/local/Cellar/eigen/3.2.7/include/eigen3/
+LIB=-L/usr/local/lib 
 CC=gcc
+CPP=g++
+
+#LIB += -L/usr/local/opt/sqlite/lib
+#CXXFLAGS += -I/usr/local/opt/sqlite/include
 
 .PHONY: interp
 
-all: mosaic lasstats lasmerge lasgrid
-debug: mosaic_debug laststats_debug lasmerge_debug lasgrid_debug
+all: mosaic lasmerge lasgrid las2csrs lasclip rastfit interp proj_ellips findmin srtm_lakes #lasstats
+
+debug: CXXFLAGS += -DDEBUG -g
+debug: CFLAGS += -DDEBUG -g
+debug: all
+
+release: CXXFLAGS += -O3
+release: CFLAGS += -O3
+release: all
 
 mosaic:
-	$(CPP) $(CXXFLAGS) -Wall -fopenmp -O3 mosaic.cpp $(LIB) -lgdal -o ../bin/mosaic
+	$(CPP) $(CXXFLAGS) -fopenmp mosaic.cpp $(LIB) -lgdal -o ../bin/mosaic
 
-mosaic_debug:
-	$(CPP) $(CXXFLAGS) -Wall -fopenmp -g mosaic.cpp $(LIB) -lgdal -o ../bin/mosaic
-	
 lasstats:
-	$(CPP) $(CXXFLAGS) -Wall -O3 lasstats.cpp $(LIB) -llas -lgdal -lproj -lgeos -o ../bin/lasstats
+	$(CPP) $(CXXFLAGS) lasstats.cpp $(LIB) -llas -lgdal -lproj -lgeos -o ../bin/lasstats
 
-lasstats_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g lasstats.cpp $(LIB) -llas -lgdal -lproj -lgeos -o ../bin/lasstats
-	
 lasmerge:
-	$(CPP) $(CXXFLAGS) -Wall -O3 lasmerge.cpp $(LIB) -llas -lgdal -lgeos -lboost_system -o ../bin/lasmerge
+	$(CPP) $(CXXFLAGS) lasmerge.cpp $(LIB) -lboost_system -llas -o ../bin/lasmerge
 
-lasmerge_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g lasmerge.cpp $(LIB) -llas -lgdal -lgeos  -o ../bin/lasmerge
-	
 lasgrid:
-	$(CPP) $(CXXFLAGS) -Wall -O3 lasgrid.cpp $(LIB) -llas -lgdal -lboost_system -o ../bin/lasgrid
+	$(CPP) $(CXXFLAGS) lasgrid.cpp $(LIB) -llas -lgdal -lboost_system -o ../bin/lasgrid
 
-lasgrid_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g lasgrid.cpp $(LIB) -llas -lgdal -lboost_system -o ../bin/lasgrid
-	
 las2csrs:
-	$(CPP) $(CXXFLAGS) -Wall -O3 las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
+	$(CPP) $(CXXFLAGS) las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
 
-las2csrs_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
-	
 lasclip:
-	$(CPP) $(CXXFLAGS) -Wall -O3 lasclip.cpp $(LIB) -llas -lgeos -lgdal -lboost_system -o ../bin/lasclip
-
-lasclip_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g lasclip.cpp $(LIB) -llas -lgeos -lgdal -lboost_system -o ../bin/lasclip
+	$(CPP) $(CXXFLAGS) lasclip.cpp $(LIB) -llas -lgeos -lgdal -lboost_system -o ../bin/lasclip
 
 rastfit:
-	$(CPP) $(CXXFLAGS) -Wall -O3 -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
+	$(CPP) $(CXXFLAGS) -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
 
-rastfit_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
-	
 interp:
-	$(CPP) $(CXXFLAGS) -Wall -O3 interp/Interpolators.cpp interp.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
-
-interp_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g -DWITH_CGAL interp/Interpolators.cpp interp.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
+	$(CPP) $(CXXFLAGS) -fopenmp interp/Interpolators.cpp interp.cpp $(LIB) -lgomp -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
 
 proj_ellips:
-	$(CC) $(CFLAGS) -Wall -g proj_ellips.c $(LIB) -o ../bin/proj_ellips
+	$(CC) $(CFLAGS) proj_ellips.c $(LIB) -o ../bin/proj_ellips
 
 findmin:
-	$(CPP) $(CXXFLAGS) -Wall -O3 utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
+	$(CPP) $(CXXFLAGS) utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
 
-findmin_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
-
+srtm_lakes:
+	$(CPP) $(CXXFLAGS) utils/srtm_lakes.cpp $(LIB) -lgdal -o ../bin/srtm_lakes
 
 clean:
 	rm ../bin/*

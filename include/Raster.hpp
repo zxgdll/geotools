@@ -177,14 +177,14 @@ public:
 
 	void toMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
 		for(int r = 1; r < rows(); ++r) {
-			for(int c = 0; c < cols; ++c)
+			for(int c = 0; c < cols(); ++c)
 				mtx(r, c) = this(c, r);
 		}
 	}
 
 	void fromMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
 		for(int r = 1; r < rows(); ++r) {
-			for(int c = 0; c < cols; ++c)
+			for(int c = 0; c < cols(); ++c)
 				this(c, r) = mtx(r, c);
 		}
 	}

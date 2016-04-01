@@ -24,6 +24,7 @@
 
 #include <liblas/liblas.hpp>
 
+#include "geotools.h"
 #include "Util.hpp"
 #include "Raster.hpp"
 

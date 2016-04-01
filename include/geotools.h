@@ -14,4 +14,9 @@
 #define _min(a, b) ((a) > (b) ? (b) : (a))
 #define _max(a, b) ((a) < (b) ? (b) : (a))
 #define _sq(a) ((a) * (a))
+
+#define _sec2rad(x) (x * 4.84813681 / 1000000000.0)
+#define _deg(x) (x * 180.0 / PI)
+#define _rad(x) (x * PI / 180.0)
+
 #endif

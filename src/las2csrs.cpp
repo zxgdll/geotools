@@ -23,24 +23,7 @@ namespace alg = boost::algorithm;
 namespace las = liblas;
 
 
-// Convert from arcsec to radians.
-double _sec2rad(double x) {
-	return x * 4.84813681 / 1000000000.0;
-}
-
-// Convert from radians to degrees.
-double _deg(double x) {
-	return x * 180.0 / PI;
-}
-
-double _rad(double x) {
-	return x * PI / 180.0;
-}
-
-double _sq(double x) {
-	return x*x;
-}
-
+// Binary interpolation.
 double _binterp(float *grid, double c, double r, int c0, int r0, int c1, int r1, int width) {
 	double x1 = (c1 - c) / (c1 - c0) * grid[r0 * width + c0] + (c - c0) / (c1 - c0) * grid[r0 * width + c1];
 	double x2 = (c1 - c) / (c1 - c0) * grid[r1 * width + c0] + (c - c0) / (c1 - c0) * grid[r1 * width + c1];
