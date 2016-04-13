@@ -27,7 +27,6 @@
 
 #ifdef WITH_QT
 #include "QtGui/QApplication"
-
 #include <interp/ui/KrigePlot.hpp>
 #endif
 
@@ -233,7 +232,9 @@ namespace interp {
 						run = blk.next();
 					} // omp
 
-					if(run) {
+					if(!run)
+						break;
+
 						sr = blk.startRow(), sc = blk.startCol();
 						int rows = blk.rows(), cols = blk.cols();
 						grid.init(cols, rows);
@@ -258,7 +259,6 @@ namespace interp {
 								grid(c, r, z / t);
 							}
 						}
-					}
 
 					#pragma omp critical
 					{
@@ -310,7 +310,9 @@ namespace interp {
 						run = blk.next();
 					} // omp
 
-					if(run) {
+					if(!run)
+						break;
+
 						sr = blk.startRow(), sc = blk.startCol();
 						int rows = blk.rows(), cols = blk.cols();
 						grid.init(cols, rows);
@@ -348,7 +350,7 @@ namespace interp {
 							out.set(sc, sr, grid);
 						} // omp
 
-					}
+
 				}
 
 				} // omp
