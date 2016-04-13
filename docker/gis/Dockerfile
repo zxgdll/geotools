@@ -36,9 +36,11 @@ RUN apt-get install -y libjson0-dev libxml2-dev libxml2-utils xsltproc docbook-x
 RUN apt-get install -y libreadline-dev bison flex
 RUN apt-get install -y zlib1g-dev
 RUN apt-get install -y libcunit1-dev
-RUN apt-get install chkconfig
+RUN apt-get install -y chkconfig
 RUN apt-get install -y libboost-dev
 RUN apt-get install -y libboost-program-options1.55-dev libboost-thread1.55-dev libboost-system1.55-dev libboost-iostreams1.55-dev libboost-filesystem1.55-dev
+RUN apt-get install -y libgmp-dev libmpfr-dev libeigen3-dev
+#RUN apt-get install -y libqt4-dev libqwt-dev
 
 # Make a directory to work from and go there.
 RUN mkdir -p /var/buildgis
@@ -71,6 +73,15 @@ WORKDIR ../..
 RUN git clone https://github.com/OSGeo/proj.4.git
 RUN mkdir -p proj.4/makefiles
 WORKDIR proj.4/makefiles
+RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
+RUN make
+RUN make install
+WORKDIR ../..
+
+# Install cgal
+RUN git clone https://github.com/CGAL/cgal.git
+RUN mkdir -p CGAL/makefiles
+WORKDIR CGAL/makefiles
 RUN cmake -DCMAKE_INSTALL_PREFIX=${install_dir} ..
 RUN make
 RUN make install
