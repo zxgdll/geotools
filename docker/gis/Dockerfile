@@ -31,7 +31,7 @@ RUN apt-get -y upgrade
 RUN apt-get install -y cmake wget git
 RUN apt-get install -y build-essential libc6 libc6-dev libexpat1 libexpat1-dev 
 RUN apt-get install -y automake libtool
-RUN apt-get install -y libpython2.7-dev python-dev
+RUN apt-get install -y libpython2.7-dev python-dev python-numpy
 RUN apt-get install -y libjson0-dev libxml2-dev libxml2-utils xsltproc docbook-xsl docbook-mathml
 RUN apt-get install -y libreadline-dev bison flex
 RUN apt-get install -y zlib1g-dev
