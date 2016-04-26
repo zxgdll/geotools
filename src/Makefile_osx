@@ -1,5 +1,5 @@
 CFLAGS=-I../include -I/usr/include 
-CXXFLAGS=-std=c++11 -Wall -I../include -I/usr/local/include -I/usr/local/Cellar/eigen/3.2.7/include/eigen3/
+CXXFLAGS=-std=c++11 -Wall -I../include -I/usr/local/include -I/usr/local/Cellar/eigen/3.2.8/include/eigen3 -I/usr/local/Cellar/gcc49/4.9.3/lib/gcc/4.9/gcc/x86_64-apple-darwin15.2.0/4.9.3/include
 LIB=-L/usr/local/lib 
 CC=gcc
 CPP=g++
@@ -41,7 +41,7 @@ rastfit:
 	$(CPP) $(CXXFLAGS) -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
 
 interp:
-	$(CPP) $(CXXFLAGS) -fopenmp interp/Interpolators.cpp interp.cpp $(LIB) -lgomp -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
+	$(CPP) $(CXXFLAGS) interp/Interpolators.cpp interp.cpp $(LIB) -lgomp -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
 
 proj_ellips:
 	$(CC) $(CFLAGS) proj_ellips.c $(LIB) -o ../bin/proj_ellips

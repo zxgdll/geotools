@@ -235,30 +235,30 @@ namespace interp {
 					if(!run)
 						break;
 
-						sr = blk.startRow(), sc = blk.startCol();
-						int rows = blk.rows(), cols = blk.cols();
-						grid.init(cols, rows);
+					sr = blk.startRow(), sc = blk.startCol();
+					int rows = blk.rows(), cols = blk.cols();
+					grid.init(cols, rows);
 
-						// Iterate over the cells in the 
-						for(int r = 0; r < rows; ++r) {
-							std::cerr << "row " << (r + sr) << std::endl;
-							for(int c = 0; c < cols; ++c) {
-								double z = 0.0;
-								double t = 0.0;
-								for(auto it = samples.begin(); it != samples.end(); ++it) {
-									double d = pow(_sdist(*it, out.toX(c), out.toY(r)), m_exponent);
-									if(d < std::numeric_limits<double>::lowest()) {
-										z = it->z;
-										t = 1.0;
-										break;
-									} else {
-										z += it->z / d;
-										t += 1 / d;
-									}
+					// Iterate over the cells in the 
+					for(int r = 0; r < rows; ++r) {
+						std::cerr << "row " << (r + sr) << std::endl;
+						for(int c = 0; c < cols; ++c) {
+							double z = 0.0;
+							double t = 0.0;
+							for(auto it = samples.begin(); it != samples.end(); ++it) {
+								double d = pow(_sdist(*it, out.toX(c), out.toY(r)), m_exponent);
+								if(d < std::numeric_limits<double>::lowest()) {
+									z = it->z;
+									t = 1.0;
+									break;
+								} else {
+									z += it->z / d;
+									t += 1 / d;
 								}
-								grid(c, r, z / t);
 							}
+							grid(c, r, z / t);
 						}
+					}
 
 					#pragma omp critical
 					{
@@ -313,43 +313,42 @@ namespace interp {
 					if(!run)
 						break;
 
-						sr = blk.startRow(), sc = blk.startCol();
-						int rows = blk.rows(), cols = blk.cols();
-						grid.init(cols, rows);
+					sr = blk.startRow(), sc = blk.startCol();
+					int rows = blk.rows(), cols = blk.cols();
+					grid.init(cols, rows);
 
-						// Iterate over the cells in the
-						for(int r = 0; r < rows; ++r) {
-							std::cerr << "row " << (r + sr) << std::endl;
-							for(int c = 0; c < cols; ++c) {
-								// Create a query point.
-								const double query[2] = {out.toX(c + sc), out.toY(r + sr)};
-								// Find the results in the knn tree.
-								index.knnSearch(query, num, &idx[0], &dist[0]);
-								double z = 0.0;
-								double t = 0.0;
-								for(int i = 0; i < num; ++i) {
-									InterpPoint pt = pc.pts[idx[i]];
-									double d = pow(dist[i], m_exponent);
-									if(d <= std::numeric_limits<float>::lowest()) {
-										// If distance is close to zero, use the value of the
-										// nearest point.
-										z = pt.z;
-										t = 1;
-										break;
-									} else {
-										z += pt.z / d;
-										t += 1 / d;
-									}
+					// Iterate over the cells in the
+					for(int r = 0; r < rows; ++r) {
+						std::cerr << "row " << (r + sr) << std::endl;
+						for(int c = 0; c < cols; ++c) {
+							// Create a query point.
+							const double query[2] = {out.toX(c + sc), out.toY(r + sr)};
+							// Find the results in the knn tree.
+							index.knnSearch(query, num, &idx[0], &dist[0]);
+							double z = 0.0;
+							double t = 0.0;
+							for(int i = 0; i < num; ++i) {
+								InterpPoint pt = pc.pts[idx[i]];
+								double d = pow(dist[i], m_exponent);
+								if(d <= std::numeric_limits<float>::lowest()) {
+									// If distance is close to zero, use the value of the
+									// nearest point.
+									z = pt.z;
+									t = 1;
+									break;
+								} else {
+									z += pt.z / d;
+									t += 1 / d;
 								}
-								grid(c, r, z / t);
 							}
+							grid(c, r, z / t);
 						}
+					}
 
-						#pragma omp critical
-						{
-							out.set(sc, sr, grid);
-						} // omp
-
+					#pragma omp critical
+					{
+						out.set(sc, sr, grid);
+					} // omp
 
 				}
 
