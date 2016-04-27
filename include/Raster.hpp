@@ -110,11 +110,21 @@ public:
 	 * Return a reference to the value held at
 	 * the given index in the grid.
 	 */
-	T &get(unsigned long idx) const {
+	const T &get(unsigned long idx) const {
 		checkInit();
 		if(idx >= size())
 			throw "Index out of bounds.";
 		return m_grid[idx];
+	}
+
+	const T &get(int col, int row) const {
+		unsigned long idx = (unsigned long) col * row;
+		return get(idx);
+	}
+
+	void set(int col, int row, const T value) {
+		unsigned long idx = (unsigned long) col * row;
+		set(idx, value);
 	}
 
 	void set(unsigned long idx, const T value) {
@@ -132,43 +142,6 @@ public:
 		if(idx >= size())
 			throw "Index out of bounds.";
 		return m_grid[idx];
-	}
-
-	T& operator[](unsigned long idx) {
-		checkInit();
-		if(idx >= size())
-			throw "Index out of bounds.";
-		return m_grid[idx];
-	}
-
-	/**
-	 * Return the element at the given index.
-	 */
-	T &operator()(unsigned long idx) const {
-		return get(idx);
-	}
-
-	/**
-	 * Return the element at the given column/row.
-	 */
-	T &operator()(int col, int row) const {
-		unsigned long idx = (unsigned long) row * m_cols + col;
-		return get(idx);
-	}
-
-	/**
-	 * Set the element at the given column/row.
-	 */
-	void operator()(int col, int row, const T value) {
-		unsigned long idx = (unsigned long) row * m_cols + col;
-		set(idx, value);
-	}
-
-	/**
-	 * Set the element at the given index.
-	 */
-	void operator()(unsigned long idx, const T value) {
-		set(idx, value);
 	}
 
 	bool isSquare() const {
@@ -476,6 +449,10 @@ public:
 			throw "Error reading block.";
 	}
 
+	void readBlock(int col, int row, Grid<T> &block) {
+		readBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
+	}
+
 	/** Deprecated. */
 	DEPRECATED void loadBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		readBlock(col, row, cols, rows, block);
@@ -487,6 +464,10 @@ public:
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
 			throw "Error writing block.";
+	}
+
+	void writeBlock(int col, int row, Grid<T> &block) {
+		writeBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
 	}
 
 	/**

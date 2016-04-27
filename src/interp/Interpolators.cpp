@@ -256,13 +256,13 @@ namespace interp {
 									t += 1 / d;
 								}
 							}
-							grid(c, r, z / t);
+							grid.set(c, r, (float) (z / t));
 						}
 					}
 
 					#pragma omp critical
 					{
-						out.set(sc, sr, grid);
+						out.writeBlock(sc, sr, grid);
 					} // omp
 
 				}
@@ -341,13 +341,13 @@ namespace interp {
 									t += 1 / d;
 								}
 							}
-							grid(c, r, z / t);
+							grid.set(c, r, (float) (z / t));
 						}
 					}
 
 					#pragma omp critical
 					{
-						out.set(sc, sr, grid);
+						out.writeBlock(sc, sr, grid);
 					} // omp
 
 				}
