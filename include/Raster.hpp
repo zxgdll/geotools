@@ -118,12 +118,12 @@ public:
 	}
 
 	const T &get(int col, int row) const {
-		unsigned long idx = (unsigned long) col * row;
+		unsigned long idx = (unsigned long) (row * m_cols + col);	
 		return get(idx);
 	}
 
 	void set(int col, int row, const T value) {
-		unsigned long idx = (unsigned long) col * row;
+		unsigned long idx = (unsigned long) (row * m_cols + col);
 		set(idx, value);
 	}
 

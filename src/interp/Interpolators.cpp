@@ -246,7 +246,7 @@ namespace interp {
 							double z = 0.0;
 							double t = 0.0;
 							for(auto it = samples.begin(); it != samples.end(); ++it) {
-								double d = pow(_sdist(*it, out.toX(c), out.toY(r)), m_exponent);
+								double d = pow(_sdist(*it, out.toX(c + sc), out.toY(r + sr)), m_exponent);
 								if(d < std::numeric_limits<double>::lowest()) {
 									z = it->z;
 									t = 1.0;
