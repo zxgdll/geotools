@@ -48,7 +48,6 @@ void validate(std::string &outfile, std::string &datafile, std::vector<std::stri
 
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
-
 			// If this point is not in the class list, skip it.
 			int cls = pt.GetClassification().GetClass();
 			if(classes.size() > 0 && !Util::inList(classes, cls))
@@ -60,12 +59,14 @@ void validate(std::string &outfile, std::string &datafile, std::vector<std::stri
 			for(unsigned int j = 0; j < points.size(); ++j) {
 				double px = std::get<0>(points[i]);
 				double py = std::get<1>(points[i]);
+				// If outside of the radius, skip it.
 				if(dist(px, py, lx, ly) > distance)
 					continue;
 
 				double pz = std::get<2>(points[i]);
 				double lz = pt.GetZ();
 
+				// Output
 				std::cout << j << "," << px << "," << py << "," << pz << "," << lx << "," << ly << "," << lz << "," << cls << std::endl;
 
 			}
