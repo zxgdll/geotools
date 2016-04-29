@@ -15,8 +15,9 @@
  *
  * Authored by: Rob Skelly rob@dijital.ca
  */
+// TODO: Better filtering of LAS files for widely distributed surveys.
 
- #include <iomanip>
+#include <iomanip>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -79,11 +80,11 @@ void usage() {
 			<< "    of a list of LAS files, and interpolates the elevation of each survey point from the resulting " << std::endl
 			<< "    TIN. This allows the survey elevation to be compared to the LiDAR surface elevaton." << std::endl
 			<< "    <lasfiles>  Is a list of las files." << std::endl
-			<< "    -p  --  A csv file with x, y and z columns. These are the survey locations." << std::endl
-			<< "    -o  --  The output file." << std::endl
+			<< "    -s  --  A csv file with x, y and z columns. These are the survey locations." << std::endl
+			<< "    -o  --  The output file for survey points." << std::endl
+			<< "    -p  --  The output file for LiDAR points (optional)." << std::endl
 			<< "    -r  --  The radius to search for lidar returns." << std::endl
 			<< "    -c  --  The classes to include; comma-separated list." << std::endl
-			<< "    -i  --  Include the points used to calculate the interpolated elevation in the output." << std::endl
 			<< "    -v  --  Verbose mode." << std::endl;
 }
 
@@ -124,25 +125,32 @@ void loadSamples(std::string &datafile, std::vector<Sample> &points) {
 /**
  * Write the output file. Optionally include the LiDAR returns.
  */
-void writeOutput(std::string &outfile, std::vector<Sample> &samples, bool keepPoints) {
-	std::ofstream out;
-	out.open(outfile.c_str());
-	out << "station_index,station_x,station_y,station_z,station_interp_z";
-	if(keepPoints)
-		out << ",lidar_x,lidar_y,lidar_z,lidar_class";
-	out << std::endl << std::setprecision(9);
+void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sample> &samples) {
+	// Open survey output file.
+	std::ofstream sout;
+	sout.open(outfile.c_str());
+	sout << "station_index,station_x,station_y,station_z,station_interp_z";
+	sout << std::endl << std::setprecision(9);
+	// Open point output file.
+	bool writePoints = !pointfile.empty();
+	std::cerr << pointfile << " " << writePoints << std::endl;
+	std::ofstream pout;
+	if(writePoints) {
+		pout.open(pointfile.c_str());
+		pout << "station_index,lidar_x,lidar_y,lidar_z,lidar_class";
+		pout << std::endl << std::setprecision(9);
+	}	
 	for(int i = 0; i < samples.size(); ++i) {
 		Sample samp = samples[i];
-		out << i << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ;
-		if(keepPoints) {
-			for(int j = 0; j < samples[i].returns.size(); ++j) {
+		sout << i << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ << std::endl;
+		if(writePoints) {
+			for(int j = 0; j < samp.returns.size(); ++j) {
 				Pnt ret = samp.returns[j];
-				out << ret.x << "," << ret.y << "," << ret.z << "," << ret.cls;
+				pout << i << "," << ret.x << "," << ret.y << "," << ret.z << "," << ret.cls << std::endl;
 			}
 		}
-		out << std::endl;
 	}
-	out.close();
+	// Files close on destruction.
 }
 
 /**
@@ -209,8 +217,8 @@ void interpolateSampleZ(Sample &sample) {
 /**
  * Validate the LiDAR point cloud using surveys stored in outfile.
  */
-void validate(std::string &outfile, std::string &datafile, std::vector<std::string> &lasfiles, 
-	std::set<int> &classes, double distance, bool keepPoints, bool quiet) {
+void validate(std::string &outfile, std::string &pointfile, std::string &datafile, std::vector<std::string> &lasfiles, 
+	std::set<int> &classes, double distance, bool quiet) {
 
 	if(outfile.empty())
 		throw "Outfile not given.";
@@ -220,6 +228,8 @@ void validate(std::string &outfile, std::string &datafile, std::vector<std::stri
 		throw "No las files.";
 	if(distance < 0.0)
 		throw "Distance must be greater than zero.";
+	if(outfile == pointfile)
+		throw "Output file and LiDAR point file must be different.";
 
 	if(!quiet && classes.size() == 0)
 		std::cerr << "No classes given; matching all classes." << std::endl;
@@ -277,10 +287,9 @@ void validate(std::string &outfile, std::string &datafile, std::vector<std::stri
 				// If outside of the radius, skip it.
 				if(dist(px, py, lx, ly) > distance)
 					continue;
-
+				// Add to sample returns.
 				double lz = pt.GetZ();
 				it->returns.push_back(Pnt(lx, ly, lz, cls));
-
 			}
 		}
 	}
@@ -290,7 +299,7 @@ void validate(std::string &outfile, std::string &datafile, std::vector<std::stri
 		interpolateSampleZ(*it);
 	
 	std::cerr << "Writing..." << std::endl;
-	writeOutput(outfile, samples, keepPoints);
+	writeOutput(outfile, pointfile, samples);
 
 }
 
@@ -300,20 +309,20 @@ int main(int argc, char **argv) {
 
  		std::vector<std::string> lasfiles;
   		std::string outfile;
+  		std::string pointfile;
   		std::string datafile;
   		std::set<int> classes;
  		double distance = 0.0;
  		bool quiet = true;
- 		bool keepPoints = false;
 
  		for(int i = 1; i < argc; ++i) {
  			std::string p(argv[i]);
  			if(p == "-o") {
  				outfile = argv[++i];
- 			} else if(p == "-p") {
+ 			} else if(p == "-s") {
  				datafile = argv[++i];
- 			} else if(p == "-i") {
- 				keepPoints = true;
+ 			} else if(p == "-p") {
+ 				pointfile = argv[++i];
  			} else if(p == "-r") {
  				distance = atof(argv[++i]);
  			} else if(p == "-v") {
@@ -325,7 +334,7 @@ int main(int argc, char **argv) {
  			}
  		}
 
-		validate(outfile, datafile, lasfiles, classes, distance, keepPoints, quiet);
+		validate(outfile, pointfile, datafile, lasfiles, classes, distance, quiet);
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;
