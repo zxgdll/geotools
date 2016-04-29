@@ -10,8 +10,7 @@ void usage() {
 			<< "    <lasfiles>  Is a list of las files." << std::endl
 			<< "    -p  --  A csv file with x, y and z columns. These are the survey locations." << std::endl
 			<< "    -o  --  The output file." << std::endl
-			<< "    -r  --  The radius to search for lidar returns (not compatible with -n)." << std::endl
-			<< "    -n  --  The number of neighbours (not compatible with -r)." << std::endl
+			<< "    -r  --  The radius to search for lidar returns." << std::endl
 			<< "    -c  --  The classes to include; comma-separated list." << std::endl;
 }
 
@@ -20,7 +19,7 @@ double dist(double x1, double y1, double x2, double y2) {
 }
 
 void validate(std::string &outfile, std::string &datafile, std::vector<std::string> &lasfiles, 
-	std::set<int> &classes, double distance, int neighbours) {
+	std::set<int> &classes, double distance) {
 
 	if(outfile.empty())
 		throw "Outfile not given.";
@@ -28,12 +27,8 @@ void validate(std::string &outfile, std::string &datafile, std::vector<std::stri
 		throw "Data file not given.";
 	if(lasfiles.size() == 0)
 		throw "No las files.";
-	if(distance != 0.0 && neighbours != 0)
-		throw "Distance and neighbours arguments are mutually exclusive.";
 	if(distance < 0.0)
 		throw "Distance must be greater than zero.";
-	if(neighbours < 0)
-		throw "Neighbours must be greater than zero.";
 
 	std::vector<std::tuple<double, double, double> > points;
 	Util::loadXYZSamples(datafile, points);
@@ -85,7 +80,6 @@ int main(int argc, char **argv) {
   		std::string datafile;
   		std::set<int> classes;
  		double distance = 0.0;
- 		int neighbours = 0;
 
  		for(int i = 0; i < argc; ++i) {
  			std::string p(argv[i]);
@@ -95,8 +89,6 @@ int main(int argc, char **argv) {
  				datafile = argv[++i];
  			} else if(p == "-r") {
  				distance = atof(argv[++i]);
- 			} else if(p == "-n") {
- 				neighbours = atoi(argv[++i]);
  			} else if(p == "-c") {
 				Util::intSplit(classes, argv[++i]);
  			} else {
@@ -104,7 +96,7 @@ int main(int argc, char **argv) {
  			}
  		}
 
-		validate(outfile, datafile, lasfiles, classes, distance, neighbours);
+		validate(outfile, datafile, lasfiles, classes, distance);
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;
