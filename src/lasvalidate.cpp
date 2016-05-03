@@ -177,11 +177,17 @@ double sideLength(const geom::Coordinate &a, const geom::Coordinate &b) {
  * Area of the triangle described by 3 coordinates.
  */
 double triArea(const geom::Coordinate &c0, const geom::Coordinate &c1, const geom::Coordinate &c2) {
-	double a = sideLength(c0, c1);
-	double b = sideLength(c1, c2);
-	double c = sideLength(c2, c0);
-	double s = (a + b + c) / 2.0;
-	return sqrt(s * (s - a) * (s - b) * (s - c));
+	
+	std::vector<double> sides = { 
+		sideLength(c0, c1),
+		sideLength(c1, c2),
+		sideLength(c2, c0)
+	};
+	std::sort(sides.begin(), sides.end());
+	double a = sides[0];
+	double b = sides[1];
+	double c = sides[2];
+	return 0.25 * sqrt((a + (b + c)) * (c - (a - b)) * (c + (a - b)) * (a + (b - c)));
 }
 
 /**
