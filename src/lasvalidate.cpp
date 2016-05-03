@@ -234,9 +234,6 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 	if(!quiet)
 		std::cerr << samples.size() << " samples found." << std::endl;
 
-	if(!quiet)
-		std::cerr << "Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3] << std::endl;
-
 	las::ReaderFactory rf;
 	//for(auto it = lasfiles.begin(); it != lasfiles.end(); ++it) {
 	for(std::string &lasfile:lasfiles) {
@@ -290,7 +287,7 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 					continue;
 				// Add to sample returns.
 				double lz = pt.GetZ();
-				it->returns.push_back(Pnt(lx, ly, lz, cls));
+				sample.returns.push_back(Pnt(lx, ly, lz, cls));
 			}
 		}
 	}
