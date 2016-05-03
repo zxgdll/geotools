@@ -38,6 +38,13 @@ namespace las = liblas;
 namespace geom = geos::geom;
 
 /**
+ * Find the distance between two coordinates.
+ */
+double dist(double x1, double y1, double x2, double y2) {
+	return sqrt(_sq(x2-x1) + _sq(y2-y1));
+}
+
+/**
  * A simple class for storing LiDAR returns.
  */
 class Pnt {
@@ -71,6 +78,18 @@ public:
 		this->z = z;
 		this->interpZ = nan("");
 	}
+	Pnt* nearest() {
+		Pnt *near = nullptr;
+		double dst = FLT_MAX;
+		for(Pnt &p:returns) {
+			double dst0 = dist(p.x, p.y, x, y);
+			if(dst0 < dst) {
+				dst = dst0;
+				near = &p;
+			}
+		}
+		return near;
+	}
 };
 
 void usage() {
@@ -85,13 +104,6 @@ void usage() {
 			<< "    -r  --  The radius to search for lidar returns." << std::endl
 			<< "    -c  --  The classes to include; comma-separated list." << std::endl
 			<< "    -v  --  Verbose mode." << std::endl;
-}
-
-/**
- * Find the distance between two coordinates.
- */
-double dist(double x1, double y1, double x2, double y2) {
-	return sqrt(_sq(x2-x1) + _sq(y2-y1));
 }
 
 /**
