@@ -99,17 +99,11 @@ double dist(double x1, double y1, double x2, double y2) {
  * Compute a boundary that contains the sample points. Extend it by the
  * search radius. This is used as a naive LAS file filter.
  */
-void computeBounds(std::vector<double> &bounds, std::vector<Sample> &points, double distance) {
-	for(int i = 0; i < points.size(); ++i) {
-		bounds[0] = _min(points[i].x, bounds[0]);
-		bounds[1] = _min(points[i].y, bounds[1]);
-		bounds[2] = _max(points[i].x, bounds[2]);
-		bounds[3] = _max(points[i].y, bounds[3]);
-	}	
-	bounds[0] -= distance;
-	bounds[1] -= distance;
-	bounds[2] += distance;
-	bounds[3] += distance;
+void computeBounds(std::vector<double> &bounds, Sample &sample, double distance) {
+	bounds[0] = sample.x - distance;
+	bounds[1] = sample.y - distance;
+	bounds[2] = sample.x + distance;
+	bounds[3] = sample.y + distance;
 }
 
 /**
@@ -240,17 +234,14 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 	if(!quiet)
 		std::cerr << samples.size() << " samples found." << std::endl;
 
-	// Set up search bounds for filtering files.
-	std::vector<double> bounds = { FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX };
-	computeBounds(bounds, samples, distance);
-
 	if(!quiet)
 		std::cerr << "Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3] << std::endl;
 
 	las::ReaderFactory rf;
-	for(auto it = lasfiles.begin(); it != lasfiles.end(); ++it) {
+	//for(auto it = lasfiles.begin(); it != lasfiles.end(); ++it) {
+	for(std::string &lasfile:lasfiles) {
 
-		std::ifstream in(it->c_str());
+		std::ifstream in(lasfile.c_str());
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 
@@ -262,14 +253,24 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		if(!quiet)
 			std::cerr << "LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3] << std::endl;
 
-		if(!Util::intersects(bounds, bounds0, 2)) {
-			if(!quiet)
-				std::cerr << "Skipping..." << std::endl;
-			continue;
+		std::vector<double> bounds = { FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX };
+		bool inBounds = false;
+		for(Sample &sample:samples) {
+			computeBounds(bounds, sample, distance);
+			if(Util::intersects(bounds, bounds0, 2)) {
+				inBounds = true;
+				break;
+			}
 		}
 
 		if(!quiet)
-			std::cerr << *it << std::endl;
+			std::cerr << lasfile << std::endl;
+
+		if(!inBounds) {
+			if(!quiet)
+				std::cerr << "No samples in bounds. Skipping..." << std::endl;
+			continue;
+		}
 
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
@@ -281,9 +282,9 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 			double lx = pt.GetX();
 			double ly = pt.GetY();
 
-			for(auto it = samples.begin(); it != samples.end(); ++it) {
-				double px = it->x;
-				double py = it->y;
+			for(Sample &sample:samples) {
+				double px = sample.x;
+				double py = sample.y;
 				// If outside of the radius, skip it.
 				if(dist(px, py, lx, ly) > distance)
 					continue;
@@ -295,8 +296,8 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 	}
 
 	std::cerr << "Interpolating..." << std::endl;
-	for(auto it = samples.begin(); it != samples.end(); ++it) 
-		interpolateSampleZ(*it);
+	for(Sample &sample:samples)
+		interpolateSampleZ(sample);
 	
 	std::cerr << "Writing..." << std::endl;
 	writeOutput(outfile, pointfile, samples);
