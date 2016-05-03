@@ -134,7 +134,7 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 	// Open survey output file.
 	std::ofstream sout;
 	sout.open(outfile.c_str());
-	sout << "station_index,station_x,station_y,station_z,station_interp_z";
+	sout << "station_index,station_x,station_y,station_z,station_interp_z,nearest_x,nearest_y,nearest_z";
 	sout << std::endl << std::setprecision(9);
 	// Open point output file.
 	bool writePoints = !pointfile.empty();
@@ -147,7 +147,15 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 	}	
 	for(int i = 0; i < samples.size(); ++i) {
 		Sample samp = samples[i];
-		sout << i << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ << std::endl;
+		Pnt *near = samp.nearest();
+		sout << i << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ;
+		// If there is a nearest point, output its coords.
+		if(near != nullptr) {
+			sout << "," << near->x << "," << near->y << "," << near->z;
+		} else {
+			sout << ",,,";
+		}
+		sout << std::endl;
 		if(writePoints) {
 			for(int j = 0; j < samp.returns.size(); ++j) {
 				Pnt ret = samp.returns[j];
