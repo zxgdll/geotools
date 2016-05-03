@@ -7,6 +7,9 @@ namespace las = liblas;
 #include <sstream>
 #include <algorithm>
 
+#include "csv.h"
+
+
 /**
  * Provides utility methods for working with LiDAR data.
  */
@@ -204,5 +207,17 @@ public:
 		std::ofstream dst(dstfile.c_str(), std::ios::binary);
 		dst << src.rdbuf();
 	}
+
+	/**
+	 * Load the samples from a csv file. The file must have x, y and z headers.
+	 */
+	static void loadXYZSamples(std::string &datafile, std::vector<std::tuple<double, double, double> > &samples) {
+		io::CSVReader<3> in(datafile.c_str());
+		in.read_header(io::ignore_extra_column, "x", "y", "z");
+		double x, y, z;
+		while(in.read_row(x, y, z))
+			samples.push_back(std::make_tuple(x, y, z));
+	}
+
 
 };
