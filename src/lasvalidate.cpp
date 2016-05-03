@@ -15,7 +15,6 @@
  *
  * Authored by: Rob Skelly rob@dijital.ca
  */
-// TODO: Better filtering of LAS files for widely distributed surveys.
 
 #include <iomanip>
 #include <iostream>
@@ -186,21 +185,21 @@ double interpolateTriangle(const geom::Coordinate *cs, const geom::Geometry *tri
 void interpolateSampleZ(Sample &sample) {
 	using namespace geos::geom;
 	using namespace geos::triangulate;
-	GeometryFactory gf;
+	GeometryFactory::unique_ptr gf = GeometryFactory::create();
 	Coordinate sc(sample.x, sample.y, sample.z);
 	// Convert returns to Points.
 	std::vector<Geometry *> points;
-	for(auto it = sample.returns.begin(); it != sample.returns.end(); ++it)
-		points.push_back(gf.createPoint(Coordinate(it->x, it->y, it->z)));
-	GeometryCollection *mp = gf.createGeometryCollection(points);
+	for(Pnt &pt:sample.returns)
+		points.push_back(gf->createPoint(Coordinate(pt.x, pt.y, pt.z)));
+	GeometryCollection *mp = gf->createGeometryCollection(points);
 	// Build Delaunay.
 	DelaunayTriangulationBuilder dtb;
 	dtb.setSites(*mp);
 	// Interpolate triangles.
-	std::auto_ptr<GeometryCollection> tris = dtb.getTriangles(gf);
+	std::auto_ptr<GeometryCollection> tris = dtb.getTriangles(*gf);
 	for(size_t i = 0; i < tris->getNumGeometries(); ++i) {
 		const Geometry *tri = tris->getGeometryN(i);
-		if(tri->contains(gf.createPoint(sc))) {
+		if(tri->contains(gf->createPoint(sc))) {
 			const Coordinate *scc = &sc;
 			sample.interpZ = interpolateTriangle(scc, tri);
 			break;
