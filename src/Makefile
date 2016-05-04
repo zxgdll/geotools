@@ -1,5 +1,6 @@
 LIB=-L/usr/lib -L/usr/lib/qt4
-CXXFLAGS=-I../include -I/usr/include -I/usr/include/gdal -I/usr/include/qt4 -I/usr/include/qt4/Qt -I/usr/include/qwt -std=c++11
+CXXFLAGS=-I../include -I/usr/include -std=c++11
+# -I/usr/include/gdal -I/usr/include/qt4 -I/usr/include/qt4 -I/usr/include/qt4/Qt -I/usr/include/qwt
 CFLAGS=-I../include -I/usr/include -std=c++11
 CPP=g++
 CC=gcc
@@ -17,6 +18,12 @@ mosaic:
 
 mosaic_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g mosaic.cpp $(LIB) -fopenmp -lgdal -o ../bin/mosaic
+	
+treecrowns:
+	$(CPP) $(CXXFLAGS) -Wall -O3 treecrowns.cpp $(LIB) -fopenmp -lgdal -o ../bin/treecrowns
+
+treecrowns_debug:
+	$(CPP) $(CXXFLAGS) -Wall -g treecrowns.cpp $(LIB) -fopenmp -lgdal -o ../bin/treecrowns
 	
 lasstats:
 	$(CPP) $(CXXFLAGS) -Wall -O3 lasstats.cpp $(LIB) -llas -lgdal -lproj -lgeos -o ../bin/lasstats
