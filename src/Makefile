@@ -1,6 +1,5 @@
-LIB=-L/usr/lib -L/usr/lib/qt4
-CXXFLAGS=-I../include -I/usr/include -std=c++11
-# -I/usr/include/gdal -I/usr/include/qt4 -I/usr/include/qt4 -I/usr/include/qt4/Qt -I/usr/include/qwt
+LIB=-L/usr/lib -L/home/rmskelly/software/lib
+CXXFLAGS=-I../include -I/home/rmskelly/software/include -I/usr/include -I/usr/local/include -I/global/software/eigen-3.2.4/include/eigen3 -std=c++11
 CFLAGS=-I../include -I/usr/include -std=c++11
 CPP=g++
 CC=gcc
@@ -37,6 +36,12 @@ lasmerge:
 lasmerge_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g lasmerge.cpp $(LIB) -llas -lgdal -lgeos  -o ../bin/lasmerge
 	
+lasvalidate:
+	$(CPP) $(CXXFLAGS) -Wall -O3 lasvalidate.cpp $(LIB) -llas -lgeos -o ../bin/lasvalidate
+
+lasvalidate_debug:
+	$(CPP) $(CXXFLAGS) -Wall -g lasvalidate.cpp $(LIB) -llas -lgeos  -o ../bin/lasvalidate
+
 lasgrid:
 	$(CPP) $(CXXFLAGS) -Wall -O3 lasgrid.cpp $(LIB) -llas -lgdal -lboost_system -o ../bin/lasgrid
 

@@ -57,7 +57,7 @@ int crownReverseSort(Crown &a, Crown &b) {
 }
 
 bool isMaximum(Raster<float> &raster, int col, int row, float *height) {
-	static int ks = 7;
+	static int ks = 9;
 	static int ks0 = (int) ks / 2;
 	if(col < ks0 || row < ks0 || col >= raster.cols() - ks0 || row >= raster.rows() - ks0)
 		return false;
