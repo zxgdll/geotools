@@ -1,4 +1,6 @@
 LIB=-L/usr/lib -L/home/rmskelly/software/lib
+#-L/global/software/gdal-1.11.1/lib -L/global/software/boost_1_55_0/lib -L/global/software/libgeotiff-1.4.0/lib -L/global/software/tiff-4.0.3/lib -L/global/software/libLAS-1.7.0/lib
+#-L/home/rmskelly/software/lib
 CXXFLAGS=-I../include -I/home/rmskelly/software/include -I/usr/include -I/usr/local/include -I/global/software/eigen-3.2.4/include/eigen3 -std=c++11
 CFLAGS=-I../include -I/usr/include -std=c++11
 CPP=g++
@@ -37,10 +39,10 @@ lasmerge_debug:
 	$(CPP) $(CXXFLAGS) -Wall -g lasmerge.cpp $(LIB) -llas -lgdal -lgeos  -o ../bin/lasmerge
 	
 lasvalidate:
-	$(CPP) $(CXXFLAGS) -Wall -O3 lasvalidate.cpp $(LIB) -llas -lgeos -o ../bin/lasvalidate
+	$(CPP) $(CXXFLAGS) -Wall -O3 lasvalidate.cpp $(LIB) -lboost_program_options -lboost_thread -lboost_iostreams -lboost_system -lboost_filesystem -llas -lgeos -o ../bin/lasvalidate
 
 lasvalidate_debug:
-	$(CPP) $(CXXFLAGS) -Wall -g lasvalidate.cpp $(LIB) -llas -lgeos  -o ../bin/lasvalidate
+	$(CPP) $(CXXFLAGS) -Wall -g lasvalidate.cpp $(LIB) -lboost_thread -lboost_iostreams -lboost_system -lboost_filesystem -llas -lgeos  -o ../bin/lasvalidate
 
 lasgrid:
 	$(CPP) $(CXXFLAGS) -Wall -O3 lasgrid.cpp $(LIB) -llas -lgdal -lboost_system -o ../bin/lasgrid
