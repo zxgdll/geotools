@@ -67,12 +67,14 @@ public:
  */
 class Sample {
 public:
+	std::string id;
 	double x;
 	double y;
 	double z;
 	double interpZ;
 	std::vector<Pnt> returns;
-	Sample(double x, double y, double z) {
+	Sample(std::string &id, double x, double y, double z) {
+		this->id = id;
 		this->x = x;
 		this->y = y;
 		this->z = z;
@@ -121,10 +123,10 @@ void computeBounds(std::vector<double> &bounds, Sample &sample, double distance)
  * Load samples (surveys) from the CSV file.
  */
 void loadSamples(std::string &datafile, std::vector<Sample> &points) {
-	std::vector<std::tuple<double, double, double> > pts;
-	Util::loadXYZSamples(datafile, pts);
+	std::vector<std::tuple<std::string, double, double, double> > pts;
+	Util::loadIDXYZSamples(datafile, pts);
 	for(auto it = pts.begin(); it != pts.end(); ++it) 
-		points.push_back(Sample(std::get<0>(*it), std::get<1>(*it), std::get<2>(*it)));
+		points.push_back(Sample(std::get<0>(*it), std::get<1>(*it), std::get<2>(*it), std::get<3>(*it)));
 }
 
 /**
@@ -134,7 +136,7 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 	// Open survey output file.
 	std::ofstream sout;
 	sout.open(outfile.c_str());
-	sout << "station_index,station_x,station_y,station_z,station_interp_z,nearest_x,nearest_y,nearest_z,nearest_dist" << std::endl << std::setprecision(9);
+	sout << "station_index,station_id,station_x,station_y,station_z,station_interp_z,nearest_x,nearest_y,nearest_z,nearest_dist" << std::endl << std::setprecision(9);
 	// Open point output file.
 	bool writePoints = !pointfile.empty();
 	std::ofstream pout;
@@ -146,7 +148,7 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 	for(unsigned int i = 0; i < samples.size(); ++i) {
 		Sample samp = samples[i];
 		Pnt *near = samp.nearest();
-		sout << i << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ;
+		sout << i << "," << samp.id << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ;
 		// If there is a nearest point, output its coords.
 		if(near != nullptr) {
 			sout << "," << near->x << "," << near->y << "," << near->z << "," << dist(samp.x, samp.y, near->x, near->y);

@@ -219,5 +219,14 @@ public:
 			samples.push_back(std::make_tuple(x, y, z));
 	}
 
+	static void loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::string, double, double, double> > &samples) {
+		io::CSVReader<4> in(datafile.c_str());
+		in.read_header(io::ignore_extra_column, "id", "x", "y", "z");
+		std::string id;
+		double x, y, z;
+		while(in.read_row(id, x, y, z))
+			samples.push_back(std::make_tuple(id, x, y, z));
+	}
+
 
 };
