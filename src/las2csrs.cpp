@@ -494,31 +494,37 @@ int test(int argc, char **argv) {
 		std::cerr << "Too few arguments." << std::endl;
 		return 1;
 	}
+	try {
 
-	int i = 1;
-	std::string ffrom(argv[++i]);
-	double efrom = atof(argv[++i]);
-	double eto = atof(argv[++i]);
-	int fsrid = atoi(argv[++i]);
-	int tsrid = atoi(argv[++i]);
-	double x = atof(argv[++i]);
-	double y = atof(argv[++i]);
-	double z = atof(argv[++i]);
+		int i = 1;
+		std::string ffrom(argv[++i]);
+		double efrom = atof(argv[++i]);
+		double eto = atof(argv[++i]);
+		int fsrid = atoi(argv[++i]);
+		int tsrid = atoi(argv[++i]);
+		double x = atof(argv[++i]);
+		double y = atof(argv[++i]);
+		double z = atof(argv[++i]);
 
-	Transformer trans(ffrom, efrom, eto, fsrid, tsrid);
+		Transformer trans(ffrom, efrom, eto, fsrid, tsrid);
 
-	Grid<double> xx(1,1);
-	Grid<double> yy(1,1);
-	Grid<double> zz(1,1);
+		Grid<double> xx(1,1);
+		Grid<double> yy(1,1);
+		Grid<double> zz(1,1);
 
-	xx[0] = x;
-	yy[0] = y;
-	zz[0] = z;
-	double bounds[6];
+		xx.set(0, x);
+		yy.set(0, y);
+		zz.set(0, z);
 
-	trans.transformPoints(xx, yy, zz, 1, bounds);
+		double bounds[6];
 
-	std::cout << std::setprecision(12) << xx[0] << " " << yy[0] << " " << zz[0] << std::endl;
+		trans.transformPoints(xx, yy, zz, 1, bounds);
+		std::cout << std::setprecision(12) << xx[0] << " " << yy[0] << " " << zz[0] << std::endl;
+
+	} catch(const char *e) {
+		std::cerr << e << std::endl;
+		return 1;
+	}
 
 	return 0;
 }
