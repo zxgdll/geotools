@@ -6,30 +6,42 @@
  */
 
 #include <queue>
+#include <iostream>
 
 #include "Raster.hpp"
 
-// Create ID grid (int)
-// Find maxima
-// Iterate over maxima;
-//   create ID, add to queue
-// For each in queue:
-//   check surrounding pixels
-//     if higher, stop
-//     if lower than [dropoff], stop
-//     else set id, add to queue
-
 static unsigned int _crown_id = 0;
+
+class Rule {
+public:
+	float minHeight;
+	float maxHeight;
+	float dropOff;
+	float radius;
+	Rule(float minHeight, float maxHeight, float dropOff, float radius) {
+		this->minHeight = minHeight;
+		this->maxHeight = maxHeight;
+		this->dropOff = dropOff;
+		this->radius = radius;
+	}
+	bool match(float height) {
+		return height >= this->minHeight && height < this->maxHeight;
+	}
+};
 
 class Px {
 public:
+	float crownHeight;
 	int col;
 	int row;
 	unsigned int id;
-	Px(int col, int row, unsigned int id) {
+	unsigned int radius;
+	Px(float crownHeight, int col, int row, unsigned int id, unsigned int radius = 0) {
+		this->crownHeight = crownHeight;
 		this->col = col;
 		this->row = row;
 		this->id = id;
+		this->radius = radius;
 	}
 };
 
@@ -56,14 +68,33 @@ int crownReverseSort(Crown &a, Crown &b) {
 	return 0;
 }
 
-bool isMaximum(Raster<float> &raster, int col, int row, float *height) {
-	static int ks = 9;
-	static int ks0 = (int) ks / 2;
+bool isMaximum(Raster<float> &raster, int col, int row, std::vector<Rule> &rules, float *height) {
+
+	*height = raster.get(col, row);
+	if(*height == raster.nodata())
+		return false;
+
+	float dropOff = 0.0;
+	float radius = 0.0;
+	bool found = false;
+	for(Rule &rule:rules) {
+		if(rule.match(*height)) {
+			dropOff = rule.dropOff;
+			radius = rule.radius;
+			found = true;
+			break;
+		}
+	}
+	if(!found) return false;
+
+	int ks = _max(3, (int) (radius / raster.resolution() / 2.0) * 2 + 1);
+	int ks0 = (int) ks / 2;
+
 	if(col < ks0 || row < ks0 || col >= raster.cols() - ks0 || row >= raster.rows() - ks0)
 		return false;
-	static Grid<float> k(ks, ks);
+
+	Grid<float> k(ks, ks);
 	raster.readBlock(col - ks0, row - ks0, ks, ks, k);
-	*height = k.get(ks0, ks0);
 	for(int r = 0; r < ks; ++r) {
 		for(int c = 0; c < ks; ++c) {
 			if(r == ks0 && c == ks0) continue;
@@ -74,31 +105,46 @@ bool isMaximum(Raster<float> &raster, int col, int row, float *height) {
 	return true;
 }
 
-void findMaxima(Raster<float> &raster, std::vector<Crown> &crowns) {
+void findMaxima(Raster<float> &raster, std::vector<Crown> &crowns, std::vector<Rule> &rules) {
 	float height = nan("");
 	for(int r = 0; r < raster.rows(); ++r) {
 		for(int c = 0; c < raster.cols(); ++c) {
-			if(isMaximum(raster, c, r, &height))
+			if(isMaximum(raster, c, r, rules, &height))
 				crowns.push_back(Crown(c, r, height));
 		}
 	}
 }
 
-void treetops(std::string &inraster, std::string &outshp, double dropoff) {
+void treetops(std::string &inraster, std::string &crownshp, std::string &topshp, double dropoff) {
 
+	std::vector<Rule> rules = {
+		Rule(3.0, 6.0, 0.65, 5.0),
+		Rule(6.0, 35.0, 0.65, 5.0),
+		Rule(35.0, 100.0, 0.65, 5.0)
+	};
+
+	std::cerr << "Loading " << inraster << std::endl;
 	static Grid<float> k(3, 3);
 	Raster<float> raster(inraster);
 	Grid<int> ids(raster.cols(), raster.rows());
 	ids.fill(0);
 
 	std::vector<Crown> crowns;
-	findMaxima(raster, crowns);
+	findMaxima(raster, crowns, rules);
 
-	//std::sort(crowns.begin(), crowns.end(), crownReverseSort);
+	std::cerr << "Building initial queue." << std::endl;
+
+	// A map to keep track of the number of cells linked to a given crown ID.
+	// When the count falls to zero, the shape can be output, and the entry deleted.
+	//std::map<unsigned int,  unsigned int> cellCounts;
 
 	std::queue<Px> cells;
-	for(Crown &crn:crowns)
-		cells.push(Px(crn.col, crn.row, crn.id));
+	for(Crown &crn:crowns) {
+		cells.push(Px(crn.height, crn.col, crn.row, crn.id));
+		//cellCounts[crn.id] = 1;
+	}
+
+	std::cerr << "Finding crowns." << std::endl;
 
 	while(!cells.empty()) {
 		Px px = cells.front();
@@ -112,19 +158,26 @@ void treetops(std::string &inraster, std::string &outshp, double dropoff) {
 		ids.set(px.col, px.row, px.id);
 		for(int r = 0; r < 3; ++r) {
 			for(int c = 0; c < 3; ++c) {
-				if(c == 1 && r ==1) continue;
+				if(c == 1 && r ==1) 
+					continue;
 				float height0 = k.get(c, r);
-				if(height0 > height) continue;
-				if(height0 < (height * dropoff)) continue;
-				//ids.set(px.col - 1 + c, px.row - 1 + r, px.id);
-				cells.push(Px(px.col - 1 + c, px.row - 1 + r, px.id));
+				if(height0 > height 
+					|| height0 < (px.crownHeight * dropoff)) 
+					continue;
+				cells.push(Px(px.crownHeight, px.col - 1 + c, px.row - 1 + r, px.id, px.radius + 1));
+				//cellCounts[px.id]++;
 			}
 		}
+		/*
+		if(cellCounts[px.id] == 0) {
+
+		}
+		*/
 	}
 
 	std::string proj;
 	raster.projection(proj);
-	Raster<int> output(outshp, raster.minx(), raster.miny(), raster.maxx(), raster.maxy(),
+	Raster<int> output(crownshp, raster.minx(), raster.miny(), raster.maxx(), raster.maxy(),
 				raster.resolution(), 0, proj);
 	output.writeBlock(ids);
 
@@ -133,7 +186,8 @@ void treetops(std::string &inraster, std::string &outshp, double dropoff) {
 int main(int argc, char **argv) {
 
 	std::string inraster;
-	std::string outshp;
+	std::string crownshp;
+	std::string topshp;
 	double dropoff = 0.65; // Percentage of elevation to drop without stop.
 
 	int i = 1;
@@ -144,12 +198,20 @@ int main(int argc, char **argv) {
 		} else if(arg == "-i") {
 			inraster = argv[++i];
 		} else if(arg == "-o") {
-			outshp = argv[++i];
+			crownshp = argv[++i];
+		} else if(arg == "-t") {
+			topshp = argv[++i];
 		}
 	}
 
-	treetops(inraster, outshp, dropoff);
+	try {
+		treetops(inraster, crownshp, topshp, dropoff);
+	} catch(const char *e) {
+		std::cerr << e << std::endl;
+		return 1;
+	}
 
+	return 0;
 }
 
 
