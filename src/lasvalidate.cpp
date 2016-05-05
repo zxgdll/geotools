@@ -134,11 +134,9 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 	// Open survey output file.
 	std::ofstream sout;
 	sout.open(outfile.c_str());
-	sout << "station_index,station_x,station_y,station_z,station_interp_z,nearest_x,nearest_y,nearest_z";
-	sout << std::endl << std::setprecision(9);
+	sout << "station_index,station_x,station_y,station_z,station_interp_z,nearest_x,nearest_y,nearest_z,nearest_dist" << std::endl << std::setprecision(9);
 	// Open point output file.
 	bool writePoints = !pointfile.empty();
-	std::cerr << pointfile << " " << writePoints << std::endl;
 	std::ofstream pout;
 	if(writePoints) {
 		pout.open(pointfile.c_str());
@@ -151,9 +149,9 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 		sout << i << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ;
 		// If there is a nearest point, output its coords.
 		if(near != nullptr) {
-			sout << "," << near->x << "," << near->y << "," << near->z;
+			sout << "," << near->x << "," << near->y << "," << near->z << "," << dist(samp.x, samp.y, near->x, near->y);
 		} else {
-			sout << ",,,";
+			sout << ",,,,";
 		}
 		sout << std::endl;
 		if(writePoints) {
@@ -263,6 +261,9 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 	//for(auto it = lasfiles.begin(); it != lasfiles.end(); ++it) {
 	for(std::string &lasfile:lasfiles) {
 
+		if(!quiet)
+			std::cerr << lasfile << std::endl;
+
 		std::ifstream in(lasfile.c_str());
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
@@ -284,9 +285,6 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 				break;
 			}
 		}
-
-		if(!quiet)
-			std::cerr << lasfile << std::endl;
 
 		if(!inBounds) {
 			if(!quiet)
