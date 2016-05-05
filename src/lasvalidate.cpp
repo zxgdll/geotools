@@ -145,7 +145,7 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 		pout << "station_index,lidar_x,lidar_y,lidar_z,lidar_class";
 		pout << std::endl << std::setprecision(9);
 	}	
-	for(int i = 0; i < samples.size(); ++i) {
+	for(unsigned int i = 0; i < samples.size(); ++i) {
 		Sample samp = samples[i];
 		Pnt *near = samp.nearest();
 		sout << i << "," << samp.x << "," << samp.y << "," << samp.z << "," << samp.interpZ;
@@ -157,7 +157,7 @@ void writeOutput(std::string &outfile, std::string &pointfile, std::vector<Sampl
 		}
 		sout << std::endl;
 		if(writePoints) {
-			for(int j = 0; j < samp.returns.size(); ++j) {
+			for(unsigned int j = 0; j < samp.returns.size(); ++j) {
 				Pnt ret = samp.returns[j];
 				pout << i << "," << ret.x << "," << ret.y << "," << ret.z << "," << ret.cls << std::endl;
 			}
