@@ -11,6 +11,8 @@
 #endif
 
 #define PI 3.14159265358979323846
+#define E 2.71828
+
 #define _min(a, b) ((a) > (b) ? (b) : (a))
 #define _max(a, b) ((a) < (b) ? (b) : (a))
 #define _sq(a) ((a) * (a))

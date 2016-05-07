@@ -8,11 +8,11 @@
 #ifndef INCLUDE_RASTER_HPP_
 #define INCLUDE_RASTER_HPP_
 
-#include "geotools.h"
+#include <gdal/gdal_priv.h>
+#include <gdal/ogr_spatialref.h>
+#include <eigen3/Eigen/Core>
 
-#include <gdal_priv.h>
-#include <ogr_spatialref.h>
-#include <Eigen/Core>
+#include "geotools.h"
 
 /**
  * A convenience class for managing a grid of values.
@@ -24,6 +24,8 @@ private:
 	int m_cols;
 	int m_rows;
 	T *m_grid;
+	T m_nodata;
+
 	void (*m_item_dealloc)(T);
 
 	/**
@@ -40,6 +42,7 @@ public:
 		m_cols = -1;
 		m_rows = -1;
 		m_item_dealloc = nullptr;
+		m_nodata = -9999.0;
 	}
 
 	Grid(int cols, int rows) : Grid() {
@@ -161,6 +164,57 @@ public:
 				this(c, r) = mtx(r, c);
 		}
 	}
+
+	T nodata() {
+		return m_nodata;
+	}
+
+	void nodata(T nodata) {
+		m_nodata = nodata;
+	}
+
+	/**
+	 * Load the contents of a single block into the given Grid instance.
+	 */
+	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
+		for(int r = 0; r < rows; ++r) {
+			for(int c = 0; c < cols; ++c)
+				block.set(c, r, get(c + col, r + row));
+		}
+	}
+
+	void readBlock(int col, int row, Grid<T> &block) {
+		readBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
+	}
+
+	/**
+	 * Write a part of the given block to the raster.
+	 */
+	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
+		for(int r = 0; r < rows; ++r) {
+			for(int c = 0; c < cols; ++c)
+				set(c + col, r + row, block.get(c, r));
+		}
+	}
+
+	void writeBlock(int col, int row, Grid<T> &block) {
+		writeBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
+	}
+
+	/**
+	 * Write the full block to the raster.
+	 */
+	void writeBlock(Grid<T> &block) {
+		writeBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+	}
+
+	/**
+	 * Read the full block from the raster.
+	 */
+	void readBlock(Grid<T> &block) {
+		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+	}
+
 
 };
 
