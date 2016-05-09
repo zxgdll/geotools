@@ -82,7 +82,7 @@ bool isMaximum(Grid<float> &raster, int col, int row, std::vector<Rule> &rules, 
 	for(Rule &rule:rules) {
 		if(rule.match(*height)) {
 			dropOff = rule.dropOff;
-			radius = rule.radius;
+			//radius = rule.radius;
 			found = true;
 			break;
 		}
