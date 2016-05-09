@@ -42,7 +42,7 @@ public:
 		m_cols = -1;
 		m_rows = -1;
 		m_item_dealloc = nullptr;
-		m_nodata = -9999.0;
+		m_nodata = 0; // TODO: Choose a nodata based on type?
 	}
 
 	Grid(int cols, int rows) : Grid() {
@@ -478,6 +478,15 @@ public:
 	bool inited() {
 		return m_inited;
 	}
+
+	void fill(T value) {
+		Block<T> blk = block();
+		Grid<T> grd(blk.cols(), blk.rows());
+		grd.fill(value);
+		while(blk.next())
+			writeBlock(blk.startCol(), blk.startRow(), grd);
+	}
+
 	/**
 	 * Return a "Block" which just stores indices of pixels that
 	 * comprise a block. Calling next on the block adjusts the indices

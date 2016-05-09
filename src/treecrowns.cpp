@@ -9,6 +9,7 @@
 #include <iostream>
 
 #include "Raster.hpp"
+#include "Vector.hpp"
 
 static unsigned int _crown_id = 0;
 
@@ -61,34 +62,25 @@ public:
 	}
 };
 
-int crownReverseSort(Crown &a, Crown &b) {
-	if(a.height > b.height) {
-		return -1;
-	} else if(a.height < b.height) {
-		return 1;
+Rule *getRuleForHeight(std::vector<Rule> &rules, double height) {
+	for(Rule &rule:rules) {
+		if(rule.match(height))
+			return &rule;
 	}
-	return 0;
+	return nullptr;
 }
 
-bool isMaximum(Grid<float> &raster, int col, int row, std::vector<Rule> &rules, double *height, double resolution) {
+bool isMaximum(Raster<float> &raster, int col, int row, std::vector<Rule> &rules, double *height, double resolution) {
 
 	*height = raster.get(col, row);
 	if(*height == raster.nodata())
 		return false;
 
-	double dropOff = 0.0;
-	double radius = 0.0;
-	bool found = false;
-	for(Rule &rule:rules) {
-		if(rule.match(*height)) {
-			dropOff = rule.dropOff;
-			//radius = rule.radius;
-			found = true;
-			break;
-		}
-	}
-	if(!found) return false;
+	Rule *rule = getRuleForHeight(rules, *height);
+	if(rule == nullptr)
+		return false;
 
+	double radius = rule->radius;
 	int ks = _max(3, (int) (radius / resolution / 2.0) * 2 + 1);
 	int ks0 = (int) ks / 2;
 
@@ -105,7 +97,7 @@ bool isMaximum(Grid<float> &raster, int col, int row, std::vector<Rule> &rules, 
 	return true;
 }
 
-void findMaxima(Grid<float> &raster, std::vector<Crown> &crowns, std::vector<Rule> &rules, double resolution) {
+void findMaxima(Raster<float> &raster, std::vector<Crown> &crowns, std::vector<Rule> &rules, double resolution) {
 	double height = nan("");
 	for(int r = 0; r < raster.rows(); ++r) {
 		for(int c = 0; c < raster.cols(); ++c) {
@@ -126,9 +118,7 @@ void gaussianWeights(double *weights, int size, double sigma) {
 	}
 }
 
-void smooth(Grid<float> &raster, double sigma, int size) {
-	Grid<float> smoothed(raster.cols(), raster.rows());
-	smoothed.writeBlock(raster);
+void smooth(Raster<float> &raster, Raster<float> &smoothed, double sigma, int size) {
 	double weights[size*size];
 	gaussianWeights(weights, size, sigma);
 	for(int r = 0; r < raster.rows(); ++r) {
@@ -145,110 +135,154 @@ void smooth(Grid<float> &raster, double sigma, int size) {
 			smoothed.set(c, r, t);
 		}
 	}
-	raster.writeBlock(smoothed);
 }
 
-void treetops(std::string &inraster, std::string &crownshp, std::string &topshp, double dropoff) {
+void treetops(std::string &inraster, std::string &smraster, std::string &crownshp, std::string &topshp) {
+
+	if(inraster.empty())
+		throw "Input raster cannot be empty.";
+	if(crownshp.empty())
+		throw "The crown output name cannot be empty.";
+	if(topshp.empty())
+		throw "The treetop output name cannot be empty.";
+	if(smraster.empty())
+		throw "The smoothed raster output name cannot be empty.";
+	if(smraster == topshp || topshp == crownshp || smraster == crownshp)
+		throw "The output file names are in conflict.";
 
 	std::vector<Rule> rules = {
-		Rule(3.0, 6.0, 0.65, 5.0),
-		Rule(6.0, 35.0, 0.65, 5.0),
-		Rule(35.0, 100.0, 0.65, 5.0)
+		Rule(3.0, 6.0, 0.65, 1.0),
+		Rule(6.0, 35.0, 0.65, 1.0),
+		Rule(35.0, 100.0, 0.65, 1.0)
 	};
 
 	std::cerr << "Loading " << inraster << std::endl;
+
+	// Work grid.
 	static Grid<float> k(3, 3);
-	Raster<float> src(inraster);
-	Grid<float> raster(src.cols(), src.rows());
-	src.readBlock(raster);
-	Grid<int> ids(raster.cols(), raster.rows());
-	ids.fill(0);
 
+	// Input raster.
+	Raster<float> raster(inraster);
 
+	// Output raster.
+	std::string proj;
+	raster.projection(proj);
+
+	// To store the IDs and extents of the crowns.
+	Raster<int> ids(crownshp, raster.minx(), raster.miny(), raster.maxx(), raster.maxy(),
+				raster.resolution(), 0, proj);
+	// So track which cells are visited (faster than using IDs).
+	Grid<char> visited(raster.cols(), raster.rows());
+	visited.fill(0);
+
+	// Gaussian-smoothed version of source raster.
+	Raster<float> smoothed(smraster, raster);
+
+	// Treetops vector file.
+	remove(topshp.c_str());
+	std::map<std::string, int> attribs;
+	attribs["id"] = Vector::INTEGER;
+	attribs["height"] = Vector::DOUBLE;
+	Vector tops(topshp, Vector::POINT, proj, attribs);
+
+	// Tree crown objects.
 	std::vector<Crown> crowns;
-	smooth(raster, 0.84089642, 7);
-	//std::string smoo = "../data/smoothed.tif";
-	//Raster<float> smoothed(smoo, src);
-	//smoothed.writeBlock(raster);
-	findMaxima(raster, crowns, rules, src.resolution());
+
+	// Smooth the input raster.
+	smooth(raster, smoothed, 0.84089642, 7);
+
+	// Find the treetops.
+	findMaxima(smoothed, crowns, rules, raster.resolution());
 
 	std::cerr << "Building initial queue." << std::endl;
 
-	// A map to keep track of the number of cells linked to a given crown ID.
-	// When the count falls to zero, the shape can be output, and the entry deleted.
-	//std::map<unsigned int,  unsigned int> cellCounts;
-
+	// Create a queue of cells contraining tree tops (maxima).
 	std::queue<Px> cells;
 	for(Crown &crn:crowns) {
 		cells.push(Px(crn.height, crn.col, crn.row, crn.id));
-		//cellCounts[crn.id] = 1;
+		std::unique_ptr<Geom> geom = tops.addPoint(
+			raster.toX(crn.col) + raster.resolutionX() / 2.0,
+			raster.toY(crn.row) + raster.resolutionY() / 2.0
+		);
+		geom->setAttribute("id", (int) crn.id);
+		geom->setAttribute("height", crn.height);
 	}
 
 	std::cerr << "Finding crowns. " << crowns.size() << std::endl;
 
+	// Iterate over the cell queue.
 	while(!cells.empty()) {
 		Px px = cells.front();
 		cells.pop();
-		if(px.col < 1 || px.row < 1 || px.col >= raster.cols() - 1 || px.row >= raster.rows() - 1)
+		// Ignore edge cells. Skip visited cells.
+		if(px.col < 1 || px.row < 1
+				|| px.col >= smoothed.cols() - 1 || px.row >= smoothed.rows() - 1
+				|| visited.get(px.col, px.row))
 			continue;
-		if(ids.get(px.col, px.row) != 0)
-			continue;
-		raster.readBlock(px.col - 1, px.row - 1, 3, 3, k);
-		double height = k.get(1, 1);
+		// Update the output with the id of the crown.
 		ids.set(px.col, px.row, px.id);
+		visited.set(px.col, px.row, 1);
+		// Get the rule for the current crown height (may be null).
+		Rule *rule = getRuleForHeight(rules, px.crownHeight);
+		if(rule == nullptr)
+			continue;
+		// Load the local grid.
+		smoothed.readBlock(px.col - 1, px.row - 1, 3, 3, k);
+		// Get the height at the center of the kernel.
+		double height = k.get(1, 1);
+		// Iterate over kernel.
 		for(int r = 0; r < 3; ++r) {
 			for(int c = 0; c < 3; ++c) {
-				if(c == 1 && r ==1) 
-					continue;
+				if(c == 1 && r ==1) continue; // Skip center.
 				double height0 = k.get(c, r);
-				if(height0 > height 
-					|| height0 < (px.crownHeight * dropoff)) 
+				// If the pixel height is high, or it's lower than the dropoff rate, ignore.
+				if(height0 > height || height0 < (px.crownHeight * rule->dropOff))
 					continue;
+				// Else add to queue.
 				cells.push(Px(px.crownHeight, px.col - 1 + c, px.row - 1 + r, px.id, px.radius + 1));
-				//cellCounts[px.id]++;
 			}
 		}
-		//if(cellCounts[px.id] == 0) {
-
-		//}
 	}
+}
 
-
-	std::string proj;
-	src.projection(proj);
-	Raster<int> output(crownshp, src.minx(), src.miny(), src.maxx(), src.maxy(),
-				src.resolution(), 0, proj);
-	output.writeBlock(ids);
-
+void usage() {
+	std::cerr << "Usage: treecrowns <options>\n"
+			<< "This program delineates tree crowns from a canopy height model" << std::endl
+			<< " -i -- The input raster; a LiDAR-derived canopy height model."  << std::endl
+			<< " -t -- The treetop vector file. A shapefile."  << std::endl
+			<< " -o -- The crown file. A raster containing cells set to the crown ID."  << std::endl
+			<< " -s -- The smoothed crown file. This is an intermediate product, but"  << std::endl
+			<< "       the user may wish to inspect it to tweak the parameters." << std::endl;
 }
 
 int main(int argc, char **argv) {
 
-	std::string inraster;
-	std::string crownshp;
-	std::string topshp;
-	double dropoff = 0.65; // Percentage of elevation to drop without stop.
+	std::string inraster; // Input raster.
+	std::string crownshp; // Crowns output.
+	std::string topshp;   // Treetops output.
+	std::string smraster; // Smoothed raster (optional).
 
 	int i = 1;
 	for(; i < argc; ++i) {
 		std::string arg = argv[i];
-		if(arg == "-d") {
-			dropoff = atof(argv[++i]);
-		} else if(arg == "-i") {
+		if(arg == "-i") {
 			inraster = argv[++i];
 		} else if(arg == "-o") {
 			crownshp = argv[++i];
 		} else if(arg == "-t") {
 			topshp = argv[++i];
+		} else if(arg == "-s") {
+			smraster = argv[++i];
 		}
 	}
 
-	//try {
-		treetops(inraster, crownshp, topshp, dropoff);
-	//} catch(const char *e) {
-	//	std::cerr << e << std::endl;
-	//	return 1;
-	//}
+	try {
+		treetops(inraster, smraster, crownshp, topshp);
+	} catch(const char *e) {
+		std::cerr << e << std::endl;
+		usage();
+		return 1;
+	}
 
 	return 0;
 }
