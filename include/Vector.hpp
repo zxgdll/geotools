@@ -15,14 +15,21 @@
 #include "gdal/ogr_geometry.h"
 #include "gdal/ogrsf_frmts.h"
 
+/**
+ * Holds information about a newly-added geometry, allowing the
+ * caller to add attributes or (potentially) modify the 
+ * geometry before it is committed to a vector layer.
+ */
 class Geom {
 private:
 	OGRFeature *m_feat;
-public:
+
+protected:
 	Geom(OGRFeature *feat) {
 		m_feat = feat;
 	}
 
+public:
 	void setAttribute(const char *name, int value) {
 		m_feat->SetField(name, value);
 	}
@@ -40,6 +47,11 @@ public:
 	}
 };
 
+/**
+ * Represents a vector file with a single layer, with a single
+ * geometry type that allows the caller to easily create and
+ * add geometries with attributes to a data set.
+ */
 class Vector {
 protected:
 	OGRDataSource *m_ds;
@@ -47,39 +59,50 @@ protected:
 	int m_type;
 	std::map<std::string, int> m_atypes;
 
+	OGRwkbGeometryType getGeomType(int type) {
+		switch(type) {
+		case POINT:
+			return wkbPoint;
+		case LINE:
+			return wkbLineString;
+		case POLYGON:
+			return wkbPolygon;
+		default:
+			throw "Unknown or unimplemented geometry type.";
+		}
+	}
+	
 public:
+	/** Point geometry type. */
 	static const int POINT = 1;
+	/** Line geometry type. */
 	static const int LINE = 2;
+	/** Polygon geometry type. */
 	static const int POLYGON = 3;
-
+	// TODO: More geometry types.
+	
+	/** String attribute type. */
 	static const int STRING = 1;
+	/** Integer attribute type. */
 	static const int INTEGER = 2;
+	/** Double attribute type. */
 	static const int DOUBLE = 3;
-
+	// TODO: More attribute types.
+	
+	/**
+	 * Construct a Vector with the given output file name, geometry 
+	 * type and projection information.
+	 */
 	Vector(std::string &filename, int type, std::string &proj) {
 		m_type = 0;
 		m_layer = nullptr;
 		m_ds = nullptr;
-
-		OGRRegisterAll();
-
-		OGRwkbGeometryType gtype = wkbNone;
-		switch(type) {
-		case POINT:
-			gtype = wkbPoint;
-			break;
-		case LINE:
-			gtype = wkbLineString;
-			break;
-		case POLYGON:
-			gtype = wkbPolygon;
-			break;
-		default:
-			throw "Unknown geometry type.";
-		}
-
 		m_type = type;
 
+		OGRRegisterAll();
+	
+		OGRwkbGeometryType gtype = setGeomType(type); //wkbNone;
+		
 		OGRSpatialReference *gproj = 0;
 		if(!proj.empty()) {
 			char *p = (char *) malloc((unsigned long) proj.size() + 1);
@@ -95,11 +118,13 @@ public:
 			throw "Failed to create vector data source. It may already exist.";
 		if(!(m_layer = m_ds->CreateLayer("layer", gproj, gtype, 0)))
 			throw "Failed to create vector layer.";
-
-		OGRFieldDefn idField("gid", OFTInteger);
-		m_layer->CreateField(&idField);
 	}
 
+	/**
+	 * Construct a Vector with the given output file name, geometry 
+	 * type and projection information. Also configures fields from 
+	 * the given mapping of attribute properties.
+	 */
 	Vector(std::string &filename, int type, std::string &proj, std::map<std::string, int> &attributes) :
 		Vector(filename, type, proj) {
 		for(auto it = attributes.begin(); it != attributes.end(); ++it) {
@@ -123,6 +148,10 @@ public:
 		}
 	}
 
+	/**
+	 * Add a point to the geometry with the given coordinates. Returns
+	 * a unique_ptr to the Geom object, to which attributes can be added.
+	 */
 	std::unique_ptr<Geom> addPoint(double x, double y, double z = 0.0) {
 		if(m_type != POINT) throw "This is not a point layer.";
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
