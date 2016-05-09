@@ -13,6 +13,10 @@
 
 static unsigned int _crown_id = 0;
 
+/**
+ * A rule provides parameters for processing crowns given
+ * their properties, such as height.
+ */
 class Rule {
 public:
 	double minHeight;
@@ -30,6 +34,9 @@ public:
 	}
 };
 
+/**
+ * Represents a single cell (pixel) in the input/output rasters.
+ */
 class Px {
 public:
 	double crownHeight;
@@ -46,6 +53,9 @@ public:
 	}
 };
 
+/** 
+ * Represents a single crown.
+ */
 class Crown {
 public:
 	unsigned int id;
@@ -62,6 +72,10 @@ public:
 	}
 };
 
+/**
+ * Returns a rule corresponding to the given crown height.
+ */
+// TODO: Don't use a pointer; use a reference to a special no-rule Rule.
 Rule *getRuleForHeight(std::vector<Rule> &rules, double height) {
 	for(Rule &rule:rules) {
 		if(rule.match(height))
@@ -70,6 +84,9 @@ Rule *getRuleForHeight(std::vector<Rule> &rules, double height) {
 	return nullptr;
 }
 
+/**
+ * Returns true if the given cell is a maximum, according to the given Rule.
+ */
 bool isMaximum(Raster<float> &raster, int col, int row, std::vector<Rule> &rules, double *height, double resolution) {
 
 	*height = raster.get(col, row);
@@ -97,6 +114,9 @@ bool isMaximum(Raster<float> &raster, int col, int row, std::vector<Rule> &rules
 	return true;
 }
 
+/**
+ * Find the maxima in the raster and append a Crown object to the list for each one.
+ */
 void findMaxima(Raster<float> &raster, std::vector<Crown> &crowns, std::vector<Rule> &rules, double resolution) {
 	double height = nan("");
 	for(int r = 0; r < raster.rows(); ++r) {
@@ -107,6 +127,10 @@ void findMaxima(Raster<float> &raster, std::vector<Crown> &crowns, std::vector<R
 	}
 }
 
+/**
+ * Compute the table of Gaussian weights given the size of the table
+ * and the std. deviation.
+ */
 void gaussianWeights(double *weights, int size, double sigma) {
 	if(size % 2 == 0) ++size;
 	for(int r = 0; r < size; ++r) {
@@ -118,6 +142,9 @@ void gaussianWeights(double *weights, int size, double sigma) {
 	}
 }
 
+/**
+ * Smooth the raster and write the smoothed version to the output raster.
+ */
 void smooth(Raster<float> &raster, Raster<float> &smoothed, double sigma, int size) {
 	double weights[size*size];
 	gaussianWeights(weights, size, sigma);
@@ -137,6 +164,12 @@ void smooth(Raster<float> &raster, Raster<float> &smoothed, double sigma, int si
 	}
 }
 
+/**
+ * Delineate and output the treetops present in the given canopy height model.
+ * Outputs a tree tops vector (with heights, IDs), a smoothed CHM and a raster containing 
+ * the crowns (with IDs).
+ */
+// TODO: Output crown vector.
 void treetops(std::string &inraster, std::string &smraster, std::string &crownshp, std::string &topshp) {
 
 	if(inraster.empty())
