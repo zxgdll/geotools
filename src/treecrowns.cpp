@@ -213,6 +213,7 @@ void treetops(std::string &inraster, std::string &smraster, std::string &crownsh
 
 	// Treetops vector file.
 	remove(topshp.c_str());
+	// Configure attributes.
 	std::map<std::string, int> attribs;
 	attribs["id"] = Vector::INTEGER;
 	attribs["height"] = Vector::DOUBLE;
