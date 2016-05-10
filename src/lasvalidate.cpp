@@ -21,7 +21,6 @@
 #include <fstream>
 #include <vector>
 #include <set>
-#include <limits>
 
 #include <geos/triangulate/DelaunayTriangulationBuilder.h>
 #include <geos/geom/GeometryFactory.h>
@@ -37,9 +36,6 @@
 
 namespace las = liblas;
 namespace geom = geos::geom;
-
-double FLT_MAX_POS = std::numeric_limits<double>::max();
-double FLT_MAX_NEG = std::numeric_limits<double>::lowest();
 
 /**
  * Find the distance between two coordinates.
