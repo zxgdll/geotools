@@ -15,6 +15,8 @@
 #include "gdal/ogr_geometry.h"
 #include "gdal/ogrsf_frmts.h"
 
+#include "geotools.h"
+
 /**
  * Holds information about a newly-added geometry, allowing the
  * caller to add attributes or (potentially) modify the 
@@ -162,6 +164,70 @@ public:
 		return ret;
 	}
 
+	/**
+	 * Add a line to the geometry. The argument is a list of tuples 
+	 * containing three doubles, x, y, z.
+	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
+	 */
+	std::unique_ptr<Geom> addLine(std::vector<std::tuple<double, double, double> > &points) {
+		if(m_type != LINE) throw "This is not a line layer.";
+		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
+		OGRLineString line;
+		int i = 0;
+		for(std::tuple<double, double, double> pt:points)
+			line.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
+		feat->SetGeometry(&line);
+		m_layer->CreateFeature(feat);
+		std::unique_ptr<Geom> ret(new Geom(feat));
+		return ret;
+	}
+	
+	/**
+	 * Add a polygon to the geometry. The argument is a list of tuples 
+	 * containing three doubles, x, y, z for the exterior ring, and a list of such
+	 * lists for holes/islands.
+	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
+	 */
+	std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing, 
+																	 std::vector<std::vector<std::tuple<double, double, double > > > &holes) {
+		if(m_type != LINE) throw "This is not a line layer.";
+		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
+		OGRPolygon poly;
+		
+		{
+			OGRLinearRing ring;
+			int i = 0;
+			for(std::tuple<double, double, double> pt:extRing)
+				ring.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
+			ring.setPoint(i++, std::get<0>(points[0]), std::get<1>(points[0]), std::get<2>(points[0]));
+			poly.addRing(&ring);
+		}
+		
+		for(std::vector<std::tuple<double, double, double > > hole:holes) {
+			OGRLinearRing ring;
+			int i = 0;
+			for(std::tuple<double, double, double> pt:hole)
+				ring.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
+			ring.setPoint(i++, std::get<0>(hole[0]), std::get<1>(hole[0]), std::get<2>(hole[0]));
+			poly.addRing(&ring);
+		}
+		
+		feat->SetGeometry(&poly);
+		m_layer->CreateFeature(feat);
+		std::unique_ptr<Geom> ret(new Geom(feat));
+		return ret;
+	}
+
+	/**
+	 * Add a simple polygon to the geometry. The argument is a list of tuples 
+	 * containing three doubles, x, y, z for the exterior ring.
+	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
+	 */
+	std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing) {
+		std::vector<std::vector<std::tuple<double, double, double > > > holes;
+		return addPolygon(extRing, holes);
+	}
+	
 	~Vector() {
 		OGRDataSource::DestroyDataSource(m_ds);
 	}
