@@ -17,18 +17,22 @@
 
 #include "geotools.h"
 
+class Vector;
+
 /**
  * Holds information about a newly-added geometry, allowing the
  * caller to add attributes or (potentially) modify the 
  * geometry before it is committed to a vector layer.
  */
 class Geom {
+friend class Vector;
 private:
 	OGRFeature *m_feat;
+	OGRLayer *m_layer;
 
-protected:
-	Geom(OGRFeature *feat) {
+	Geom(OGRFeature *feat, OGRLayer *layer) {
 		m_feat = feat;
+		m_layer = layer;
 	}
 
 public:
@@ -45,6 +49,7 @@ public:
 	}
 
 	~Geom() {
+		m_layer->CreateFeature(m_feat);
 		OGRFeature::DestroyFeature(m_feat);
 	}
 };
@@ -103,7 +108,7 @@ public:
 
 		OGRRegisterAll();
 	
-		OGRwkbGeometryType gtype = setGeomType(type); //wkbNone;
+		OGRwkbGeometryType gtype = getGeomType(type);
 		
 		OGRSpatialReference *gproj = 0;
 		if(!proj.empty()) {
@@ -159,8 +164,7 @@ public:
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
 		OGRPoint pt(x, y, z);
 		feat->SetGeometry(&pt);
-		m_layer->CreateFeature(feat);
-		std::unique_ptr<Geom> ret(new Geom(feat));
+		std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 		return ret;
 	}
 
@@ -177,8 +181,7 @@ public:
 		for(std::tuple<double, double, double> pt:points)
 			line.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
 		feat->SetGeometry(&line);
-		m_layer->CreateFeature(feat);
-		std::unique_ptr<Geom> ret(new Geom(feat));
+		std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 		return ret;
 	}
 	
@@ -199,7 +202,7 @@ public:
 			int i = 0;
 			for(std::tuple<double, double, double> pt:extRing)
 				ring.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
-			ring.setPoint(i++, std::get<0>(points[0]), std::get<1>(points[0]), std::get<2>(points[0]));
+			ring.setPoint(i++, std::get<0>(extRing[0]), std::get<1>(extRing[0]), std::get<2>(extRing[0]));
 			poly.addRing(&ring);
 		}
 		
@@ -213,8 +216,7 @@ public:
 		}
 		
 		feat->SetGeometry(&poly);
-		m_layer->CreateFeature(feat);
-		std::unique_ptr<Geom> ret(new Geom(feat));
+		std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 		return ret;
 	}
 
