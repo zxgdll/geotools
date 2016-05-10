@@ -15,8 +15,11 @@
 #define PI 3.14159265358979323846
 #define E 2.71828
 
-#define FLT_MAX_POS std::numeric_limits<double>::max();
-#double FLT_MAX_NEG std::numeric_limits<double>::lowest();
+#define DBL_MAX_POS std::numeric_limits<double>::max();
+#define DBL_MAX_NEG std::numeric_limits<double>::lowest();
+
+#define FLT_MAX_POS std::numeric_limits<float>::max();
+#define FLT_MAX_NEG std::numeric_limits<float>::lowest();
 
 #define _min(a, b) ((a) > (b) ? (b) : (a))
 #define _max(a, b) ((a) < (b) ? (b) : (a))
