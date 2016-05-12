@@ -32,6 +32,7 @@
 
 #include <liblas/liblas.hpp>
 
+#include "geotools.h"
 #include "Util.hpp"
 
 namespace las = liblas;
@@ -201,7 +202,7 @@ int main(int argc, char ** argv) {
 	las::Header::RecordsByReturnArray recs;
 	int count = 0;
 
-	double bounds[] = { FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX };
+	double bounds[] = { DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
 
 	if(!quiet) 
 		std::cerr << "Using points from " << indices.size() << " files." << std::endl;

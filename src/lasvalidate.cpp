@@ -82,7 +82,7 @@ public:
 	}
 	Pnt* nearest() {
 		Pnt *near = nullptr;
-		double dst = FLT_MAX_POS;
+		double dst = DBL_MAX_POS;
 		for(Pnt &p:returns) {
 			double dst0 = dist(p.x, p.y, x, y);
 			if(dst0 < dst) {
@@ -271,14 +271,14 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		las::Header h = r.GetHeader();
 
 		// Check that this file is relevant.
-		std::vector<double> bounds0 = { FLT_MAX_POS, FLT_MAX_POS, FLT_MAX_NEG, FLT_MAX_NEG };
+		std::vector<double> bounds0 = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
 		if(!Util::computeLasBounds(h, bounds0, 2))
 			Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 
 		if(!quiet)
 			std::cerr << "LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3] << std::endl;
 
-		std::vector<double> bounds = { FLT_MAX_POS, FLT_MAX_POS, FLT_MAX_NEG, FLT_MAX_NEG };
+		std::vector<double> bounds = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
 		bool inBounds = false;
 		for(Sample &sample:samples) {
 			computeBounds(bounds, sample, distance);

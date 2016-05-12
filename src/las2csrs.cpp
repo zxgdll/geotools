@@ -12,10 +12,10 @@
 #include <gdal.h>
 #include <cpl_conv.h> // for CPLMalloc()
 
+#include "geotools.h"
 #include "Util.hpp"
 #include "Raster.hpp"
 
-#define PI 3.14159265358979323846
 #define LAS2CSRS_DATA "LAS2CSRS_DATA"
 
 namespace fs = boost::filesystem;
@@ -296,7 +296,7 @@ public:
 		las::ReaderFactory rf;
 
 		// The overall bounds: min x, max x, min y, max y, min z, max z
-		double bounds[] = { FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX };
+		double bounds[] = { DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
 
 		for(std::list<fs::path>::iterator it = files.begin(); it != files.end(); ++it) {
 

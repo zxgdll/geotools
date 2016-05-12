@@ -155,7 +155,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		std::ifstream in(files[i].c_str());
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
-		std::vector<double> bounds0 = { FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX };
+		std::vector<double> bounds0 = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
 		if(!Util::computeLasBounds(h, bounds0, 2))
 			Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 		in.close();
@@ -197,7 +197,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		qGrid.init(cols, rows);
 		qGrid.setDeallocator(*vector_dealloc);
 		for(int i = 0; i < cols * rows; ++i)
-			qGrid[i] = new std::vector<float>();
+			qGrid.set(i, new std::vector<float>());
 	}
 
 	// Create a grid for maintaining counts.
@@ -253,34 +253,34 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 					int idx = (rows - rr - 1) * cols + cc;
 					switch(type){
 					case TYPE_COUNT:
-						counts[idx]++;
+						counts.set(idx, counts.get(idx) + 1);
 						break;
 					case TYPE_MIN:
 						if(counts[idx] == 0 || pz < grid1[idx])
-							grid1[idx] = pz;
-						counts[idx]++;
+							grid1.set(idx, pz);
+						counts.set(idx, counts.get(idx) + 1);
 						break;
 					case TYPE_MAX:
 						if(counts[idx] == 0 || pz > grid1[idx])
-							grid1[idx] = pz;
-						counts[idx]++;
+							grid1.set(idx, pz);
+						counts.set(idx, counts.get(idx) + 1);
 						break;
 					case TYPE_MEAN:
 					case TYPE_VARIANCE:
 					case TYPE_STDDEV:
 						if(counts[idx] == 0) {
-							grid1[idx] = pz;
+							grid1.set(idx, pz);
 						} else {
-							grid1[idx] += pz;
+							grid1.set(idx, grid1.get(idx) + pz);
 						}
-						counts[idx]++;
+						counts.set(idx, counts.get(idx) + 1);
 						break;
 					case TYPE_DENSITY:
-						counts[idx]++;
+						counts.set(idx, counts.get(idx) + 1);
 						break;
 					case TYPE_QUANTILE:
 						qGrid[idx]->push_back(pz);
-						counts[idx]++;
+						counts.set(idx, counts.get(idx) + 1);
 						break;
 					}
 				}
@@ -295,7 +295,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	case TYPE_STDDEV:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 			if(counts[i] > 0)
-				grid1[i] /= counts[i];
+				grid1.set(i, grid1.get(i) / counts[i]);
 		}
 		break;
 	case TYPE_DENSITY:
@@ -303,9 +303,9 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 			double r2 = _sq(resolution);
 			for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 				if(counts[i] > 0) {
-					grid1[i] = counts[i] / r2;
+					grid1.set(i, counts[i] / r2);
 				} else {
-					grid1[i] = 0.0;
+					grid1.set(i, 0.0);
 				}
 			}
 		}
@@ -317,16 +317,16 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 				std::sort(qGrid[i]->begin(), qGrid[i]->end());
 				if(quantile == 0) {
 					// If index is zero, just return the min.
-					grid1[i] = (*qGrid[i])[0];
+					grid1.set(i, (*qGrid[i])[0]);
 				} else if(quantile == numQuantiles) {
 					// If index == numQuantiles, return the max.
-					grid1[i] = (*qGrid[i])[qGrid[i]->size() - 1];
+					grid1.set(i, (*qGrid[i])[qGrid[i]->size() - 1]);
 				} else {
 					float idx = (((float) qGrid[i]->size() - 1) / numQuantiles) * quantile;
 					if(floor(idx) == idx) {
-						grid1[i] = (*qGrid[i])[(int) idx];
+						grid1.set(i, (*qGrid[i])[(int) idx]);
 					} else {
-						grid1[i] = ((*qGrid[i])[(int) idx] + (*qGrid[i])[(int) idx + 1]) / 2.0;
+						grid1.set(i, ((*qGrid[i])[(int) idx] + (*qGrid[i])[(int) idx + 1]) / 2.0);
 					}
 				}
 			}
@@ -388,7 +388,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 						switch(type){
 						case TYPE_VARIANCE:
 						case TYPE_STDDEV:
-							grid2[idx] += _sq(grid1[idx] - pz);
+							grid2.set(idx, grid2.get(idx) + _sq(grid1[idx] - pz));
 							break;
 						}
 					}
@@ -401,13 +401,13 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		case TYPE_VARIANCE:
 			for(int i=0;i<cols*rows;++i) {
 				if(counts[i] > 0)
-					grid1[i] = grid2[i] / counts[i];
+					grid1.set(i, grid2.get(i) / counts[i]);
 			}
 			break;
 		case TYPE_STDDEV:
 			for(int i=0;i<cols*rows;++i) {
 				if(counts[i] > 0)
-					grid1[i] = sqrt(grid2[i] / counts[i]);
+					grid1.set(i, sqrt(grid2[i] / counts[i]));
 			}
 			break;
 		}
@@ -431,7 +431,7 @@ int main(int argc, char **argv) {
 	int quantile = 0;
 	float resolution = 2.0;
 	float radius = -1.0;
-	std::vector<double> bounds = {FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX};
+	std::vector<double> bounds = {DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG};
 	std::set<int> classes;
 	std::vector<int> quantiles;
 	std::vector<std::string> files;

@@ -11,9 +11,9 @@
 #include <map>
 #include <memory>
 
-#include "gdal/ogr_spatialref.h"
-#include "gdal/ogr_geometry.h"
-#include "gdal/ogrsf_frmts.h"
+#include "ogr_spatialref.h"
+#include "ogr_geometry.h"
+#include "ogrsf_frmts.h"
 
 #include "geotools.h"
 

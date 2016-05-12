@@ -30,6 +30,7 @@
 
 #include <liblas/liblas.hpp>
 
+#include "geotools.h"
 #include "Util.hpp"
 
 #define LAS_EXT ".las"
@@ -159,8 +160,8 @@ int main(int argc, char **argv) {
 	}
 
 	las::ReaderFactory rf;
-	double bounds[4] = { FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX } ;
-	double bounds0[4] = { FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX } ;
+	double bounds[4] = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
+	double bounds0[4] = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
 
 	for(unsigned int i=0; i<files.size(); ++i) {
 		// Open the file and create a reader.

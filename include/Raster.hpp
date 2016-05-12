@@ -8,8 +8,8 @@
 #ifndef INCLUDE_RASTER_HPP_
 #define INCLUDE_RASTER_HPP_
 
-#include <gdal/gdal_priv.h>
-#include <gdal/ogr_spatialref.h>
+#include <gdal_priv.h>
+#include <ogr_spatialref.h>
 #include <eigen3/Eigen/Core>
 
 #include "geotools.h"

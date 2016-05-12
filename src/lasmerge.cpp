@@ -29,10 +29,10 @@ void usage() {
 int main(int argc, char ** argv) {
 
 	std::vector<char *> files;
-	double minx = -FLT_MAX;
-	double maxx = FLT_MAX;
-	double miny = -FLT_MAX;
-	double maxy = FLT_MAX;
+	double minx = DBL_MAX_NEG;
+	double maxx = DBL_MAX_POS;
+	double miny = DBL_MAX_NEG;
+	double maxy = DBL_MAX_POS;
 	char *outfile = NULL;
 	bool quiet = false;
 
@@ -81,7 +81,7 @@ int main(int argc, char ** argv) {
 	las::ReaderFactory rf;
 
 	// min x, max x, min y, max y, min z, max z
-	double bounds[] = { FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX, FLT_MAX, -FLT_MAX };
+	double bounds[] = { DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
 	int count = 0;
 	std::vector<unsigned int> indices;
 
