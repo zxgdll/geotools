@@ -143,10 +143,10 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	if(hasBounds) 
 		Util::snapBounds(bounds, resolution, 2);
 
-	Grid<float> grid1;
-	Grid<float> grid2;
-	Grid<int> counts;
-	Grid<std::vector<float>* > qGrid;
+	MemRaster<float> grid1;
+	MemRaster<float> grid2;
+	MemRaster<int> counts;
+	MemRaster<std::vector<float>* > qGrid;
 
 	las::ReaderFactory rf;
 	std::vector<unsigned int> indices;
