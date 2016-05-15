@@ -17,6 +17,7 @@
 
 #include "liblas/liblas.hpp"
 
+#include "geotools.h"
 
 namespace las = liblas;
 
