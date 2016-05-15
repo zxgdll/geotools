@@ -11,9 +11,6 @@
 
 #include <omp.h>
 
-#include <ogr_spatialref.h>
-#include <gdal_priv.h>
-
 #include "Util.hpp"
 #include "Raster.hpp"
 
@@ -31,11 +28,11 @@ float _tanCurve(float step, float steps) {
  * it is one), or the edge of the grid.
  */
 bool isEdgePixel(Grid<char> &fillGrid, int col, int row, int cols, int rows) {
-	if(fillGrid(col, row) == 0)
+	if(fillGrid.get(col, row) == 0)
 		return false;
 	for(int r = row - 1; r < row + 2; ++r) {
 		for(int c = col - 1; c < col + 2; ++c) {
-			if(c <= 0 || r <= 0 || c >= cols-1 || r >= rows-1 || fillGrid(c, r) == 0)
+			if(c <= 0 || r <= 0 || c >= cols-1 || r >= rows-1 || fillGrid.get(c, r) == 0)
 				return true;
 		}
 	}
@@ -49,9 +46,9 @@ bool isEdgePixel(Grid<char> &fillGrid, int col, int row, int cols, int rows) {
 void feather(Grid<float> &srcGrid, Grid<float> &dstGrid, int cols, int rows, float distance, float nodata, float resolution) {
 	// Fill grid is used to keep track of where the edges are as they're "snowed in"
 	// Starts out as a mask of non-nodata pixels from the source.
-	Grid<char> fillGrid(cols, rows);
+	MemRaster<char> fillGrid(cols, rows);
 	for(unsigned long i = 0; i < (unsigned long) rows * cols; ++i)
-		fillGrid[i] = srcGrid[i] == nodata ? 0 : 1;
+		fillGrid.set(i, srcGrid[i] == nodata ? 0 : 1);
 	// The number of steps is just the number of pixels needed to 
 	// cover the distance of the fade.
 	float step = 0.0;
@@ -63,15 +60,15 @@ void feather(Grid<float> &srcGrid, Grid<float> &dstGrid, int cols, int rows, flo
 		for(int row = 0; row < rows; ++row) {
 			for(int col = 0; col < cols; ++col) {
 				if(isEdgePixel(fillGrid, col, row, cols, rows)) {
-					fillGrid(col, row) = 2; // Set edge to dirty.
-					dstGrid(col, row) = _tanCurve(step, steps); // TODO: Configurable curves.
+					fillGrid.set(col, row, 2); // Set edge to dirty.
+					dstGrid.set(col, row, _tanCurve(step, steps)); // TODO: Configurable curves.
 					found = true;
 				}
 			}
 		}
 		// Reset dirty edges to 0
 		for(int i = 0; i < rows * cols; ++i) 
-			if(fillGrid[i] == 2) fillGrid[i] = 0;
+			if(fillGrid[i] == 2) fillGrid.set(i, 0);
 		++step;
 	} while(found);
 }
@@ -82,7 +79,7 @@ void feather(Grid<float> &srcGrid, Grid<float> &dstGrid, int cols, int rows, flo
 void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, int cols, int rows, float imNodata, float bgNodata) {
 	for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 		if(!(bgGrid[i] == bgNodata || imgGrid[i] == imNodata))
-			bgGrid[i] = bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i];
+			bgGrid.set(i, bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i]);
 	}
 }
 
@@ -94,7 +91,7 @@ void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, int co
  * used, the existing overviews may obscure the fact that the image has changed (when zoomed out.)
  */
  // TODO: Background must be larger than other files. Remedy this.
-void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, bool overviews) {
+void mosaic(std::vector<std::string> &files, std::string &outfile, float distance) {
 	
 	if(distance <= 0.0)
 		throw "Invalid distance.";
@@ -105,51 +102,34 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 	if(files.size() < 2)
 		throw "Less than 2 files. Nothing to do.";
 
-	GDALAllRegister();
-
 	// Copy the background file to the destination.
 	std::cout << "Copying background file." << std::endl;
 	Util::copyfile(files[0], outfile);
 
 	// Open the destination file to modify it.
-	GDALDataset *outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
-	if(outDS == NULL)
-		throw "Failed to open destination image.";
-
-	// Load the transform parameters.
-	double outTrans[6];
-	outDS->GetGeoTransform(outTrans);
+	Raster<float> output(outfile);
 
 	// Iterate over the files, adding each one to the background.
 	for(unsigned int i = 1; i < files.size(); ++i) {
 
 		std::cout << "Processing file: " << files[i] << std::endl;
 
-		GDALDataset *imDS = (GDALDataset *) GDALOpen(files[i].c_str(), GA_ReadOnly);
-		if(!imDS)
-			throw "Failed to open mosaic image.";
-
-		double imTrans[6];
-		imDS->GetGeoTransform(imTrans);
-		if(outTrans[1] != imTrans[1] || outTrans[5] != imTrans[5]) 
+		Raster<float> input(files[i]);
+		if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
 			throw "Raster's resolution does not match the background.";
 
-		int cols = imDS->GetRasterXSize();
-		int rows = imDS->GetRasterYSize();
-		int col = (int) ((imTrans[0] - outTrans[0]) / outTrans[1]);
-		int row = (int) ((imTrans[3] - outTrans[3]) / outTrans[5]);
+		// Get the origin of the input w/r/t the output.
+		int col = output.toCol(input.minx());
+		int row = output.toRow(input.maxy());
+		int cols = output.toCol(intput.maxx()) - col;
+		int rows = output.toRow(intput.miny()) - row;
 
-		if(col + cols > outDS->GetRasterXSize())
-			cols = outDS->GetRasterXSize() - col;
-		if(row + rows > outDS->GetRasterYSize())
-			rows = outDS->GetRasterYSize() - row;
-
-		float imNodata = imDS->GetRasterBand(1)->GetNoDataValue();
-		float outNodata = outDS->GetRasterBand(1)->GetNoDataValue();
+		float imNodata = input.nodata();
+		float outNodata = output.nodata();
 
 		// TODO: Configurable row height.
 		int rowHeight = 500 > rows ? rows : 500;
-		int rowOffset = (int) (distance / imTrans[1]) + 1;
+		int rowOffset = (int) (distance / input.resolution()) + 1;
 		int bufRows = rowHeight + rowOffset * 2;
 
 		// Move the window down by rowHeight and one rowOffset *not* two.
@@ -157,9 +137,9 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 		for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) {
 
 			// Initialize the grids.
-			Grid<float> imGrid(cols, bufRows);
-			Grid<float> outGrid(cols, bufRows);
-			Grid<float> alphaGrid(cols, bufRows);
+			MemRaster<float> imGrid(cols, bufRows);
+			MemRaster<float> outGrid(cols, bufRows);
+			MemRaster<float> alphaGrid(cols, bufRows);
 			// Set to zero or nodata depending on the band.
 			outGrid.fill(outNodata);
 			imGrid.fill(imNodata);
@@ -193,21 +173,27 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			// Load the overlay.
 			#pragma omp critical
 			{
+				imGrid.loadBlock(0, bufRow0, cols, bufRows0, imGrid);
+				/*
 				if(CPLE_None != imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid.grid() + addrOffset), cols, bufRows0,
 					GDT_Float32, 1, NULL, 0, 0, 0))
 					throw "Failed to read raster.";
+					*/
 			}
 
 			std::cout << "Feathering" << std::endl;
 			// Feather the overlay
-			feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, imTrans[1]);
+			feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, input.resolution());
 
 			// Read background data.
 			#pragma omp critical 
 			{
+				output.loadBlock(col, row + bufRow0, cols, bufRows0, outGrid);
+				/*
 				if(CPLE_None != outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid.grid() + addrOffset), cols, bufRows0,
 					GDT_Float32, 1, NULL, 0, 0, 0))
 					throw "Failed to read raster.";
+					*/
 			}
 
 			std::cout << "Blending" << std::endl;
@@ -218,27 +204,15 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			// We are extracting a slice out of the buffer, not writing the whole thing.
 			#pragma omp critical 
 			{
+				output.writeBlock(col, row + bufRow0 + rowOffset0, cols, rowHeight0, outGrid);
+				/*
 				if(CPLE_None != outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid.grid() + addrOffset + rowOffset0 * cols), cols, rowHeight0,
 					GDT_Float32, 1, NULL, 0, 0, 0))
 					throw "Failed to write raster.";
+					*/
 			}
 
 		}
-
-		GDALClose(imDS);
-	}
-
-	if(overviews) {
-		std::cout << "Building overviews..." << std::endl;
-		// Must close and open the DS to avoid errors.
-		GDALClose(outDS);
-		outDS = (GDALDataset *) GDALOpen(outfile.c_str(), GA_Update);
-		if(outDS == NULL)
-			throw "Failed to open destination image for overview creation.";
-		// TODO: Configure overviews and method.
-		int overViews[] = { 2, 4, 8, 16 };
- 		outDS->BuildOverviews("NEAREST", 4, overViews, 0, NULL, NULL, NULL);
- 		GDALClose(outDS);
 	}
 }
 
@@ -246,7 +220,6 @@ void usage() {
 	std::cout << "Usage: mosaic [options] -o <output file> <file [file [file [...]]]>" << std::endl;
 	std::cout << "    -o <file>     -- The output file." << std::endl;
 	std::cout << "    -d <distance> -- The feather distance in map units (default 100.)" << std::endl;
-	std::cout << "    -b            -- Build overviews (default: old overviews are preserved.)" << std::endl;
 	std::cout << "    <file [...]>  -- A list of files. The first is used as the background " << std::endl;
 	std::cout << "                     and determines the size of the output. Subsequent " << std::endl;
 	std::cout << "                     images are layered on top and feathered." << std::endl;
@@ -259,22 +232,19 @@ int main(int argc, char **argv) {
 	 	float distance = 100.0;
 	 	std::vector<std::string> files;
 	 	std::string outfile;
-	 	bool overviews = false;
-
+	 	
 	 	for(int i = 1; i < argc; ++i) {
 	 		std::string arg(argv[i]);
 	 		if(arg == "-d") {
 	 			distance = atof(argv[++i]);
 	 		} else if(arg == "-o") {
 	 			outfile = argv[++i];
-	 		} else if(arg == "-b") {
-	 			overviews = true;
 	 		} else {
 	 			files.push_back(argv[i]);
 	 		}
 	 	}
 
- 		mosaic(files, outfile, distance, overviews);
+ 		mosaic(files, outfile, distance);
 
  	} catch(const char *e) {
  		std::cerr << e << std::endl;
