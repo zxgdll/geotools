@@ -14,12 +14,83 @@
 
 #include "geotools.h"
 
+template <class T>
+class Grid {
+public:
+	
+	int rows() const;
+
+	int cols() const;
+	
+	unsigned long size() const;
+
+	void fill(const T value);
+
+	/**
+	 * Return a pointer to an in-memory grid of the raster data.
+	 * Throw an exception if this is not possible.
+	 */
+	T *grid() const;
+	
+	/**
+	 * Return a reference to the value held at
+	 * the given index in the grid.
+	 */
+	const T &get(unsigned long idx) const;
+
+	const T &get(int col, int row) const;
+
+	void set(int col, int row, const T value);
+
+	void set(unsigned long idx, const T value);
+
+	/**
+	 * Return the element at the given index.
+	 */
+	const T &operator[](unsigned long idx) const;
+
+	bool isSquare() const;
+
+	void toMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) const;
+
+	void fromMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx);
+
+	T nodata() const;
+
+	void nodata(T nodata);
+
+	/**
+	 * Load the contents of a single block into the given Grid instance.
+	 */
+	void readBlock(int col, int row, int cols, int rows, Grid<T> &block);
+
+	void readBlock(int col, int row, Grid<T> &block);
+
+	/**
+	 * Write a part of the given block to the raster.
+	 */
+	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block);
+
+	void writeBlock(int col, int row, Grid<T> &block);
+
+	/**
+	 * Write the full block to the raster.
+	 */
+	void writeBlock(Grid<T> &block);
+
+	/**
+	 * Read the full block from the raster.
+	 */
+	void readBlock(Grid<T> &block);
+
+};
+
 /**
  * A convenience class for managing a grid of values.
  * Handles allocation and deallocation of memory.
  */
 template <class T>
-class Grid {
+class MemRaster : public Grid<T> {
 private:
 	int m_cols;
 	int m_rows;
@@ -37,7 +108,7 @@ private:
 	}
 
 public:
-	Grid() {
+	MemRaster() {
 		m_grid = nullptr;
 		m_cols = -1;
 		m_rows = -1;
@@ -45,11 +116,11 @@ public:
 		m_nodata = 0; // TODO: Choose a nodata based on type?
 	}
 
-	Grid(int cols, int rows) : Grid() {
+	MemRaster(int cols, int rows) : MemRaster() {
 		init(cols, rows);
 	}
 
-	~Grid() {
+	~MemRaster() {
 		if(m_item_dealloc != nullptr) {
 			for(unsigned long i = 0; i < (unsigned long) m_cols * m_rows; ++i)
 				m_item_dealloc(m_grid[i]);
@@ -272,7 +343,7 @@ public:
 };
 
 template <class T>
-class Raster {
+class Raster : public Grid<T> {
 private:
 	int m_cols, m_rows;		// Raster cols/rows
 	int m_bcols, m_brows;	// Block cols/rows -- not the number of cols/rows in a block
@@ -516,11 +587,6 @@ public:
 		readBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
 	}
 
-	/** Deprecated. */
-	DEPRECATED void loadBlock(int col, int row, int cols, int rows, Grid<T> &block) {
-		readBlock(col, row, cols, rows, block);
-	}
-
 	/**
 	 * Write a part of the given block to the raster.
 	 */
@@ -759,6 +825,10 @@ public:
 		}
 	}
 
+	T *grid() const {
+		throw "grid() Not implemented in Raster.";
+	}
+	
 	/**
 	 * Returns pixel value at the given coordinate.
 	 */
@@ -774,17 +844,6 @@ public:
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
 		T v = m_block[idx];
 		return v;
-	}
-
-	/**
-	 * Write the Grid into the raster with col and row as the
-	 * top left corner.
-	 */
-	DEPRECATED void set(int col, int row, Grid<T> &grid) {
-		for(int r = row; r < grid.rows() + row; ++r) {
-			for(int c = col; c < grid.cols() + col; ++c)
-				set(c, r, grid(c - col, r - row));
-		}
 	}
 
 	/**
