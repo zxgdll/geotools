@@ -1,11 +1,8 @@
-CFLAGS=-I../include -I/usr/local/include -I/usr/include 
-CXXFLAGS=-std=c++11 -Wall -I../include -I/usr/local/include -I/usr/include
+CFLAGS=-I../include -I/usr/local/include -I/usr/include -I/usr/local/include/gdal -I/usr/include/gdal 
+CXXFLAGS=-std=c++11 -Wall -I../include -I/usr/local/include -I/usr/include -I/usr/local/include/gdal -I/usr/include/gdal 
 LIB=-L/usr/local/lib -L/usr/lib
 CC=gcc
 CPP=g++
-
-#LIB += -L/usr/local/opt/sqlite/lib
-#CXXFLAGS += -I/usr/local/opt/sqlite/include
 
 .PHONY: interp
 
