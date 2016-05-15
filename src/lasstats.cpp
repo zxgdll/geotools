@@ -39,6 +39,7 @@
 
 #include <liblas/liblas.hpp>
  
+#include "geotools.h"
 #include "Util.hpp"
 #include "Raster.hpp"
 
@@ -49,13 +50,6 @@ namespace alg = boost::algorithm;
 #define RASTER 1
 #define VECTOR 2
 #define CSV 3
-
-/**
- * Squares a double.
- */
-double _sq(double a) {
-	return a * a;
-}
 
 /**
  * Represents a single polygon in the input shape file.
@@ -509,7 +503,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 
 	std::map<int, std::map<int, Stat * > > stats;
 
-	Grid<char> dg(cols, rows);
+	MemRaster<char> dg(cols, rows);
 
 	if(0 != b->RasterIO(GF_Read, 0, 0, cols, rows, dg.grid(), cols, rows, GDT_Byte, 0, 0))
 		throw "Failed to read from classification raster.";
@@ -544,7 +538,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 
 			int c = (int) ((x - minx) / (maxx - minx) * cols);
 			int r = (int) ((maxy - y) / (maxy - miny) * rows);
-			int val = (int) dg(c, r);
+			int val = (int) dg.get(c, r);
 
 			Stat *st = stats[val][cls];
 			if(st == nullptr)
@@ -605,7 +599,7 @@ void doRaster(std::string &raster, std::string &outfile, int band,
 		dst->SetGeoTransform(trans);
 		dst->SetProjection(proj);
 
-		Grid<float> fg(cols, rows);
+		MemRaster<float> fg(cols, rows);
 
 		for(auto it = stats.begin(); it != stats.end(); ++it) {
 			for(unsigned int c = 0; c < classes.size(); ++c) {
