@@ -132,10 +132,10 @@ public:
 	}
 
 private:
-	Grid<float> xg;
-	Grid<float> yg;
-	Grid<float> zg;
-	Grid<double> tg;
+	MemRaster<float> xg;
+	MemRaster<float> yg;
+	MemRaster<float> zg;
+	MemRaster<double> tg;
 	int width;
 	int height;
 };
@@ -187,17 +187,17 @@ public:
 		if(efrom != eto) {
 
 			// Copy the coordinate arrays for transformation.
-			Grid<double> x0(count, 1);
-			Grid<double> y0(count, 1);
-			Grid<double> z0(count, 1);
+			MemRaster<double> x0(count, 1);
+			MemRaster<double> y0(count, 1);
+			MemRaster<double> z0(count, 1);
 			memcpy(x0.grid(), x.grid(), sizeof(double) * count);
 			memcpy(y0.grid(), y.grid(), sizeof(double) * count);
 			memcpy(z0.grid(), z.grid(), sizeof(double) * count);
 
 			// Initalize shift arrays.
-			Grid<double> dx(count, 1);
-			Grid<double> dy(count, 1);
-			Grid<double> dz(count, 1);
+			MemRaster<double> dx(count, 1);
+			MemRaster<double> dy(count, 1);
+			MemRaster<double> dz(count, 1);
 			
 			// Transform to latlon. (b)
 			pj_transform(p2, p4, count, 1, x0.grid(), y0.grid(), z0.grid());
@@ -206,8 +206,8 @@ public:
 			shiftGrid.interpolate(x0.grid(), y0.grid(), dx.grid(), dy.grid(), dz.grid(), count);
 			
 			// Transform mm shifts to latlon
-			Grid<double> dlat(count, 1);
-			Grid<double> dlon(count, 1);
+			MemRaster<double> dlat(count, 1);
+			MemRaster<double> dlon(count, 1);
 
 			// Get projection's spheroid props.
 			double a, e2;
@@ -315,9 +315,9 @@ public:
 
 			int count = h.GetPointRecordsCount();
 
-			Grid<double> x(count, 1);
-			Grid<double> y(count, 1);
-			Grid<double> z(count, 1);
+			MemRaster<double> x(count, 1);
+			MemRaster<double> y(count, 1);
+			MemRaster<double> z(count, 1);
 
 			// Iterate over the points.
 			for(int i = 0; r.ReadNextPoint(); ++i) {
@@ -508,9 +508,9 @@ int test(int argc, char **argv) {
 
 		Transformer trans(ffrom, efrom, eto, fsrid, tsrid);
 
-		Grid<double> xx(1,1);
-		Grid<double> yy(1,1);
-		Grid<double> zz(1,1);
+		MemRaster<double> xx(1,1);
+		MemRaster<double> yy(1,1);
+		MemRaster<double> zz(1,1);
 
 		xx.set(0, x);
 		yy.set(0, y);
