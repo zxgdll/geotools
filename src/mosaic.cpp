@@ -121,8 +121,8 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 		// Get the origin of the input w/r/t the output.
 		int col = output.toCol(input.minx());
 		int row = output.toRow(input.maxy());
-		int cols = output.toCol(intput.maxx()) - col;
-		int rows = output.toRow(intput.miny()) - row;
+		int cols = output.toCol(input.maxx()) - col;
+		int rows = output.toRow(input.miny()) - row;
 
 		float imNodata = input.nodata();
 		float outNodata = output.nodata();
@@ -145,7 +145,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			imGrid.fill(imNodata);
 			alphaGrid.fill(1.0);
 
-			int addrOffset = 0;
+			//int addrOffset = 0;
 			int bufRows0 = bufRows;
 			int bufRow0 = bufRow;
 			int rowHeight0 = rowHeight;
@@ -153,7 +153,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			
 			if(bufRow0 < 0) {
 				bufRow0 = 0;
-				addrOffset = rowOffset * cols;
+			//	addrOffset = rowOffset * cols;
 				bufRows0 = bufRows - rowOffset;
 				rowOffset0 = 0;
 			}
@@ -173,7 +173,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			// Load the overlay.
 			#pragma omp critical
 			{
-				imGrid.loadBlock(0, bufRow0, cols, bufRows0, imGrid);
+				imGrid.readBlock(0, bufRow0, cols, bufRows0, imGrid);
 				/*
 				if(CPLE_None != imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid.grid() + addrOffset), cols, bufRows0,
 					GDT_Float32, 1, NULL, 0, 0, 0))
@@ -188,7 +188,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			// Read background data.
 			#pragma omp critical 
 			{
-				output.loadBlock(col, row + bufRow0, cols, bufRows0, outGrid);
+				output.readBlock(col, row + bufRow0, cols, bufRows0, outGrid);
 				/*
 				if(CPLE_None != outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid.grid() + addrOffset), cols, bufRows0,
 					GDT_Float32, 1, NULL, 0, 0, 0))
