@@ -18,70 +18,68 @@ template <class T>
 class Grid {
 public:
 	
-	int rows() const;
+	virtual int rows() const =0;
 
-	int cols() const;
+	virtual int cols() const =0;
 	
-	unsigned long size() const;
+	virtual unsigned long size() const =0;
 
-	void fill(const T value);
+	virtual void fill(const T value) =0;
 
 	/**
 	 * Return a pointer to an in-memory grid of the raster data.
 	 * Throw an exception if this is not possible.
 	 */
-	T *grid() const;
+	virtual T *grid() =0;
 	
 	/**
 	 * Return a reference to the value held at
 	 * the given index in the grid.
+	 * Not const because the get operation might imply (e.g.)
+	 * a buffering operation in the subclass.
 	 */
-	const T &get(unsigned long idx) const;
+	virtual T &get(unsigned long idx) =0;
 
-	const T &get(int col, int row) const;
+	virtual T &get(int col, int row) =0;
 
-	void set(int col, int row, const T value);
+	virtual void set(int col, int row, const T value) =0;
 
-	void set(unsigned long idx, const T value);
+	virtual void set(unsigned long idx, const T value) =0;
 
 	/**
 	 * Return the element at the given index.
 	 */
-	const T &operator[](unsigned long idx) const;
+	virtual T &operator[](unsigned long idx) =0;
 
-	bool isSquare() const;
+	virtual bool isSquare() const =0;
 
-	void toMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) const;
+	virtual T nodata() const =0;
 
-	void fromMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx);
-
-	T nodata() const;
-
-	void nodata(T nodata);
+	virtual void nodata(T nodata) =0;
 
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	void readBlock(int col, int row, int cols, int rows, Grid<T> &block);
+	virtual void readBlock(int col, int row, int cols, int rows, Grid<T> &block) =0;
 
-	void readBlock(int col, int row, Grid<T> &block);
+	virtual void readBlock(int col, int row, Grid<T> &block) =0;
 
 	/**
 	 * Write a part of the given block to the raster.
 	 */
-	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block);
+	virtual void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) =0;
 
-	void writeBlock(int col, int row, Grid<T> &block);
+	virtual void writeBlock(int col, int row, Grid<T> &block) =0;
 
 	/**
 	 * Write the full block to the raster.
 	 */
-	void writeBlock(Grid<T> &block);
+	virtual void writeBlock(Grid<T> &block) =0;
 
 	/**
 	 * Read the full block from the raster.
 	 */
-	void readBlock(Grid<T> &block);
+	virtual void readBlock(Grid<T> &block) =0;
 
 };
 
@@ -140,7 +138,7 @@ public:
 	/**
 	 * Return a pointer to the allocated memory.
 	 */
-	T *grid() const {
+	T *grid() {
 		return m_grid;
 	}
 
@@ -184,14 +182,14 @@ public:
 	 * Return a reference to the value held at
 	 * the given index in the grid.
 	 */
-	const T &get(unsigned long idx) const {
+	T &get(unsigned long idx) {
 		checkInit();
 		if(idx >= size())
 			throw "Index out of bounds.";
 		return m_grid[idx];
 	}
 
-	const T &get(int col, int row) const {
+	T &get(int col, int row) {
 		unsigned long idx = (unsigned long) (row * m_cols + col);	
 		return get(idx);
 	}
@@ -211,7 +209,7 @@ public:
 	/**
 	 * Return the element at the given index.
 	 */
-	const T &operator[](unsigned long idx) const {
+	T &operator[](unsigned long idx) {
 		checkInit();
 		if(idx >= size())
 			throw "Index out of bounds.";
@@ -225,18 +223,18 @@ public:
 	void toMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
 		for(int r = 1; r < rows(); ++r) {
 			for(int c = 0; c < cols(); ++c)
-				mtx(r, c) = this(c, r);
+				mtx(r, c) = get(c, r);
 		}
 	}
 
 	void fromMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
 		for(int r = 1; r < rows(); ++r) {
 			for(int c = 0; c < cols(); ++c)
-				this(c, r) = mtx(r, c);
+				set(c, r, mtx(r, c));
 		}
 	}
 
-	T nodata() {
+	T nodata() const {
 		return m_nodata;
 	}
 
@@ -552,7 +550,7 @@ public:
 
 	void fill(T value) {
 		Block<T> blk = block();
-		Grid<T> grd(blk.cols(), blk.rows());
+		MemRaster<T> grd(blk.cols(), blk.rows());
 		grd.fill(value);
 		while(blk.next())
 			writeBlock(blk.startCol(), blk.startRow(), grd);
@@ -617,21 +615,21 @@ public:
 	 * Return the resolution. If the x and y resolution are different,
 	 * use resolutionX and resolutionY.
 	 */
-	double resolution() {
+	double resolution() const {
 		return m_trans[1];
 	}
 
 	/**
 	 * Get the x resolution.
 	 */
-	double resolutionX() {
+	double resolutionX() const {
 		return m_trans[1];
 	}
 
 	/**
 	 * Get the y resolution.
 	 */
-	double resolutionY() {
+	double resolutionY() const {
 		return m_trans[5];
 	}
 
@@ -696,6 +694,10 @@ public:
 	 */
 	T nodata() const {
 		return m_nodata;
+	}
+
+	void nodata(T nodata) {
+		throw "Cannot set nodata on Raster.";
 	}
 
 	/*
@@ -771,7 +773,7 @@ public:
 	/**
 	 * The number of elements in the grid.
 	 */
-	unsigned long size() {
+	unsigned long size() const {
 		return (unsigned long) m_cols * m_rows;
 	}
 
@@ -825,25 +827,41 @@ public:
 		}
 	}
 
-	T *grid() const {
+	T *grid() {
 		throw "grid() Not implemented in Raster.";
 	}
 	
 	/**
 	 * Returns pixel value at the given coordinate.
 	 */
-	T get(double x, double y) {
+	T &get(double x, double y) const {
 		return get(toCol(x), toRow(y));
 	}
 
 	/**
 	 * Returns the pixel value at the give row/column.
 	 */
-	T get(int col, int row) {
+	T &get(int col, int row) {
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
-		T v = m_block[idx];
-		return v;
+		return m_block[idx];
+	}
+
+	T &get(unsigned long idx) {
+		int col = idx % m_cols;
+		int row = (int) idx / m_cols;
+		loadBlock(col, row);
+		return m_block[idx];
+	}
+
+	/**
+	 * Return the element at the given index.
+	 */
+	T &operator[](unsigned long idx) {
+		int col = idx % m_cols;
+		int row = (int) idx / m_cols;
+		loadBlock(col, row);
+		return m_block[idx];
 	}
 
 	/**
@@ -857,11 +875,22 @@ public:
 		m_dirty = true;
 	}
 
+	void set(unsigned long idx, T v) {
+		if(idx >= size())
+			throw "Index out of bounds.";
+		m_block[idx] = v;
+		m_dirty = true;
+	}
+
 	/**
 	 * Sets the pixel value at the given coordinate.
 	 */
 	void set(double x, double y, T v) {
 		set(toCol(x), toRow(y), v);
+	}
+
+	bool isSquare() const {
+		return cols() == rows();
 	}
 
 	/**
