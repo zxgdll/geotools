@@ -219,7 +219,7 @@ namespace interp {
 				{
 
 				// Use a block instance for writing output in a thread-safe way.
-				Grid<float> grid;
+				MemRaster<float> grid;
 				int sr = 0, sc = 0;
 
 				while(true) {
@@ -297,7 +297,7 @@ namespace interp {
 				{
 
 				// Use a block instance for writing output in a thread-safe way.
-				Grid<float> grid;
+				MemRaster<float> grid;
 				int sr = 0, sc = 0;
 
 				while(true) {
