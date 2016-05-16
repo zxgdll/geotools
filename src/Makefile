@@ -1,12 +1,20 @@
-CFLAGS=-I../include -I/usr/local/include -I/usr/include -I/usr/local/include/gdal -I/usr/include/gdal 
-CXXFLAGS=-std=c++11 -Wall -I../include -I/usr/local/include -I/usr/include -I/usr/local/include/gdal -I/usr/include/gdal 
+CXXFLAGS=-std=c++11 -Wall -I../include -I/usr/local/include -I/usr/include 
+
+# To deal with variable path prefixes
+CXXFLAGS += -I/usr/local/include/gdal -I/usr/include/gdal 
+CXXFLAGS += -I/usr/include/local/liblas -I/usr/include/liblas 
+CXXFLAGS += -I/usr/include/local/eigen3 -I/usr/include/eigen3
+
+# Using a library (like GEOS trunk) that is installed in /opt
+#CXXFLAGS := -I/opt/include $(CXXFLAGS)
+
 LIB=-L/usr/local/lib -L/usr/lib
 CC=gcc
 CPP=g++
 
 .PHONY: interp
 
-all: mosaic lasmerge lasgrid las2csrs lasclip rastfit interp proj_ellips findmin srtm_lakes #lasstats
+all: mosaic lasmerge lasgrid las2csrs lasclip interp lasstats
 
 debug: CXXFLAGS += -DDEBUG -g
 debug: CFLAGS += -DDEBUG -g
@@ -37,23 +45,26 @@ las2csrs:
 lasclip:
 	$(CPP) $(CXXFLAGS) lasclip.cpp $(LIB) -llas -lgeos -lgdal -lboost_system -o ../bin/lasclip
 
-rastfit:
-	$(CPP) $(CXXFLAGS) -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
+#rastfit:
+#	$(CPP) $(CXXFLAGS) -DWITH_CGAL interp/Interpolators.cpp rastfit.cpp $(LIB) -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/rastfit
 
 interp:
-	$(CPP) $(CXXFLAGS) interp/Interpolators.cpp interp.cpp $(LIB) -lgomp -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -lboost_thread-mt -o ../bin/interp
+	$(CPP) $(CXXFLAGS) -fopenmp interp/Interpolators.cpp interp.cpp $(LIB) -lgomp -lgdal -lmpfr -lgmp -lCGAL -lCGAL_Core -o ../bin/interp
 
 lasvalidate:
 	$(CPP) $(CXXFLAGS) lasvalidate.cpp $(LIB) -llas -lgeos -o ../bin/lasvalidate
 
-proj_ellips:
-	$(CC) $(CFLAGS) proj_ellips.c $(LIB) -o ../bin/proj_ellips
+lasboundary:
+	$(CPP) $(CXXFLAGS) -fopenmp lasboundary.cpp $(LIB) -llas -lgomp -lmpfr -lgmp -lgdal -lgeos -lboost_system -lboost_filesystem -o ../bin/lasboundary
 
-findmin:
-	$(CPP) $(CXXFLAGS) utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
+#proj_ellips:
+#	$(CC) $(CFLAGS) proj_ellips.c $(LIB) -o ../bin/proj_ellips
 
-srtm_lakes:
-	$(CPP) $(CXXFLAGS) utils/srtm_lakes.cpp $(LIB) -lgdal -o ../bin/srtm_lakes
+#findmin:
+#	$(CPP) $(CXXFLAGS) utils/findmin.cpp $(LIB) -lgdal -o ../bin/findmin
+
+#srtm_lakes:
+#	$(CPP) $(CXXFLAGS) utils/srtm_lakes.cpp $(LIB) -lgdal -o ../bin/srtm_lakes
 
 clean:
 	rm ../bin/*
