@@ -11,6 +11,13 @@
 #include <map>
 #include <memory>
 
+#include <geos/geom/GeometryFactory.h>
+#include <geos/geom/Geometry.h>
+#include <geos/geom/MultiLineString.h>
+#include <geos/geom/Polygon.h>
+#include <geos/geom/LineString.h>
+#include <geos/geom/Point.h>
+
 #include "ogr_spatialref.h"
 #include "ogr_geometry.h"
 #include "ogrsf_frmts.h"
@@ -84,6 +91,8 @@ public:
 	static const int POINT = 1;
 	/** Line geometry type. */
 	static const int LINE = 2;
+	/** MultiLine geometry type. */
+	static const int MULTILINE = 3;
 	/** Polygon geometry type. */
 	static const int POLYGON = 3;
 	// TODO: More geometry types.
@@ -170,6 +179,36 @@ public:
 		return ret;
 	}
 
+	std::unique_ptr<Geom> addMultiLine(geos::geom::MultiLineString &line) {
+		if(m_type != MULTILINE) throw "This is not a multiline layer.";
+		const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
+		OGRGeometry *geom = OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) &line);
+		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
+		feat->SetGeometry(geom);
+		std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
+		return ret;
+
+	}
+
+	std::unique_ptr<Geom> addMultiLine(const std::vector<std::vector<std::tuple<double, double, double> > > &line) {
+		if(m_type != MULTILINE) throw "This is not a multiline layer.";
+		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
+		OGRMultiLineString mline;
+		
+		for(std::vector<std::tuple<double, double, double > > seg:line) {
+			OGRLineString lseg;
+			int i = 0;
+			for(std::tuple<double, double, double> pt:seg)
+				lseg.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
+			mline.addGeometry(&lseg);
+		}
+		
+		feat->SetGeometry(&mline);
+		std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
+		return ret;
+
+	}
+
 	/**
 	 * Add a line to the geometry. The argument is a list of tuples 
 	 * containing three doubles, x, y, z.
@@ -195,7 +234,7 @@ public:
 	 */
 	std::unique_ptr<Geom> addPolygon(const std::vector<std::tuple<double, double, double> > &extRing, 
 																	 std::vector<std::vector<std::tuple<double, double, double > > > &holes) {
-		if(m_type != LINE) throw "This is not a line layer.";
+		if(m_type != POLYGON) throw "This is not a polygon layer.";
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
 		OGRPolygon poly;
 		
