@@ -192,7 +192,7 @@ void treetops(std::string &inraster, std::string &smraster, std::string &crownsh
 	std::cerr << "Loading " << inraster << std::endl;
 
 	// Work grid.
-	static Grid<float> k(3, 3);
+	static MemRaster<float> k(3, 3);
 
 	// Input raster.
 	Raster<float> raster(inraster);
@@ -205,7 +205,7 @@ void treetops(std::string &inraster, std::string &smraster, std::string &crownsh
 	Raster<int> ids(crownshp, raster.minx(), raster.miny(), raster.maxx(), raster.maxy(),
 				raster.resolution(), 0, proj);
 	// So track which cells are visited (faster than using IDs).
-	Grid<char> visited(raster.cols(), raster.rows());
+	MemRaster<char> visited(raster.cols(), raster.rows());
 	visited.fill(0);
 
 	// Gaussian-smoothed version of source raster.
