@@ -18,11 +18,16 @@
 #include <geos/geom/LineString.h>
 #include <geos/geom/Point.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
+ 
 #include "ogr_spatialref.h"
 #include "ogr_geometry.h"
 #include "ogrsf_frmts.h"
 
 #include "geotools.h"
+
+using namespace boost::algorithm;
 
 class Vector;
 
@@ -122,10 +127,16 @@ public:
 		
 		OGRSpatialReference *gproj = 0;
 		if(!proj.empty()) {
-			char *p = (char *) malloc((unsigned long) proj.size() + 1);
-			memcpy(p, proj.c_str(), proj.size() + 1);
-			gproj = new OGRSpatialReference();
-			gproj->importFromWkt(&p);
+			std::string chunk = proj.substr(0, 5);
+			to_lower(chunk);
+			if(starts_with(chunk, "epsg:")) {
+				gproj->importFromEPSG(atoi(proj.substr(5).c_str()));
+			} else {
+				char *p = (char *) malloc((unsigned long) proj.size() + 1);
+				memcpy(p, proj.c_str(), proj.size() + 1);
+				gproj = new OGRSpatialReference();
+				gproj->importFromWkt(&p);
+			}
 		}
 
 		OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(vecType.c_str());
