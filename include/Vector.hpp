@@ -100,7 +100,8 @@ public:
 	 * Construct a Vector with the given output file name, geometry 
 	 * type and projection information.
 	 */
-	Vector(std::string &filename, int type, std::string &proj) {
+	Vector(const std::string &filename, int type, const std::string &proj, 
+		const std::string &vecType = std::string("ESRI Shapefile")) {
 		m_type = 0;
 		m_layer = nullptr;
 		m_ds = nullptr;
@@ -118,7 +119,7 @@ public:
 			gproj->importFromWkt(&p);
 		}
 
-		OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName("ESRI Shapefile");
+		OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(vecType.c_str());
 		if(!drv)
 			throw "Failed to load Shapefile driver.";
 		if(!(m_ds = drv->CreateDataSource(filename.c_str(), 0)))
@@ -132,8 +133,9 @@ public:
 	 * type and projection information. Also configures fields from 
 	 * the given mapping of attribute properties.
 	 */
-	Vector(std::string &filename, int type, std::string &proj, std::map<std::string, int> &attributes) :
-		Vector(filename, type, proj) {
+	Vector(const std::string &filename, int type, const std::string &proj, 
+		const std::map<std::string, int> &attributes, const std::string &vecType = std::string("ESRI Shapefile")) :
+		Vector(filename, type, proj, vecType) {
 		for(auto it = attributes.begin(); it != attributes.end(); ++it) {
 			OGRFieldType type;
 			m_atypes[it->first] = it->second;
@@ -173,7 +175,7 @@ public:
 	 * containing three doubles, x, y, z.
 	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 	 */
-	std::unique_ptr<Geom> addLine(std::vector<std::tuple<double, double, double> > &points) {
+	std::unique_ptr<Geom> addLine(const std::vector<std::tuple<double, double, double> > &points) {
 		if(m_type != LINE) throw "This is not a line layer.";
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
 		OGRLineString line;
@@ -191,7 +193,7 @@ public:
 	 * lists for holes/islands.
 	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 	 */
-	std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing, 
+	std::unique_ptr<Geom> addPolygon(const std::vector<std::tuple<double, double, double> > &extRing, 
 																	 std::vector<std::vector<std::tuple<double, double, double > > > &holes) {
 		if(m_type != LINE) throw "This is not a line layer.";
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
@@ -225,7 +227,7 @@ public:
 	 * containing three doubles, x, y, z for the exterior ring.
 	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 	 */
-	std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing) {
+	std::unique_ptr<Geom> addPolygon(const std::vector<std::tuple<double, double, double> > &extRing) {
 		std::vector<std::vector<std::tuple<double, double, double > > > holes;
 		return addPolygon(extRing, holes);
 	}
