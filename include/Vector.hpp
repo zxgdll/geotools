@@ -17,10 +17,11 @@
 #include <geos/geom/Polygon.h>
 #include <geos/geom/LineString.h>
 #include <geos/geom/Point.h>
+#include <geos/io/WKBWriter.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
- 
+
 #include "ogr_spatialref.h"
 #include "ogr_geometry.h"
 #include "ogrsf_frmts.h"
@@ -86,6 +87,8 @@ protected:
 			return wkbLineString;
 		case POLYGON:
 			return wkbPolygon;
+		case MULTILINE:
+			return wkbMultiLineString;
 		default:
 			throw "Unknown or unimplemented geometry type.";
 		}
@@ -97,7 +100,7 @@ public:
 	/** Line geometry type. */
 	static const int LINE = 2;
 	/** MultiLine geometry type. */
-	static const int MULTILINE = 3;
+	static const int MULTILINE = 4;
 	/** Polygon geometry type. */
 	static const int POLYGON = 3;
 	// TODO: More geometry types.
@@ -130,7 +133,9 @@ public:
 			std::string chunk = proj.substr(0, 5);
 			to_lower(chunk);
 			if(starts_with(chunk, "epsg:")) {
-				gproj->importFromEPSG(atoi(proj.substr(5).c_str()));
+				int code = atoi(proj.substr(5).c_str());
+				gproj = new OGRSpatialReference();
+				gproj->importFromEPSG(code);
 			} else {
 				char *p = (char *) malloc((unsigned long) proj.size() + 1);
 				memcpy(p, proj.c_str(), proj.size() + 1);
@@ -192,8 +197,16 @@ public:
 
 	std::unique_ptr<Geom> addMultiLine(geos::geom::MultiLineString &line) {
 		if(m_type != MULTILINE) throw "This is not a multiline layer.";
-		const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
-		OGRGeometry *geom = OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) &line);
+		//const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
+		
+		std::stringstream buf;
+		geos::io::WKBWriter writer;
+		writer.write(line, buf);
+		OGRGeometry *geom;
+		unsigned char *data = (unsigned char *) buf.str().c_str();
+
+		OGRGeometryFactory::createFromWkb(data, 0, &geom, buf.str().size());
+		//OGRGeometry *geom = OGRGeometryFactory::createFromGEOS(gctx, gline);
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
 		feat->SetGeometry(geom);
 		std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
