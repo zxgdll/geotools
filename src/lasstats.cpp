@@ -366,12 +366,13 @@ void doVector(std::string &shapefile, std::string &outfile, std::string &layerna
 		std::cout << "Processing file " << files[i] << std::endl;
 
 		// Build the boundary polygon.
-		std::vector<geom::Coordinate> coords;
-		coords.push_back(geom::Coordinate(h.GetMinX(), h.GetMinY()));
-		coords.push_back(geom::Coordinate(h.GetMaxX(), h.GetMinY()));
-		coords.push_back(geom::Coordinate(h.GetMaxX(), h.GetMaxY()));
-		coords.push_back(geom::Coordinate(h.GetMinX(), h.GetMaxY()));
-		coords.push_back(geom::Coordinate(h.GetMinX(), h.GetMinY()));
+		std::vector<geom::Coordinate> coords = {
+			geom::Coordinate(h.GetMinX(), h.GetMinY()),
+			geom::Coordinate(h.GetMaxX(), h.GetMinY()),
+			geom::Coordinate(h.GetMaxX(), h.GetMaxY()),
+			geom::Coordinate(h.GetMinX(), h.GetMaxY()),
+			geom::Coordinate(h.GetMinX(), h.GetMinY())
+		};
 		geom::CoordinateSequence *cs = cf->create(&coords);
 		geom::LinearRing *lr = gf->createLinearRing(cs);
 		geom::Polygon *bounds = gf->createPolygon(lr, nullptr);
