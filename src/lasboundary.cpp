@@ -19,10 +19,13 @@
 #include <math.h>
 
 #include <omp.h>
-#include <ogr_spatialref.h>
-#include <ogrsf_frmts.h>
-#include <ogr_spatialref.h>
-#include <gdal_priv.h>
+
+
+#include <geos/triangulate/DelaunayTriangulationBuilder.h>
+#include <geos/geom/GeometryFactory.h>
+#include <geos/geom/Geometry.h>
+#include <geos/geom/Point.h>
+#include <geos/geom/Coordinate.h>
 
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -32,6 +35,8 @@
 
 #include "geotools.h"
 #include "Util.hpp"
+#include "Raster.hpp"
+#include "Vector.hpp"
 
 #define LAS_EXT ".las"
 
@@ -43,7 +48,7 @@ namespace las = liblas;
  * Gets a list of the files in the directory pointed to by srcDir, 
  * or returns a list containing srcDir if srcDir is a file.
  */
-void listFiles(std::vector<std::string> &files, const char *srcDir) {
+void listFiles(std::vector<std::string> &files, std::string &srcDir) {
 	fs::path srcdir_p(srcDir);
 	if(!exists(srcdir_p))
 		throw std::invalid_argument("Path not found.");
@@ -79,13 +84,6 @@ bool inList(std::set<int> &classes, int cls) {
 	return classes.find(cls) != classes.end();
 }
 
-/**
- * Returns the square of a given float.
- */
-inline float _sq(float a) {
-	return a * a;
-}
-
 void usage() {
 	std::cerr << "Usage: lasboundary [options] -i <src dir> -o <dst file>" << std::endl;
 	std::cerr << "	This program creates a Shapefile containing the boundary " << std::endl;
@@ -100,6 +98,123 @@ void usage() {
 	std::cerr << "  -s       - The integer EPSG ID of the coordinate reference system." << std::endl;
 }
 
+bool fullNeighbours(Grid<char> &grid, int col, int row) {
+	if(col == 0 || row == 0 || col >= grid.cols() - 1 || row >= grid.rows() - 1)
+		return false;
+	if(
+		!grid.get(col-1, row-1) || 
+		!grid.get(col, row-1) || 
+		!grid.get(col+1, row-1) ||
+		!grid.get(col-1, row) || 
+		!grid.get(col+1, row) ||
+		!grid.get(col-1, row+1) || 
+		!grid.get(col, row+1) || 
+		!grid.get(col+1, row+1))
+		return false;
+	return true;
+}
+
+void buildBoundary(std::string &srcDir, std::string &dstFile, int srid, double res, std::set<int> &classes) {
+
+	if(srcDir.empty()) 
+		throw "No source dir given.";
+
+	if(dstFile.empty())
+		throw "No dest file given.";
+
+	if(srid <= 0)
+		throw "No SRID given.";
+
+	// Gets the list of files from the source dir.
+	std::vector<std::string> files;
+	listFiles(files, srcDir);
+
+	if(files.size() == 0)
+		throw "No files found.";
+
+	las::ReaderFactory rf;
+	std::vector<double> bounds = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
+
+	for(unsigned int i=0; i<files.size(); ++i) {
+		// Open the file and create a reader.
+		std::cerr << "Checking " << files[i] << std::endl;
+		std::ifstream in(files[i].c_str());
+		las::Reader reader = rf.CreateWithStream(in);
+		las::Header header = reader.GetHeader();
+		std::vector<double> bounds0 = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
+		Util::computeLasBounds(header, bounds0, 2);
+		Util::expand(bounds, bounds0, 2);
+		in.close();
+	}
+
+	Util::snapBounds(bounds, res, 2);
+	int cols = (int) ((bounds[2] - bounds[0]) + res);
+	int rows = (int) ((bounds[3] - bounds[1]) + res);
+	double width = bounds[2] - bounds[0];
+	double height = bounds[3] - bounds[1];
+
+	MemRaster<char> grid(cols, rows);
+
+	for(unsigned int i=0; i<files.size(); ++i) {
+		// Open the file and create a reader.
+		std::cerr << "Processing " << files[i] << std::endl;
+		std::ifstream in(files[i].c_str());
+		las::Reader reader = rf.CreateWithStream(in);
+		las::Header header = reader.GetHeader();
+		while(reader.ReadNextPoint()) {
+			las::Point pt = reader.GetPoint();
+			if(classes.size() == 0 || inList(classes, pt.GetClassification().GetClass())) {
+				int col = (int) ((pt.GetX() - bounds[0]) / res);
+				int row = (int) ((pt.GetY() - bounds[1]) / res);
+				grid.set(col, row, 1);
+			}
+		}
+	}
+
+	using namespace geos::geom;
+	using namespace geos::triangulate;
+
+	GeometryFactory::unique_ptr gf = GeometryFactory::create();
+
+	std::vector<Geometry*> coords;
+
+	// Create a point set from the grid cells with returns in them.
+	for(int row = 0; row < grid.rows(); ++row) {
+		for(int col = 0; col < grid.cols(); ++col) {
+			if(grid.get(col, row) && !fullNeighbours(grid, col, row))
+				coords.push_back(gf->createPoint(Coordinate(col * res + bounds[0] + res / 2.0, row * res + bounds[1] - res / 2.0)));
+		}
+	}
+
+	// Build Delaunay.
+	GeometryCollection *mp = gf->createGeometryCollection(coords);
+	DelaunayTriangulationBuilder dtb;
+	dtb.setSites(*mp);
+
+	// Get the edges.
+	std::unique_ptr<MultiLineString> boundary = dtb.getEdges(*gf);
+
+	MultiLineString *edges = boundary.get();
+	std::vector<Geometry*> newlines;
+	for(unsigned int i = 0; i < edges->getNumGeometries(); ++i) {
+		Geometry *line = (Geometry *) edges->getGeometryN(i);
+		if(line->getLength() < 10.0) {
+			newlines.push_back(line);
+		}
+	}
+
+	MultiLineString *newbounds = gf->createMultiLineString(&newlines);
+
+	// Build the vector.
+	std::map<std::string, int> attribs;
+	attribs["value"] = Vector::INTEGER;
+	Vector vec(dstFile, Vector::MULTILINE, std::string("epsg:26912"), attribs);
+
+	std::unique_ptr<Geom> g = vec.addMultiLine(*newbounds);
+	g->setAttribute("value", 1);
+
+}
+
 int main(int argc, char **argv) {
 
 	if(argc < 6) {
@@ -107,19 +222,17 @@ int main(int argc, char **argv) {
 		return 1;
 	}
 
-	char *srcDir = 0;
-	char *dstFile = 0;
+	std::string srcDir;
+	std::string dstFile;
 	int srid = 0;
 	double res = 1.0;
 	std::set<int> classes;
-	bool hasClasses = false;
 
 	for(int i = 0; i < argc; ++i) {
 		std::string s(argv[i]);
 		if(s == "-c") {
 			// Gets the set of classes to keep
 			intSplit(classes, argv[++i]);
-			hasClasses = true;
 		} else if(s == "-r") {
 			 res = atof(argv[++i]);
 		} else if(s == "-s") {
@@ -131,106 +244,14 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if(!srcDir) {
-		std::cerr << "No source dir given." << std::endl;
+	try {
+
+		buildBoundary(srcDir, dstFile, srid, res, classes);
+	} catch(const char *e) {
+		std::cerr << e << std::endl;
 		usage();
 		return 1;
 	}
-
-	if(!dstFile) {
-		std::cerr << "No dest file given." << std::endl;
-		usage();
-		return 1;
-	}
-
-	if(srid <= 0) {
-		std::cerr << "No SRID given." << std::endl;
-		usage();
-		return 1;
-	}
-
-	// Gets the list of files from the source dir.
-	std::vector<std::string> files;
-	listFiles(files, srcDir);
-
-	if(files.size() == 0) {
-		std::cerr << "No files found." << std::endl;
-		usage();
-		return 1;
-	}
-
-	las::ReaderFactory rf;
-	double bounds[4] = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
-	double bounds0[4] = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
-
-	for(unsigned int i=0; i<files.size(); ++i) {
-		// Open the file and create a reader.
-		std::cerr << "Checking " << files[i] << std::endl;
-		std::ifstream in(files[i].c_str());
-		las::Reader reader = rf.CreateWithStream(in);
-		las::Header header = reader.GetHeader();
-		Util::computeLasBounds(header, bounds0, 2);
-		Util::expand(bounds, bounds0, 2);
-		in.close();
-	}
-
-	Util::snapBounds(bounds, res, 2);
-	int cols = (int) ((bounds[2] - bounds[0]) + res);
-	int rows = (int) ((bounds[3] - bounds[1]) + res);
-	double width = bounds[2] - bounds[0];
-	double height = bounds[3] - bounds[1];
-	int col, row;
-	char *grid = (char *) calloc(cols * rows, sizeof(char));
-
-	for(unsigned int i=0; i<files.size(); ++i) {
-		// Open the file and create a reader.
-		std::cerr << "Processing " << files[i] << std::endl;
-		std::ifstream in(files[i].c_str());
-		las::Reader reader = rf.CreateWithStream(in);
-		las::Header header = reader.GetHeader();
-		while(reader.ReadNextPoint()) {
-			las::Point pt = reader.GetPoint();
-			if(!hasClasses || inList(classes, pt.GetClassification().GetClass())) {
-				col = (int) ((pt.GetX() - bounds[0]) / width * res * cols);
-				row = (int) ((pt.GetY() - bounds[1]) / height * res * rows);
-				grid[row * cols + col] = 1;
-			}
-		}
-	}
-
-	// Build the shapefile output.
-	GDALAllRegister();
-	OGRRegisterAll();
-	double transform[6] = {bounds[0], res, 0, bounds[3], 0, -res};
-	const char *shpFormat = "ESRI Shapefile";
-	const char *tifFormat = "GTiff";
-
-    OGRSpatialReference ref;
-    ref.importFromEPSG(srid);
-    char *crs = (char *) malloc(1024 * sizeof(char));
-    ref.exportToWkt(&crs);
-
-    OGRSFDriver *shpDriver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(shpFormat);
-    GDALDriver *tifDriver = GetGDALDriverManager()->GetDriverByName(tifFormat);
-
-    GDALDataset *tifDS = tifDriver->Create("/tmp/lasboundary.tif", cols, rows, 1, GDT_Byte, 0);
-    tifDS->SetGeoTransform(transform);
-    tifDS->SetProjection(crs);
-    tifDS->RasterIO(GF_Write, 0, 0, cols, rows, grid, cols, rows, GDT_Byte, 1, 0, 0, 0, 0);
-    OGRFree(crs);
-
-    OGRDataSource *shpDS = shpDriver->CreateDataSource(dstFile, NULL);
-    OGRLayer *layer = shpDS->CreateLayer("boundary", &ref, wkbMultiPolygon, NULL);
-	OGRFieldDefn fvalue("value", OFTReal);
-	if(layer->CreateField(&fvalue) != OGRERR_NONE) {
-		std::cerr << "Failed to create value field." << std::endl;
-		return 1;
-	}
-
-    //GDALPolygonize(tifDS, NULL, layer, 0, NULL, NULL, NULL);
-	std::cerr << "Writing to file." << std::endl;
-    GDALClose(tifDS);
-    GDALClose(shpDS);
 
     return 0;
 
