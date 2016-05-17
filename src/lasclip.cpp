@@ -107,7 +107,6 @@ void lasclip(std::string &outfile, std::string &shapefile, std::string &layernam
 	double cbounds[] = { env->getMinX(), env->getMinY(), env->getMaxX(), env->getMaxY() };
 
 	/* Loop over files and figure out which ones are relevant. */
-
 	las::ReaderFactory rf;
 	las::Header *dsth = nullptr;
 	std::vector<unsigned int> indices;
@@ -120,9 +119,6 @@ void lasclip(std::string &outfile, std::string &shapefile, std::string &layernam
 
 		if(i == 0)
 			dsth = new las::Header(h);
-
-		//if(!quiet)
-		//	std::cerr << "Checking file " << filename << std::endl;
 
 		std::vector<gg::Coordinate> coords;
 		coords.push_back(gg::Coordinate(h.GetMinX(), h.GetMinY()));
@@ -171,7 +167,7 @@ void lasclip(std::string &outfile, std::string &shapefile, std::string &layernam
 			las::Point pt = r.GetPoint();
 			
 			int cls = pt.GetClassification().GetClass();
-			if(classes.size() > 0 || !Util::inList(classes, cls)) 
+			if(classes.size() > 0 && !Util::inList(classes, cls)) 
 				continue;
 			
 			double x = pt.GetX();
@@ -179,7 +175,7 @@ void lasclip(std::string &outfile, std::string &shapefile, std::string &layernam
 			const gg::Coordinate c(x, y);
 			gg::Point *p = gf->createPoint(c);
 
-			if(Util::inBounds(x, y, cbounds)) {// && geomColl->contains(p)) {
+			if(Util::inBounds(x, y, cbounds) && geomColl->contains(p)) {
 				++recs[cls];
 				++count;
 				w.WritePoint(pt);
