@@ -532,6 +532,7 @@ int main(int argc, char **argv) {
 				type, radius, resolution, bounds, quiet);
 	} catch(const char *ex) {
 		std::cerr << ex << std::endl;
+		usage();
 		return 1;
 	}
 }
