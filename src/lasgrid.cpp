@@ -135,12 +135,63 @@ bool inRadius(double px, double py, int col, int row, double radius,
 	return a <= b;
 }
 
+
 void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
-			int crs, int quantile, int numQuantiles, int attribute, int type, float radius,
-			float resolution, std::vector<double> &bounds, bool hasBounds, bool quiet) {
+			int crs, std::vector<int> &quantiles, int attribute, int type, float radius,
+			float resolution, std::vector<double> &bounds, bool quiet) {
+
+	if(files.size() == 0)
+		throw "At least one input file is required.";
+	if(!quiet)
+		std::cerr << files.size() << " files." << std::endl;
+
+	if(dstFile.empty()) 
+		throw "An output file is required.";
+	if(!quiet)
+		std::cerr << "Creating " << dstFile << std::endl;
+
+	if(attribute == 0)
+		throw "An attribute is required.";
+	if(!quiet)
+		std::cerr << "Attribute: " << attribute << std::endl;
+
+	if(type == 0)
+		throw "A valid type is required.";
+	if(!quiet)
+		std::cerr << "Type: " << type << std::endl;
+
+	int quantile = 0;
+	int numQuantiles = 0;
+	if(type == TYPE_QUANTILE && quantiles.size() < 2) {
+		throw "If the type is quantiles, there must be a -q argument with 2 values.";
+	} else if(type == TYPE_QUANTILE) {
+		quantile = quantiles[1];
+		numQuantiles = quantiles[0];
+		if(quantile == 0) {
+			if(!quiet)
+				std::cerr << "Using min because q = 0." << std::endl;
+			type = TYPE_MIN;
+		} else if(quantile == numQuantiles) {
+			if(!quiet)
+				std::cerr << "Using max because q = numQuantiles." << std::endl;
+			type = TYPE_MAX;
+		} else {
+			if(numQuantiles < 2)
+				throw "The number of quantiles must be >=2 and the quantile must be between 0 and n, inclusive.";
+			if(!quiet)
+				std::cerr << "Quantiles: " << quantile << ", Q: " << numQuantiles << std::endl;
+		}
+	}
+
+	if(classes.size() == 0) {
+		std::cerr << "WARNING: No classes given. Matching all classes." << std::endl;
+	} else {
+		if(!quiet)
+			std::cerr << "Classes: " << classes.size() << std::endl;
+	}
 
 	// Snap bounds
-	if(hasBounds) 
+	if(bounds.size() == 4) 
 		Util::snapBounds(bounds, resolution, 2);
 
 	MemRaster<float> grid1;
@@ -151,6 +202,14 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	las::ReaderFactory rf;
 	std::vector<unsigned int> indices;
 
+	bool hasBounds = bounds.size() > 0;
+	if(!hasBounds) {
+		bounds.push_back(DBL_MAX_POS);
+		bounds.push_back(DBL_MAX_POS);
+		bounds.push_back(DBL_MAX_NEG);
+		bounds.push_back(DBL_MAX_NEG);
+	}
+
 	for(unsigned int i=0; i<files.size(); ++i) {
 		std::ifstream in(files[i].c_str());
 		las::Reader r = rf.CreateWithStream(in);
@@ -159,9 +218,14 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		if(!Util::computeLasBounds(h, bounds0, 2))
 			Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 		in.close();
-		// If bounds are given, ignore blocks that do not intersect.
-		if(!hasBounds || (hasBounds && Util::intersects(bounds0, bounds, 2)))
+		if(hasBounds) {
+			// If bounds are given, ignore blocks that do not intersect.
+			if(!Util::intersects(bounds0, bounds, 2))
+				continue;
+		} else {
+			// Otherwise expand to include each block.
 			Util::expand(bounds, bounds0, 2);
+		}
 		indices.push_back(i);
 	}
 
@@ -224,7 +288,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 			double px = pt.GetX();
 			double py = pt.GetY();
 			// Check if in bounds, but only if clipping is desired.
-			if(hasBounds && !Util::inBounds(px, py, bounds)) 
+			if(!Util::inBounds(px, py, bounds)) 
 				continue;
 			// If this point is not in the class list, skip it.
 			if(!Util::inList(classes, pt.GetClassification().GetClass()))
@@ -422,19 +486,16 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 int main(int argc, char **argv) {
 
 	std::string dstFile;
-	bool hasBounds = false;
 	bool quiet = true;
 	int crs = 0;
 	int type = TYPE_MEAN;
 	int att = ATT_HEIGHT;
-	int numQuantiles = 0;
-	int quantile = 0;
 	float resolution = 2.0;
 	float radius = -1.0;
-	std::vector<double> bounds = {DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG};
+	std::vector<double> bounds;
 	std::set<int> classes;
-	std::vector<int> quantiles;
 	std::vector<std::string> files;
+	std::vector<int> quantiles;
 
 	for(int i = 1; i < argc; ++i) {
 		std::string s(argv[i]);
@@ -457,87 +518,18 @@ int main(int argc, char **argv) {
 		} else if(s == "-v") {
 			quiet = false;
 		} else if(s == "-b") {
-			bounds[0] = atof(argv[++i]);
-			bounds[1] = atof(argv[++i]);
-			bounds[2] = atof(argv[++i]);
-			bounds[3] = atof(argv[++i]);
-			hasBounds = true;
+			bounds.push_back(atof(argv[++i]));
+			bounds.push_back(atof(argv[++i]));
+			bounds.push_back(atof(argv[++i]));
+			bounds.push_back(atof(argv[++i]));
 		} else {
 			files.push_back(argv[i]);
 		}
 	}
 
-	if(files.size() == 0) {
-		std::cerr << "At least one input file is required." << std::endl;
-		usage();
-		return 1;
-	} else {
-		std::cerr << files.size() << " files." << std::endl;
-	}
-
-	if(dstFile.empty()) {
-		std::cerr << "An output file is required." << std::endl;
-		usage();
-		return 1;
-	} else {
-		if(!quiet)
-			std::cerr << "Creating " << dstFile << std::endl;
-	}
-
-	if(att == 0) {
-		std::cerr << "An attribute is required." << std::endl;
-		usage();
-		return 1;
-	} else {
-		if(!quiet)
-			std::cerr << "Attribute: " << att << std::endl;
-	}
-
-	if(type == 0) {
-		std::cerr << "A valid type is required." << std::endl;
-		usage();
-		return 1;
-	} else {
-		if(!quiet)
-			std::cerr << "Type: " << type << std::endl;
-	}
-
-	if(type == TYPE_QUANTILE && quantiles.size() < 2) {
-		std::cerr << "If the type is quantiles, there must be a -q argument with 2 values." << std::endl;
-		usage();
-		return 1;
-	} else if(type == TYPE_QUANTILE) {
-		quantile = quantiles[1];
-		numQuantiles = quantiles[0];
-		if(quantile == 0) {
-			if(!quiet)
-				std::cerr << "Using min because q = 0." << std::endl;
-			type = TYPE_MIN;
-		} else if(quantile == numQuantiles) {
-			if(!quiet)
-				std::cerr << "Using max because q = numQuantiles." << std::endl;
-			type = TYPE_MAX;
-		} else {
-			if(numQuantiles < 2) {
-				std::cerr << "The number of quantiles must be >=2 and the quantile must be between 0 and n, inclusive." << std::endl;
-				usage();
-				return 1;
-			}
-			if(!quiet)
-				std::cerr << "Quantiles: " << quantile << ", Q: " << numQuantiles << std::endl;
-		}
-	}
-
-	if(classes.size() == 0) {
-		std::cerr << "WARNING: No classes given. Matching all classes." << std::endl;
-	} else {
-		if(!quiet)
-			std::cerr << "Classes: " << classes.size() << std::endl;
-	}
-
 	try {
-		lasgrid(dstFile, files, classes, crs, quantile, numQuantiles, att,
-				type, radius, resolution, bounds, hasBounds, quiet);
+		lasgrid(dstFile, files, classes, crs, quantiles, att,
+				type, radius, resolution, bounds, quiet);
 	} catch(const char *ex) {
 		std::cerr << ex << std::endl;
 		return 1;

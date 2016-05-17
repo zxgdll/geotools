@@ -48,58 +48,19 @@ void usage() {
 	std::cerr << " -q Supress output." << std::endl;	
 }
 
-int main(int argc, char ** argv) {
+void lasclip(std::string &outfile, std::string &shapefile, std::string &layername, 
+	std::vector<std::string> &files, std::set<int> &classes, bool quiet) {
 
-	std::vector<char *> files;
-	std::string outfile;
-	std::string shapefile;
-	std::string layername;
-	std::set<int> classes;
-	bool quiet = false;
-
-	/* Parse and check input. */
-
-	for(int i=1;i<argc;++i) {
-		std::string arg(argv[i]);
-		if(arg == "-s") {
-			shapefile = argv[++i];
-		} else if(arg == "-o") {
-			outfile = argv[++i];
-		} else if(arg == "-l") {
-			layername = argv[++i];
-		} else if(arg == "-q") {
-			quiet = true;
-		} else if(arg == "-c") {
-			Util::intSplit(classes, argv[++i]);
-		} else {
-			files.push_back(argv[i]);
-		}
-	}
-
-	if(outfile.empty()) {
-		std::cerr << "An output file (-o) is required." << std::endl;
-		usage();
-		return 1;
-	}
-
-	if(shapefile.empty()) {
-		std::cerr << "A shape file (-s) is required." << std::endl;
-		usage();
-		return 1;
-	}
-
-	if(files.size() == 0) {
-		std::cerr << "At least one input file is required." << std::endl;
-		usage();
-		return 1;
-	}
-
-	if(classes.size() == 0) {
+	if(outfile.empty()) 
+		throw "An output file (-o) is required.";
+	if(shapefile.empty())
+		throw "A shape file (-s) is required.";
+	if(files.size() == 0)
+		throw "At least one input file is required.";
+	if(classes.size() == 0)
 		std::cerr << "WARNING: No classes specified, matching all classes." << std::endl;
-	}
 
 	/* Attempt to open and load geometries from the shape file. */
-
 	OGRRegisterAll();
 	OGRLayer *layer;
 	OGRFeature *feat;
@@ -109,28 +70,19 @@ int main(int argc, char ** argv) {
 	gg::Geometry *geom;
 
 	OGRDataSource *ds = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
-	if(ds == NULL) {
-		std::cerr << "Couldn't open shapefile." << std::endl;
-		return 1;
-	}
-
+	if(ds == nullptr)
+		throw "Couldn't open shapefile.";
 	if(layername.empty()) {
 		layer = ds->GetLayer(0);
 	} else {
 		layer = ds->GetLayerByName(layername.c_str());
 	}
-	if(layer == NULL) {
-		std::cerr << "Couldn't get layer." << std::endl;
-		GDALClose(ds);
-		return 1;
-	}
+	if(layer == nullptr)
+		throw "Couldn't get layer.";
 
 	type = layer->GetGeomType();
-	if(type != wkbPolygon && type != wkbMultiPolygon) {
-		std::cerr << "Geometry must be polygon or multipolygon." << std::endl;
-		GDALClose(ds);
-		return 1;
-	}
+	if(type != wkbPolygon && type != wkbMultiPolygon)
+		throw "Geometry must be polygon or multipolygon.";
 
 	const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
 	const gg::GeometryFactory *gf = gg::GeometryFactory::getDefaultInstance();
@@ -145,15 +97,14 @@ int main(int argc, char ** argv) {
 
 	GDALClose(ds);
 
-	if(geoms.size() == 0) {
-		std::cerr << "No geometries were found." << std::endl;
-		return 1;
-	}
+	if(geoms.size() == 0)
+		throw "No geometries were found.";
 
 	/* The geometry collection is used for checking whether a las file intersects
 	   the region of interest. */
-	
 	geomColl = gf->createGeometryCollection(geoms);
+	const gg::Envelope *env = geomColl->getEnvelopeInternal();
+	double cbounds[] = { env->getMinX(), env->getMinY(), env->getMaxX(), env->getMaxY() };
 
 	/* Loop over files and figure out which ones are relevant. */
 
@@ -163,8 +114,7 @@ int main(int argc, char ** argv) {
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
 
-		const char * filename = files[i];
-		std::ifstream in(filename, std::ios::in | std::ios::binary);
+		std::ifstream in(files[i].c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 
@@ -191,10 +141,8 @@ int main(int argc, char ** argv) {
 		in.close();
 	}
 
-	if(indices.size() == 0) {
-		std::cerr << "No files matched the given bounds." << std::endl;
-		return 1;
-	}
+	if(indices.size() == 0) 
+		throw "No files matched the given bounds.";
 
 	std::ofstream out(outfile, std::ios::out | std::ios::binary);
 	las::WriterFactory wf;
@@ -210,25 +158,28 @@ int main(int argc, char ** argv) {
 	for(int i = 0; i < 5; ++i)
 		recs.push_back(0);
 
-	std::cerr << "Starting" << std::endl;
-
    	for(unsigned int i = 0; i < indices.size(); ++i) {
 
-		const char * filename = files[indices[i]];
-		std::ifstream in(filename, std::ios::in | std::ios::binary);
+		std::ifstream in(files[indices[i]].c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 
 		if(!quiet)
-			std::cerr << "Processing file " << filename << std::endl;
+			std::cerr << "Processing file " << files[indices[i]] << std::endl;
 
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
+			
 			int cls = pt.GetClassification().GetClass();
-			if(!Util::inList(classes, cls)) continue;
-			const gg::Coordinate c(pt.GetX(), pt.GetY());
+			if(classes.size() > 0 || !Util::inList(classes, cls)) 
+				continue;
+			
+			double x = pt.GetX();
+			double y = pt.GetY();
+			const gg::Coordinate c(x, y);
 			gg::Point *p = gf->createPoint(c);
-			if(geomColl->contains(p)) {
+
+			if(Util::inBounds(x, y, cbounds)) {// && geomColl->contains(p)) {
 				++recs[cls];
 				++count;
 				w.WritePoint(pt);
@@ -245,15 +196,51 @@ int main(int argc, char ** argv) {
 	}
 
 	// Set the total count and update the point record counts.
+	dsth->SetMin(bounds[0], bounds[2], bounds[4]);
+	dsth->SetMax(bounds[1], bounds[3], bounds[5]);
 	dsth->SetPointRecordsCount(count);
 	for(unsigned int i=0;i<recs.size();++i)
 		dsth->SetPointRecordsByReturnCount(i, recs[i]);
 
-	dsth->SetMin(bounds[0], bounds[2], bounds[4]);
-	dsth->SetMax(bounds[1], bounds[3], bounds[5]);
+	w.WriteHeader();
 
-	out.close();
-	//delete dsth;	
+}
+
+int main(int argc, char ** argv) {
+
+	std::vector<std::string> files;
+	std::string outfile;
+	std::string shapefile;
+	std::string layername;
+	std::set<int> classes;
+	bool quiet = false;
+
+	/* Parse and check input. */
+
+	for(int i=1;i<argc;++i) {
+		std::string arg(argv[i]);
+		if(arg == "-s") {
+			shapefile = argv[++i];
+		} else if(arg == "-o") {
+			outfile = argv[++i];
+		} else if(arg == "-l") {
+			layername = argv[++i];
+		} else if(arg == "-q") {
+			quiet = true;
+		} else if(arg == "-c") {
+			Util::intSplit(classes, argv[++i]);
+		} else {
+			files.push_back(std::string(argv[i]));
+		}
+	}
+
+	try {
+		lasclip(outfile, shapefile, layername, files, classes, quiet);
+	} catch(const char *e) {
+		std::cerr << e << std::endl;
+		usage();
+		return 1;
+	}
 
 	return 0;
 

@@ -67,23 +67,6 @@ void listFiles(std::vector<std::string> &files, std::string &srcDir) {
 	}
 }
 
-/**
- * Splits a string of comma-delimited integers into a set.
- */
-void intSplit(std::set<int> &classes, const char *classStr) {
-	std::stringstream ss(classStr);
-	std::string item;
-	while(std::getline(ss, item, ','))
-		classes.insert(atoi(item.c_str()));
-}
-
-/**
- * Returns true if the given int is in the set of ints.
- */
-bool inList(std::set<int> &classes, int cls) {
-	return classes.find(cls) != classes.end();
-}
-
 void usage() {
 	std::cerr << "Usage: lasboundary [options] -i <src dir> -o <dst file>" << std::endl;
 	std::cerr << "	This program creates a Shapefile containing the boundary " << std::endl;
@@ -163,7 +146,7 @@ void buildBoundary(std::string &srcDir, std::string &dstFile, int srid, double r
 		las::Header header = reader.GetHeader();
 		while(reader.ReadNextPoint()) {
 			las::Point pt = reader.GetPoint();
-			if(classes.size() == 0 || inList(classes, pt.GetClassification().GetClass())) {
+			if(classes.size() == 0 || Util::inList(classes, pt.GetClassification().GetClass())) {
 				int col = (int) ((pt.GetX() - bounds[0]) / res);
 				int row = (int) ((pt.GetY() - bounds[1]) / res);
 				grid.set(col, row, 1);
@@ -232,7 +215,7 @@ int main(int argc, char **argv) {
 		std::string s(argv[i]);
 		if(s == "-c") {
 			// Gets the set of classes to keep
-			intSplit(classes, argv[++i]);
+			Util::intSplit(classes, argv[++i]);
 		} else if(s == "-r") {
 			 res = atof(argv[++i]);
 		} else if(s == "-s") {
