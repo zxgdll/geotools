@@ -18,11 +18,11 @@ all: mosaic lasmerge lasgrid las2csrs lasclip interp lasstats
 
 debug: CXXFLAGS += -DDEBUG -g
 debug: CFLAGS += -DDEBUG -g
-debug: all
+debug: $(target)
 
 release: CXXFLAGS += -O3
 release: CFLAGS += -O3
-release: all
+release: $(target)
 
 mosaic:
 	$(CPP) $(CXXFLAGS) -fopenmp mosaic.cpp $(LIB) -lgdal -o ../bin/mosaic
