@@ -117,8 +117,8 @@ public:
 	 * Construct a Vector with the given output file name, geometry 
 	 * type and projection information.
 	 */
-	Vector(const std::string &filename, int type, const std::string &proj, 
-		const std::string &vecType = std::string("ESRI Shapefile")) {
+	Vector(std::string &filename, int type, std::string &proj, 
+		std::string &vecType = std::string("ESRI Shapefile")) {
 		m_type = 0;
 		m_layer = nullptr;
 		m_ds = nullptr;
@@ -158,8 +158,8 @@ public:
 	 * type and projection information. Also configures fields from 
 	 * the given mapping of attribute properties.
 	 */
-	Vector(const std::string &filename, int type, const std::string &proj, 
-		const std::map<std::string, int> &attributes, const std::string &vecType = std::string("ESRI Shapefile")) :
+	Vector(std::string &filename, int type, std::string &proj, 
+		std::map<std::string, int> &attributes, std::string &vecType = std::string("ESRI Shapefile")) :
 		Vector(filename, type, proj, vecType) {
 		for(auto it = attributes.begin(); it != attributes.end(); ++it) {
 			OGRFieldType type;
@@ -214,7 +214,7 @@ public:
 
 	}
 
-	std::unique_ptr<Geom> addMultiLine(const std::vector<std::vector<std::tuple<double, double, double> > > &line) {
+	std::unique_ptr<Geom> addMultiLine(std::vector<std::vector<std::tuple<double, double, double> > > &line) {
 		if(m_type != MULTILINE) throw "This is not a multiline layer.";
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
 		OGRMultiLineString mline;
@@ -238,7 +238,7 @@ public:
 	 * containing three doubles, x, y, z.
 	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 	 */
-	std::unique_ptr<Geom> addLine(const std::vector<std::tuple<double, double, double> > &points) {
+	std::unique_ptr<Geom> addLine(std::vector<std::tuple<double, double, double> > &points) {
 		if(m_type != LINE) throw "This is not a line layer.";
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
 		OGRLineString line;
@@ -256,7 +256,7 @@ public:
 	 * lists for holes/islands.
 	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 	 */
-	std::unique_ptr<Geom> addPolygon(const std::vector<std::tuple<double, double, double> > &extRing, 
+	std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing, 
 																	 std::vector<std::vector<std::tuple<double, double, double > > > &holes) {
 		if(m_type != POLYGON) throw "This is not a polygon layer.";
 		OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
@@ -290,7 +290,7 @@ public:
 	 * containing three doubles, x, y, z for the exterior ring.
 	 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 	 */
-	std::unique_ptr<Geom> addPolygon(const std::vector<std::tuple<double, double, double> > &extRing) {
+	std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing) {
 		std::vector<std::vector<std::tuple<double, double, double > > > holes;
 		return addPolygon(extRing, holes);
 	}

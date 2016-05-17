@@ -140,6 +140,14 @@ public:
 	* Returns true if the given coordinate is inside the bounds.
 	* Coordinates are assumed to have the same CRS as the bounds.
 	*/
+	static bool inBounds(double x, double y, double *bounds) {
+		return x >= bounds[0] && x < bounds[2] && y >= bounds[1] && y < bounds[3];
+	}
+
+	/**
+	* Returns true if the given coordinate is inside the bounds.
+	* Coordinates are assumed to have the same CRS as the bounds.
+	*/
 	static bool inBounds(double x, double y, double z, double *bounds) {
 		return x >= bounds[0] && x < bounds[2] && y >= bounds[1] && y < bounds[3] && z >= bounds[4] && z < bounds[5];
 	}
