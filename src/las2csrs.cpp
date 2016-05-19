@@ -22,6 +22,7 @@ namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
 namespace las = liblas;
 
+bool quiet = true;
 
 // Binary interpolation.
 double _binterp(float *grid, double c, double r, int c0, int r0, int c1, int r1, int width) {
@@ -108,7 +109,15 @@ public:
 	 * Compute the the shifts in x, y and z at position x, y. x and y are radians,
 	 * dx, dy and dz are m.
 	 */
-	void interpolate(double *x, double *y, double *dx, double *dy, double *dz, int count) {
+	void interpolate(Grid<double> &gx, Grid<double> &gy, Grid<double> &gdx, 
+		Grid<double> &gdy, Grid<double> &gdz, int count) {
+
+		double *x = gx.grid();
+		double *y = gy.grid();
+		double *dx = gdx.grid();
+		double *dy = gdy.grid();
+		double *dz = gdz.grid();
+
 		double c, r;
 		int c0, c1, r0, r1;
 		for(;count;--count, ++x, ++y, ++dx, ++dy, ++dz) {
@@ -138,6 +147,28 @@ private:
 	MemRaster<double> tg;
 	int width;
 	int height;
+
+};
+
+class Params {
+public:
+	// Source reference frame.
+	std::string ffrom;
+	// From and to epochs.
+	double efrom;
+	double eto;
+	// SRIDs of the from and to CRSes.
+	int fsrid;
+	int tsrid;
+	// The shift grid.
+	ShiftGrid shiftGrid;
+	// Transform parameters; loaded from the itrf file.
+	double tx, ty, tz, dtx, dty, dtz;		// Shifts, rates.
+	double rx, ry, rz, drx, dry, drz;		// Rotations, rates.
+	double epoch;							// ITRF Transform epoch.
+	//double dt; 								// Time delta
+	double d, dd; 							// Scale, scale rate.
+
 };
 
 /**
@@ -158,14 +189,20 @@ public:
 	 *          NAD83(CSRS), e.g. 2956 for UTM12N.
 	 */
 	Transformer(std::string &ffrom, float efrom, float eto, int fsrid, int tsrid) {
-		this->efrom = efrom;
-		this->eto = eto;
-		this->fsrid = fsrid;
-		this->tsrid = tsrid;
-		this->ffrom.assign(ffrom);
+
+		if(!quiet) {
+			std::cerr << "Transformer:" << std::endl
+				<< " -- src ref frame: " << ffrom << "; src epoch: " << efrom << "; dst epoch: " << eto << std::endl
+				<< " -- src srid: " << fsrid << "; dst srid: " << tsrid << std::endl;
+		}
+		params.efrom = efrom;
+		params.eto = eto;
+		params.fsrid = fsrid;
+		params.tsrid = tsrid;
+		params.ffrom.assign(ffrom);
 
 		initProjections();
-		loadHelmert();
+		loadHelmert(params);
 		shiftGrid.load();
 	}
 
@@ -177,34 +214,51 @@ public:
 	 */
 	void transformPoints(Grid<double> &x, Grid<double> &y, Grid<double> &z, int count, double bounds[6]) {
 
+		if(!quiet) {
+			std::cerr << std::setprecision(9) << "transformPoints" << std::endl;
+			std::cerr << "  -- Original: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
+		}
+
+		// Copy the coordinate arrays for transformation.
+		MemRaster<double> x0(count, 1);
+		MemRaster<double> y0(count, 1);
+		MemRaster<double> z0(count, 1);
+		memcpy(x0.grid(), x.grid(), sizeof(double) * count);
+		memcpy(y0.grid(), y.grid(), sizeof(double) * count);
+		memcpy(z0.grid(), z.grid(), sizeof(double) * count);
+
 		// Project to Cartesian 3D. (c)
 		pj_transform(p1, p2, count, 1, x.grid(), y.grid(), z.grid());
 
+		// Transform to latlon. (b)
+		pj_transform(p1, p4, count, 1, x0.grid(), y0.grid(), z0.grid());
+
+		if(!quiet)
+			std::cerr << "  -- Cartesian: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
+
+		if(!quiet)
+			std::cerr << "  -- Latlon: " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << z0.grid()[0] << std::endl;
+
 		// Transform to csrs using Helmert (etc.) params. (c)
-		epochTransform(x.grid(), y.grid(), z.grid(), count, this->efrom - 1997.0);
+		epochTransform(x, y, z, count, this->efrom - 1997.0);
+
+		if(!quiet)
+			std::cerr << "  -- Cartesian + epoch: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
 
 		// Only use the grid shift if the epoch changes.
 		if(efrom != eto) {
-
-			// Copy the coordinate arrays for transformation.
-			MemRaster<double> x0(count, 1);
-			MemRaster<double> y0(count, 1);
-			MemRaster<double> z0(count, 1);
-			memcpy(x0.grid(), x.grid(), sizeof(double) * count);
-			memcpy(y0.grid(), y.grid(), sizeof(double) * count);
-			memcpy(z0.grid(), z.grid(), sizeof(double) * count);
 
 			// Initalize shift arrays.
 			MemRaster<double> dx(count, 1);
 			MemRaster<double> dy(count, 1);
 			MemRaster<double> dz(count, 1);
 			
-			// Transform to latlon. (b)
-			pj_transform(p2, p4, count, 1, x0.grid(), y0.grid(), z0.grid());
-			
 			// Interpolate shifts using latlon coords -- returns in mm. (d)
-			shiftGrid.interpolate(x0.grid(), y0.grid(), dx.grid(), dy.grid(), dz.grid(), count);
+			shiftGrid.interpolate(x0, y0, dx, dy, dz, count);
 			
+			if(!quiet)
+				std::cerr << "  -- Velocities: " << dx.grid()[0] << ", " << dy.grid()[0] << ", " << dz.grid()[0] << std::endl;
+
 			// Transform mm shifts to latlon
 			MemRaster<double> dlat(count, 1);
 			MemRaster<double> dlon(count, 1);
@@ -212,9 +266,9 @@ public:
 			// Get projection's spheroid props.
 			double a, e2;
 			pj_get_spheroid_defn(p4, &a, &e2);
-			// Change the shift distance in projected coords to latlon.
-			// This avoids the scale distortion associated with projection.
-			_shift2latlon(dx.grid(), dy.grid(), y0.grid(), z0.grid(), a, e2, count, dlat.grid(), dlon.grid());
+
+			// Apply shifts (mm) to angular coords.
+			_shift2latlon(dx, dy, dz, x0, y0, z0, a, e2, count, dlat, dlon);
 
 			double dt = this->eto - this->efrom;
 			// Apply shifts to latlon coords.
@@ -258,6 +312,9 @@ public:
 	 */
 	int transformLas(std::string &srcfile, std::string &dstdir, bool overwrite) {
 		
+		if(!quiet)
+			std::cerr << "transformLas" << std::endl;
+
 		const fs::path src(srcfile);
 		const fs::path dst(dstdir);
 
@@ -271,6 +328,9 @@ public:
 		}
 
 		// Get the list of las files.
+		if(!quiet)
+			std::cerr << " -- Getting file list." << std::endl;
+
 		std::list<fs::path> files;
 		if(fs::is_regular_file(src)) {
 			if(overwrite || !fs::exists(dst / src.leaf()))
@@ -282,14 +342,19 @@ public:
 			for(; di != end; ++di) {
 				std::string p(di->path().string());
 				alg::to_lower(p);
-				if((overwrite || !fs::exists(dst / di->path().leaf())) && alg::ends_with(p, ext))
+				if((overwrite || !fs::exists(dst / di->path().leaf())) && alg::ends_with(p, ext)) {
 					files.push_back(di->path());
+				} else {
+					throw "The destination file exists and -o is not specified.";
+				}
 			}
 		}
+
 		if(files.size() == 0)
 			throw "No matching files found.";
 
-		std::cout << "Processing " << files.size() << " files." << std::endl;
+		if(!quiet)
+			std::cerr << "Processing " << files.size() << " files." << std::endl;
 
 		// Start
 		las::WriterFactory wf;
@@ -366,27 +431,17 @@ public:
 
 private:
 
-	// Source reference frame.
-	std::string ffrom;
-	// From and to epochs.
-	double efrom;
-	double eto;
 	// Projection objects.
 	projPJ p1;
 	projPJ p2;
 	projPJ p3;
 	projPJ p4;
-	// SRIDs of the from and to CRSes.
-	int fsrid;
-	int tsrid;
-	// The shift grid.
-	ShiftGrid shiftGrid;
-	// Transform parameters; loaded from the itrf file.
-	double tx, ty, tz, dtx, dty, dtz;		// Shifts, rates.
-	double rx, ry, rz, drx, dry, drz;		// Rotations, rates.
-	double epoch;							// ITRF Transform epoch.
-	//double dt; 								// Time delta
-	double d, dd; 							// Scale, scale rate.
+
+	Params params;
+
+	inline double _sec2rad(double x) {
+		return (x * 0.000290888);
+	}
 
 	/**
 		Transform the coordinate using the procedure listed in Craymer (2006).
@@ -394,21 +449,33 @@ private:
 		x, y, z -- 	The coordinate arrays.
 		count 	-- 	The number of points.
 	*/
-	void epochTransform(double *x, double *y, double *z, int count, double dt) {
-		double a0 = tx + dtx * dt;
-		double a1 = ty + dty * dt;
-		double a2 = tz + dtz * dt;
-		double bsx = 1.0 + d + dd * dt;
-		double b01 = -_sec2rad(rz + drz * dt);
-		double b02 = _sec2rad(ry + dry * dt);
-		double b10 = _sec2rad(rz + drz * dt);
-		double b12 = -_sec2rad(rx + drx * dt);
-		double b20 = -_sec2rad(ry + dry * dt);
-		double b21 = _sec2rad(rx + drx * dt);
+	void epochTransform(Params &p, Grid<double> &gx, Grid<double> &gy, Grid<double> &gz, int count, double dt) {
+
+		if(!quiet)
+			std::cerr << "epochTransform" << std::endl;
+
+		double *x = gx.grid();
+		double *y = gy.grid();
+		double *z = gz.grid();
+
+		double cx = p.tx + p.dtx * dt;            // Translation in X plus X velocity * time
+		double cy = p.ty + p.dty * dt;
+		double cz = p.tz + p.dtz * dt;
+		double s = 1.0 + p.d + p.dd * dt;         // Scale plus delta scale * time
+		double rx = _sec2rad(p.rx + p.drx * dt); // Rotation in X plus velocity * time; seconds to radians.
+		double ry = _sec2rad(p.ry + p.dry * dt);
+		double rz = _sec2rad(p.rz + p.drz * dt);
+
+		if(!quiet) {
+			std::cerr << " -- cx: " << cx << "; cy: " << cy << "; cz: " << cz << std::endl;
+			std::cerr << " -- rx: " << rx << "; ry: " << ry << "; rz: " << rz << std::endl;
+			std::cerr << " -- s: " << s << std::endl;
+		}
+
 		for(;count;--count, ++x, ++y, ++z) {
-			*x = a0 + bsx * *x + b01 * *y + b02 * *z;
-			*y = a1 + b10 * *x + bsx * *y + b12 * *z;
-			*z = a2 + b20 * *x + b21 * *y + bsx * *z;
+			*x = cx + s * (*x - rz * *y + ry * *z);
+			*y = cy + s * (*y + rz * *x - rx * *z);
+			*z = cz + s * (*z - ry * *x + rx * *y);
 		}
 	}
 
@@ -416,6 +483,10 @@ private:
 	 * Initialize the proj4 projection objects.
 	 */
 	void initProjections() {
+
+		if(!quiet)
+			std::cerr << "initProjection" << std::endl;
+
 		// Initialize projections.
 		if(!fsrid || !tsrid)
 			throw "SRIDs are not set.";
@@ -439,7 +510,10 @@ private:
 	/**
 	 * Load the transformation database.
 	 */
-	void loadHelmert() {
+	void loadHelmert(Params &p) {
+
+		if(!quiet)
+			std::cerr << "loadHelmert" << std::endl;
 
 		char path[PATH_MAX];
 		sprintf(path, "%s%s", std::getenv(LAS2CSRS_DATA), "/itrf.csv");
@@ -454,22 +528,26 @@ private:
 						ffrom, fto, &epoch, &tx, &ty, &tz, &rx, &ry, &rz, &d,
 						&dtx, &dty, &dtz, &drx, &dry, &drz, &dd) > 0) {
 			std::string _ffrom(ffrom);
-			if(_ffrom == this->ffrom) {
-				this->epoch = epoch;
-				this->d = d / 1000000000.0; 		// Listed as ppb.
-				this->dd = dd / 1000000000.0;
-				this->tx = tx;
-				this->ty = ty;
-				this->tz = tz;
-				this->rx = rx;
-				this->ry = ry;
-				this->rz = rz;
-				this->dtx = dtx;
-				this->dty = dty;
-				this->dtz = dtz;
-				this->drx = drx;
-				this->dry = dry;
-				this->drz = drz;
+			if(!quiet)
+				std::cerr << " -- Checking: " << _ffrom << std::endl;
+			if(_ffrom == p.ffrom) {
+				if(!quiet)
+					std::cerr << " -- Found entry for " << _ffrom << std::endl;
+				p.epoch = epoch;
+				p.d = d / 1000000000.0; 		// Listed as ppb.
+				p.dd = dd / 1000000000.0;
+				p.tx = tx;
+				p.ty = ty;
+				p.tz = tz;
+				p.rx = rx;
+				p.ry = ry;
+				p.rz = rz;
+				p.dtx = dtx;
+				p.dty = dty;
+				p.dtz = dtz;
+				p.drx = drx;
+				p.dry = dry;
+				p.drz = drz;
 				found = true;
 				break;
 			}
@@ -542,6 +620,7 @@ int main(int argc, char **argv) {
 	}
 
 	bool overwrite = false;
+
 	try {
 
 		int i = 1;
@@ -551,6 +630,8 @@ int main(int argc, char **argv) {
 				break;
 			} else if(arg == "-o") {
 				overwrite = true;
+			} else if(arg == "-v") {
+				quiet = false;
 			}
 		}
 
@@ -574,6 +655,10 @@ int main(int argc, char **argv) {
 		usage();
 		return 1;
 	} catch(const std::string &err) {
+		std::cerr << err << std::endl;
+		usage();
+		return 1;
+	} catch(const char *err) {
 		std::cerr << err << std::endl;
 		usage();
 		return 1;
