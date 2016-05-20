@@ -33,17 +33,25 @@ double _binterp(float *grid, double c, double r, int c0, int r0, int c1, int r1,
 
 /**
  * Convert projected distance in mm to latlon in radians.
- * dx, dy  -- Distance in m.
- * lat     -- The latitude at which distances are computed
- * h       -- Ellipsoidal height.
- * a       -- Semi-major axis
- * e2      -- Eccentricity^2
- * count   -- Number of points.
- * dlat    -- The distance in rad (out).
- * dlon    -- The distance in rad (out).
+ * dx, dy, dx  -- Distance in m.
+ * lat         -- The latitude at which distances are computed
+ * h           -- Ellipsoidal height.
+ * a           -- Semi-major axis
+ * e2          -- Eccentricity^2
+ * count       -- Number of points.
+ * dlat        -- The distance in rad (out).
+ * dlon        -- The distance in rad (out).
  */
-void _shift2latlon(double *dx, double *dy, double *lat, double *h, double a, double e2, int count, 
-		double *dlat, double *dlon) {
+void _shift2latlon(Grid<double> &gdx, Grid<double> &gdy, Grid<double> &glat, Grid<double> &gh,
+	double a, double e2, int count, Grid<double> &gdlat, Grid<double> &gdlon) {
+
+	double *dx = gdx.grid();
+	double *dy = gdy.grid();
+	double *lat = glat.grid();
+	double *dlat = gdlat.grid();
+	double *dlon = gdlon.grid();
+	double *h = gh.grid();
+
 	double r, l, m, n;
 	for(int i = 0; i < count; ++i) {
 		l = *(lat + i);
@@ -160,8 +168,6 @@ public:
 	// SRIDs of the from and to CRSes.
 	int fsrid;
 	int tsrid;
-	// The shift grid.
-	ShiftGrid shiftGrid;
 	// Transform parameters; loaded from the itrf file.
 	double tx, ty, tz, dtx, dty, dtz;		// Shifts, rates.
 	double rx, ry, rz, drx, dry, drz;		// Rotations, rates.
@@ -240,13 +246,13 @@ public:
 			std::cerr << "  -- Latlon: " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << z0.grid()[0] << std::endl;
 
 		// Transform to csrs using Helmert (etc.) params. (c)
-		epochTransform(x, y, z, count, this->efrom - 1997.0);
+		epochTransform(x, y, z, count, params.efrom - 1997.0);
 
 		if(!quiet)
 			std::cerr << "  -- Cartesian + epoch: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
 
 		// Only use the grid shift if the epoch changes.
-		if(efrom != eto) {
+		if(params.efrom != params.eto) {
 
 			// Initalize shift arrays.
 			MemRaster<double> dx(count, 1);
@@ -268,9 +274,12 @@ public:
 			pj_get_spheroid_defn(p4, &a, &e2);
 
 			// Apply shifts (mm) to angular coords.
-			_shift2latlon(dx, dy, dz, x0, y0, z0, a, e2, count, dlat, dlon);
+			_shift2latlon(dx, dy, y0, z0, a, e2, count, dlat, dlon);
 
-			double dt = this->eto - this->efrom;
+			if(!quiet)
+				std::cerr << "  -- Lat lon shifts: " << dlat.grid()[0] << ", " << dlon.grid()[0] << std::endl;
+			
+			double dt = 1997.0 - params.eto;
 			// Apply shifts to latlon coords.
 			for(int i = 0; i < count; ++i) {
 				*(x0.grid() + i) += *(dlon.grid() + i) * dt;
@@ -278,9 +287,15 @@ public:
 				*(z0.grid() + i) += *(dz.grid() + i) * dt;
 			}
 			
+			if(!quiet)
+				std::cerr << "  -- Lat lon shifted: " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << _deg(z0.grid()[0]) << std::endl;
+
 			// Transform latlon to target proj
 			pj_transform(p4, p3, count, 1, x0.grid(), y0.grid(), z0.grid());
 			
+			if(!quiet)
+				std::cerr << "  -- Final: " << x0.grid()[0] << ", " << y0.grid()[0] << ", " << z0.grid()[0] << std::endl;
+
 			// Assign the shifted coords to the output arrays.
 			memcpy(x.grid(), x0.grid(), sizeof(double) * count);
 			memcpy(y.grid(), y0.grid(), sizeof(double) * count);
@@ -437,6 +452,9 @@ private:
 	projPJ p3;
 	projPJ p4;
 
+	// The shift grid.
+	ShiftGrid shiftGrid;
+
 	Params params;
 
 	inline double _sec2rad(double x) {
@@ -449,7 +467,7 @@ private:
 		x, y, z -- 	The coordinate arrays.
 		count 	-- 	The number of points.
 	*/
-	void epochTransform(Params &p, Grid<double> &gx, Grid<double> &gy, Grid<double> &gz, int count, double dt) {
+	void epochTransform(Grid<double> &gx, Grid<double> &gy, Grid<double> &gz, int count, double dt) {
 
 		if(!quiet)
 			std::cerr << "epochTransform" << std::endl;
@@ -458,13 +476,13 @@ private:
 		double *y = gy.grid();
 		double *z = gz.grid();
 
-		double cx = p.tx + p.dtx * dt;            // Translation in X plus X velocity * time
-		double cy = p.ty + p.dty * dt;
-		double cz = p.tz + p.dtz * dt;
-		double s = 1.0 + p.d + p.dd * dt;         // Scale plus delta scale * time
-		double rx = _sec2rad(p.rx + p.drx * dt); // Rotation in X plus velocity * time; seconds to radians.
-		double ry = _sec2rad(p.ry + p.dry * dt);
-		double rz = _sec2rad(p.rz + p.drz * dt);
+		double cx = params.tx + params.dtx * dt;            // Translation in X plus X velocity * time
+		double cy = params.ty + params.dty * dt;
+		double cz = params.tz + params.dtz * dt;
+		double s = 1.0 + params.d + params.dd * dt;         // Scale plus delta scale * time
+		double rx = _sec2rad(params.rx + params.drx * dt); // Rotation in X plus velocity * time; seconds to radians.
+		double ry = _sec2rad(params.ry + params.dry * dt);
+		double rz = _sec2rad(params.rz + params.drz * dt);
 
 		if(!quiet) {
 			std::cerr << " -- cx: " << cx << "; cy: " << cy << "; cz: " << cz << std::endl;
@@ -488,14 +506,14 @@ private:
 			std::cerr << "initProjection" << std::endl;
 
 		// Initialize projections.
-		if(!fsrid || !tsrid)
+		if(!params.fsrid || !params.tsrid)
 			throw "SRIDs are not set.";
 		char str[128];
-		sprintf(str, "+init=epsg:%u", fsrid);
+		sprintf(str, "+init=epsg:%u", params.fsrid);
 		p1 = pj_init_plus(str);
 		if(!p1)
 			throw std::string(pj_strerrno(pj_errno));
-		sprintf(str, "+init=epsg:%u", tsrid);
+		sprintf(str, "+init=epsg:%u", params.tsrid);
 		p3 = pj_init_plus(str);
 		if(!p3)
 			throw std::string(pj_strerrno(pj_errno));
