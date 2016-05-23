@@ -52,14 +52,13 @@ void _shift2latlon(Grid<double> &gdx, Grid<double> &gdy, Grid<double> &glat, Gri
 	double *dlon = gdlon.grid();
 	double *h = gh.grid();
 
-	double r, l, m, n;
 	for(int i = 0; i < count; ++i) {
-		l = *(lat + i);
-		m = a * (1.0 - e2) / pow((1.0 - e2 * _sq(sin(l))), 3.0/2.0); 	// Meridional radius of curvature.
-		n = a / pow((1.0 - e2 * _sq(sin(l))), 1.0/2.0); 				// Parallel radius of curvature.
-		r = n * cos(l); 												// Radius of parallel.
+		double l = *(lat + i);
+		double m = a * (1.0 - e2) / pow((1.0 - e2 * _sq(sin(l))), 3.0/2.0); 	// Meridional radius of curvature.
+		double n = a / pow((1.0 - e2 * _sq(sin(l))), 1.0/2.0); 					// Parallel radius of curvature.
+		double r = n * cos(l); 													// Radius of parallel.
 		*(dlon + i) = *(dx + i) / (r + *(h + i));
-		*(dlat + i) = *(dy + i) / (m + *(h + i));
+		*(dlat + i) = *(dy + i) / (m + *(h + i));		
 	}
 }
 
@@ -72,8 +71,6 @@ public:
 	/**
 	 * Load the shift grid raster and store the x, y, z shifts internally.
 	 */
-	 // TODO: Only load the portion of the grid necessary for the point cloud.
-	 //       On the other hand, the grid is so small, who cares?
 	void load() {
 
 		char path[PATH_MAX];
@@ -207,8 +204,15 @@ public:
 		params.tsrid = tsrid;
 		params.ffrom.assign(ffrom);
 
+		paramsCSRS.efrom = efrom;
+		paramsCSRS.eto = eto;
+		paramsCSRS.fsrid = fsrid;
+		paramsCSRS.tsrid = tsrid;
+		paramsCSRS.ffrom.assign("nad83csrs");
+
 		initProjections();
 		loadHelmert(params);
+		loadHelmert(paramsCSRS);
 		shiftGrid.load();
 	}
 
@@ -220,39 +224,45 @@ public:
 	 */
 	void transformPoints(Grid<double> &x, Grid<double> &y, Grid<double> &z, int count, double bounds[6]) {
 
+		// 1) Transform original points to their ECEF representation (Cartesian) at the original epoch.
+		// 2) Deduce the transformation parameters to NAD83 @ 1997.0.
+		// 3) Transform from NAD83 forward to target epoch.
+
 		if(!quiet) {
-			std::cerr << std::setprecision(9) << "transformPoints" << std::endl;
-			std::cerr << "  -- Original: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
+			std::cerr << "transformPoints" << std::endl;
+			std::cerr << " -- Original: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
 		}
 
-		// Copy the coordinate arrays for transformation.
-		MemRaster<double> x0(count, 1);
-		MemRaster<double> y0(count, 1);
-		MemRaster<double> z0(count, 1);
-		memcpy(x0.grid(), x.grid(), sizeof(double) * count);
-		memcpy(y0.grid(), y.grid(), sizeof(double) * count);
-		memcpy(z0.grid(), z.grid(), sizeof(double) * count);
-
-		// Project to Cartesian 3D. (c)
-		pj_transform(p1, p2, count, 1, x.grid(), y.grid(), z.grid());
-
-		// Transform to latlon. (b)
-		pj_transform(p1, p4, count, 1, x0.grid(), y0.grid(), z0.grid());
+		// 1) Project to ECEF in the original reference frame.
+		pj_transform(projFrom, projECEF, count, 1, x.grid(), y.grid(), z.grid());
 
 		if(!quiet)
-			std::cerr << "  -- Cartesian: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
+			std::cerr << " -- ECEF (Original): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
+
+		// 2) Transform to NAD83 @ 1997.
+		epochTransform(params, x, y, z, count, params.efrom - 1997.0);
 
 		if(!quiet)
-			std::cerr << "  -- Latlon: " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << z0.grid()[0] << std::endl;
-
-		// Transform to csrs using Helmert (etc.) params. (c)
-		epochTransform(x, y, z, count, params.efrom - 1997.0);
-
-		if(!quiet)
-			std::cerr << "  -- Cartesian + epoch: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
+			std::cerr << " -- ECEF (CSRS): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
 
 		// Only use the grid shift if the epoch changes.
 		if(params.efrom != params.eto) {
+
+			// 3) Transform from NAD83 @ 1997 to NAD83 at target epoch.
+
+			// Copy the coordinate arrays for transformation.
+			MemRaster<double> x0(count, 1);
+			MemRaster<double> y0(count, 1);
+			MemRaster<double> z0(count, 1);
+			memcpy(x0.grid(), x.grid(), sizeof(double) * count);
+			memcpy(y0.grid(), y.grid(), sizeof(double) * count);
+			memcpy(z0.grid(), z.grid(), sizeof(double) * count);
+
+			// Transform from Cartesian (CSRS) to latlon.
+			pj_transform(projECEF, projGeog, count, 1, x0.grid(), y0.grid(), z0.grid());
+
+			if(!quiet)
+				std::cerr << " -- Lat Lon (CSRS): " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << z0.grid()[0] << std::endl;
 
 			// Initalize shift arrays.
 			MemRaster<double> dx(count, 1);
@@ -263,7 +273,7 @@ public:
 			shiftGrid.interpolate(x0, y0, dx, dy, dz, count);
 			
 			if(!quiet)
-				std::cerr << "  -- Velocities: " << dx.grid()[0] << ", " << dy.grid()[0] << ", " << dz.grid()[0] << std::endl;
+				std::cerr << " -- Grid Velocities: " << dx.grid()[0] << ", " << dy.grid()[0] << ", " << dz.grid()[0] << std::endl;
 
 			// Transform mm shifts to latlon
 			MemRaster<double> dlat(count, 1);
@@ -271,15 +281,17 @@ public:
 
 			// Get projection's spheroid props.
 			double a, e2;
-			pj_get_spheroid_defn(p4, &a, &e2);
+			pj_get_spheroid_defn(projTo, &a, &e2);
 
-			// Apply shifts (mm) to angular coords.
+			// Get angular shifts from grid shift (mm).
 			_shift2latlon(dx, dy, y0, z0, a, e2, count, dlat, dlon);
 
 			if(!quiet)
-				std::cerr << "  -- Lat lon shifts: " << dlat.grid()[0] << ", " << dlon.grid()[0] << std::endl;
+				std::cerr << " -- Lat lon shifts: " << dlat.grid()[0] << ", " << dlon.grid()[0] << std::endl;
+
+			// Good to here...
 			
-			double dt = 1997.0 - params.eto;
+			double dt = params.eto - params.efrom;
 			// Apply shifts to latlon coords.
 			for(int i = 0; i < count; ++i) {
 				*(x0.grid() + i) += *(dlon.grid() + i) * dt;
@@ -288,14 +300,11 @@ public:
 			}
 			
 			if(!quiet)
-				std::cerr << "  -- Lat lon shifted: " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << _deg(z0.grid()[0]) << std::endl;
+				std::cerr << " -- Lat lon shifted: " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << z0.grid()[0] << std::endl;
 
 			// Transform latlon to target proj
-			pj_transform(p4, p3, count, 1, x0.grid(), y0.grid(), z0.grid());
+			pj_transform(projGeog, projTo, count, 1, x0.grid(), y0.grid(), z0.grid());
 			
-			if(!quiet)
-				std::cerr << "  -- Final: " << x0.grid()[0] << ", " << y0.grid()[0] << ", " << z0.grid()[0] << std::endl;
-
 			// Assign the shifted coords to the output arrays.
 			memcpy(x.grid(), x0.grid(), sizeof(double) * count);
 			memcpy(y.grid(), y0.grid(), sizeof(double) * count);
@@ -304,9 +313,12 @@ public:
 		} else {
 
 			// Reproject to the dest coordinates
-			pj_transform(p2, p3, count, 1, x.grid(), y.grid(), z.grid());
+			pj_transform(projECEF, projTo, count, 1, x.grid(), y.grid(), z.grid());
 
 		}
+
+		if(!quiet)
+			std::cerr << std::setprecision(15) << " -- Final: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
 
 		// Expand the bounds for the new header.
 		for(int i = 0; i < count; ++i) {
@@ -438,27 +450,28 @@ public:
 	}
 
 	~Transformer() {
-		pj_free(p1);
-		pj_free(p2);
-		pj_free(p3);
-		pj_free(p4);
+		pj_free(projFrom);
+		pj_free(projECEF);
+		pj_free(projTo);
+		pj_free(projGeog);
 	}
 
 private:
 
 	// Projection objects.
-	projPJ p1;
-	projPJ p2;
-	projPJ p3;
-	projPJ p4;
+	projPJ projFrom;
+	projPJ projECEF;
+	projPJ projTo;
+	projPJ projGeog;
 
 	// The shift grid.
 	ShiftGrid shiftGrid;
 
-	Params params;
+	Params params;     // Params for the source ref frame.
+	Params paramsCSRS; // Params for csrs -> csrs
 
-	inline double _sec2rad(double x) {
-		return (x * 0.000290888);
+	inline double _mas2rad(double x) {
+		return (x * 4.84813681 / 1000000000.0);
 	}
 
 	/**
@@ -467,7 +480,7 @@ private:
 		x, y, z -- 	The coordinate arrays.
 		count 	-- 	The number of points.
 	*/
-	void epochTransform(Grid<double> &gx, Grid<double> &gy, Grid<double> &gz, int count, double dt) {
+	void epochTransform(Params &params, Grid<double> &gx, Grid<double> &gy, Grid<double> &gz, int count, double dt) {
 
 		if(!quiet)
 			std::cerr << "epochTransform" << std::endl;
@@ -476,24 +489,28 @@ private:
 		double *y = gy.grid();
 		double *z = gz.grid();
 
-		double cx = params.tx + params.dtx * dt;            // Translation in X plus X velocity * time
-		double cy = params.ty + params.dty * dt;
-		double cz = params.tz + params.dtz * dt;
-		double s = 1.0 + params.d + params.dd * dt;         // Scale plus delta scale * time
-		double rx = _sec2rad(params.rx + params.drx * dt); // Rotation in X plus velocity * time; seconds to radians.
-		double ry = _sec2rad(params.ry + params.dry * dt);
-		double rz = _sec2rad(params.rz + params.drz * dt);
+		double Txt = params.tx + params.dtx * dt;            // Translation in X plus X velocity * time
+		double Tyt = params.ty + params.dty * dt;
+		double Tzt = params.tz + params.dtz * dt;
+		double DSt = params.d + params.dd * dt;         // Scale plus delta scale * time
+		double Rxt = _mas2rad(params.rx + params.drx * dt); // Rotation in X plus velocity * time; seconds to radians.
+		double Ryt = _mas2rad(params.ry + params.dry * dt);
+		double Rzt = _mas2rad(params.rz + params.drz * dt);
+
+		DSt += 1.0;
 
 		if(!quiet) {
-			std::cerr << " -- cx: " << cx << "; cy: " << cy << "; cz: " << cz << std::endl;
-			std::cerr << " -- rx: " << rx << "; ry: " << ry << "; rz: " << rz << std::endl;
-			std::cerr << " -- s: " << s << std::endl;
+			std::cerr << "  > Txt: " << Txt << "; Tyt: " << Tyt << "; Tzt: " << Tzt << std::endl;
+			std::cerr << "  > Rxt: " << Rxt << "; Ryt: " << Ryt << "; Rzt: " << Rzt << std::endl;
+			std::cerr << "  > DSt: " << DSt << std::endl;
+			std::cerr << "  > drx: " << params.drx << "; dry: " << params.dry << "; drz: " << params.drz << std::endl;
 		}
 
+
 		for(;count;--count, ++x, ++y, ++z) {
-			*x = cx + s * (*x - rz * *y + ry * *z);
-			*y = cy + s * (*y + rz * *x - rx * *z);
-			*z = cz + s * (*z - ry * *x + rx * *y);
+			*x = Txt + (DSt * *x) + (-Rzt * *y) + (Ryt * *z);
+			*y = Tyt + (Rzt * *x) + (DSt * *y) + (-Rxt * *z);
+			*z = Tzt + (-Ryt * *x) + (Rxt * *y) + (DSt * *z);
 		}
 	}
 
@@ -510,18 +527,18 @@ private:
 			throw "SRIDs are not set.";
 		char str[128];
 		sprintf(str, "+init=epsg:%u", params.fsrid);
-		p1 = pj_init_plus(str);
-		if(!p1)
+		projFrom = pj_init_plus(str);
+		if(!projFrom)
 			throw std::string(pj_strerrno(pj_errno));
 		sprintf(str, "+init=epsg:%u", params.tsrid);
-		p3 = pj_init_plus(str);
-		if(!p3)
+		projTo = pj_init_plus(str);
+		if(!projTo)
 			throw std::string(pj_strerrno(pj_errno));
-		p2 = pj_init_plus("+init=epsg:4978");
-		if(!p2)
+		projECEF = pj_init_plus("+init=epsg:4978");
+		if(!projECEF)
 			throw std::string(pj_strerrno(pj_errno));
-		p4 = pj_init_plus("+init=epsg:4326");
-		if(!p4)
+		projGeog = pj_init_plus("+init=epsg:4326");
+		if(!projGeog)
 			throw std::string(pj_strerrno(pj_errno));
 	}
 
@@ -531,7 +548,7 @@ private:
 	void loadHelmert(Params &p) {
 
 		if(!quiet)
-			std::cerr << "loadHelmert" << std::endl;
+			std::cerr << "loadHelmert " << p.ffrom << std::endl;
 
 		char path[PATH_MAX];
 		sprintf(path, "%s%s", std::getenv(LAS2CSRS_DATA), "/itrf.csv");
@@ -574,6 +591,12 @@ private:
 
 		if(!found)
 			throw "Failed to find a transformation matching the parameters.";
+
+		if(!quiet) {
+			std::cerr << " -- Params: dtx: " << p.dtx << "; dty: " << p.dty << "; dtz: " << p.dtz << std::endl;
+			std::cerr << "            drx: " << p.drx << "; dry: " << p.dry << "; drz: " << p.drz << std::endl;
+		}
+
 	}
 };
 
@@ -615,7 +638,7 @@ int test(int argc, char **argv) {
 		double bounds[6];
 
 		trans.transformPoints(xx, yy, zz, 1, bounds);
-		std::cout << std::setprecision(12) << xx[0] << " " << yy[0] << " " << zz[0] << std::endl;
+		std::cerr << xx[0] << " " << yy[0] << " " << zz[0] << std::endl;
 
 	} catch(const char *e) {
 		std::cerr << e << std::endl;
@@ -660,6 +683,8 @@ int main(int argc, char **argv) {
 		double eto = atof(argv[++i]);
 		int fsrid = atoi(argv[++i]);
 		int tsrid = atoi(argv[++i]);
+
+		std::cerr << std::setprecision(15);
 
 		if(!std::getenv(LAS2CSRS_DATA))
 			setenv(LAS2CSRS_DATA, "..", 1);
