@@ -8,14 +8,33 @@
 #ifndef INCLUDE_RASTER_HPP_
 #define INCLUDE_RASTER_HPP_
 
+#include <queue>
+
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
 #include <eigen3/Eigen/Core>
 
 #include "geotools.h"
 
+class Cell {
+public:
+	int col;
+	int row;
+	Cell(int col, int row) {
+		this->col = col;
+		this->row = row;
+	}
+};
+
 template <class T>
 class Grid {
+protected:
+	T m_min = 0;
+	T m_max = 0;
+	T m_mean = 0;
+	T m_stddev = 0;
+	bool m_stats = false;
+
 public:
 	
 	virtual int rows() const =0;
@@ -80,6 +99,131 @@ public:
 	 * Read the full block from the raster.
 	 */
 	virtual void readBlock(Grid<T> &block) =0;
+
+	void computeStats() {
+		T total = 0;
+		T max = get(0);
+		T min = get(0);
+		int count = 0;
+		for(unsigned int i = 0; i < size(); ++i) {
+			T v = get(i);
+			if(v != nodata()) {
+				total += v;
+				if(v > max) max = v;
+				if(v < min) min = v;
+				++count;
+			}
+		}
+		m_mean = total / count;
+		m_min = min;
+		m_max = max;
+		T variance = 0;
+		for(unsigned int i = 0; i < size(); ++i) {
+			T v = get(i);
+			if(v != nodata())
+				variance += _sq(v - m_mean);
+		}
+		m_stddev = sqrt(variance / count);
+		m_stats = true;
+	}
+
+	T max() {
+		if(!m_stats)
+			computeStats();
+		return m_max;
+	}
+
+	T min() {
+		if(!m_stats)
+			computeStats();
+		return m_min;
+	}
+
+	T mean() {
+		if(!m_stats)
+			computeStats();
+		return m_mean;
+	}
+	
+	T stddev() {
+		if(!m_stats)
+			computeStats();
+		return m_stddev;
+	}
+
+	void floodFill(int col, int row, T target, T fill, Grid<T> *other = nullptr, T otherFill = 0) {
+
+		// If other is provided, fill pixels in it too, rather than just the current raster.
+
+		T value = get(col, row);
+		if(value != target)
+			return;
+
+		std::queue<Cell> q;
+		q.push(Cell(col, row));
+
+		while(q.size()) {
+			Cell &cel = q.front();
+			q.pop();
+
+			value = get(cel.col, cel.row);
+
+			// If it's a nodata pixel, ignore it.
+			if(value == nodata())
+				continue;
+
+			// If it's the same as the target, fill it.
+			if(value == target) {
+				set(cel.col, cel.row, fill);
+				if(other)
+					other->set(cel.col, cel.row, otherFill);
+			}
+
+			// Scan out to the left, starting with current.
+			for(int c = cel.col - 1; c >= 0; --c) {
+				value = get(c, cel.row);
+				if(value == target) {
+					set(c, cel.row, fill);
+					if(other)
+						other->set(c, cel.row, otherFill);;
+					if(cel.row > 0) {
+						value = get(c, cel.row - 1);
+						if(value == target)
+							q.push(Cell(c, cel.row - 1));
+					}
+					if(cel.row < rows() - 1) {
+						value = get(c, cel.row + 1);
+						if(value == target) 
+							q.push(Cell(c, cel.row + 1));
+					}
+				} else {
+					break;
+				}
+			}
+
+			// Scan out to the right.
+			for(int c = cel.col + 1; c < cols(); ++c) {
+				value = get(c, cel.row);
+				if(value == target) {
+					set(c, cel.row, fill);
+					if(other)
+						other->set(c, cel.row, otherFill);
+					if(cel.row > 0) {
+						value = get(c, cel.row - 1);
+						if(value == target)
+							q.push(Cell(c, cel.row - 1));
+					}
+					if(cel.row < rows() - 1) {
+						value = get(c, cel.row + 1);
+						if(value == target)
+							q.push(Cell(c, cel.row + 1));
+					}
+				} else {
+					break;
+				}
+			}
+		}
+	}
 
 };
 
@@ -294,9 +438,7 @@ private:
 	int m_bw, m_bh;
 	int m_col, m_row;
 	int m_tc, m_tr;
-	int min(int a, int b) {
-		return a < b ? a : b;
-	}
+
 public:
 	Block(int blockCols, int blockRows, int blockWidth, int blockHeight, int totalCols, int totalRows) {
 		m_bc = blockCols;
@@ -329,13 +471,13 @@ public:
 		return m_col * m_bw;
 	}
 	int endCol() {
-		return min(startCol() + m_bw, m_tc);
+		return _min(startCol() + m_bw, m_tc);
 	}
 	int startRow() {
 		return m_row * m_bh;
 	}
 	int endRow() {
-		return min(startRow() + m_bh, m_tr);
+		return _min(startRow() + m_bh, m_tr);
 	}
 	~Block() {}
 };
@@ -444,7 +586,14 @@ public:
 	/**
 	 * Create a new raster for writing with a template.
 	 */
-	Raster(std::string &filename, Raster<T> &tpl) : Raster() {
+	template <class D>
+	Raster(const std::string &filename, Raster<D> &tpl) : Raster() {
+		std::string proj;
+		tpl.projection(proj);
+		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolution(), (T) tpl.nodata(), proj);
+	}
+
+	Raster(const std::string &filename, Raster<T> &tpl) : Raster() {
 		std::string proj;
 		tpl.projection(proj);
 		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolution(), tpl.nodata(), proj);
@@ -453,12 +602,12 @@ public:
 	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 	 */
-	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
+	Raster(const std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolution, double nodata, std::string &proj) : Raster() {
 		init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
 	}
 
-	Raster(std::string &filename, double minx, double miny, double maxx, double maxy,
+	Raster(const std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolution, double nodata, int crs) : Raster() {
 		std::string proj = epsg2ProjText(crs);
 		init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
@@ -467,7 +616,7 @@ public:
 	/**
 	 * Initializes the raster with the given filename, bounds, resolution, nodata and projection.
 	 */
-	void init(std::string &filename, double minx, double miny, double maxx, double maxy,
+	void init(const std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolution, double nodata, std::string proj) {
 		if(minx >= maxx || miny >= maxy)
 			throw "Invalid boundaries.";
@@ -774,7 +923,7 @@ public:
 	 * The number of elements in the grid.
 	 */
 	unsigned long size() const {
-		return (unsigned long) m_cols * m_rows;
+		return (unsigned long) (m_cols * m_rows);
 	}
 
 	/**
@@ -848,20 +997,18 @@ public:
 	}
 
 	T &get(unsigned long idx) {
-		int col = idx % m_cols;
-		int row = (int) idx / m_cols;
-		loadBlock(col, row);
-		return m_block[idx];
+		int col = idx % m_bw;
+		int row = (int) (idx / m_bw);
+		return get(col, row);
 	}
 
 	/**
 	 * Return the element at the given index.
 	 */
 	T &operator[](unsigned long idx) {
-		int col = idx % m_cols;
-		int row = (int) idx / m_cols;
-		loadBlock(col, row);
-		return m_block[idx];
+		int col = idx % m_bw;
+		int row = (int) (idx / m_bw);
+		return get(col, row);
 	}
 
 	/**
