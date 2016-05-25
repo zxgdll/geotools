@@ -266,10 +266,10 @@ private:
 		projTo = pj_init_plus(str);
 		if(!projTo)
 			throw std::string(pj_strerrno(pj_errno));
-		projECEF = pj_init_plus("+init=epsg:4978");
+		projECEF = pj_init_plus("+proj=geocent +ellps=GRS80 +units=m +no_defs");
 		if(!projECEF)
 			throw std::string(pj_strerrno(pj_errno));
-		projGeog = pj_init_plus("+init=epsg:4326");
+		projGeog = pj_init_plus("+proj=latlon +ellps=GRS80 +no_defs");
 		if(!projGeog)
 			throw std::string(pj_strerrno(pj_errno));
 	}
@@ -717,12 +717,12 @@ int main(int argc, char **argv) {
 		int tsrid = atoi(argv[++i]);
 		std::string fgeoid;
 		std::string tgeoid;
-		try {
+		std::cerr << argc << "," << i << std::endl;
+		if(argc - 1 > i)
 			fgeoid.assign(argv[++i]);
+		std::cerr << argc << "," << i << std::endl;
+		if(argc - 1 > i)
 			tgeoid.assign(argv[++i]);
-		} catch(...) {
-			std::cerr << "Couldn't parse vertical srids." << std::endl;
-		}
 
 		std::cerr << std::setprecision(15);
 
