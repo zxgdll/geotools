@@ -166,11 +166,9 @@ public:
 	// From and to epochs.
 	double efrom;
 	double eto;
-	// SRIDs of the from and to CRSes.
-	int fsrid;
-	int tsrid;
-	std::string fgeoid;
-	std::string tgeoid;
+	// To and from SRSes.
+	las::SpatialReference *fromSRS;
+	las::SpatialReference *toSRS;
 	// Transform parameters; loaded from the itrf file.
 	double tx, ty, tz, dtx, dty, dtz;		// Shifts, rates.
 	double rx, ry, rz, drx, dry, drz;		// Rotations, rates.
@@ -178,6 +176,24 @@ public:
 	//double dt; 							// Time delta
 	double d, dd; 							// Scale, scale rate.
 
+	Params() : 
+		ffrom(""),
+		efrom(0),
+		eto(0),
+		fromSRS(nullptr), 
+		toSRS(nullptr),
+		tx(0), ty(0), tz(0), dtx(0), dty(0), dtz(0),
+		rx(0), ry(0), rz(0), drx(0), dry(0), drz(0),
+		epoch(0), 
+		d(0), dd(0) {}
+
+
+	~Params() {
+		if(fromSRS)
+			delete fromSRS;
+		if(toSRS)
+			delete toSRS;
+	}
 };
 
 /**
@@ -243,27 +259,16 @@ private:
 			std::cerr << "initProjection" << std::endl;
 
 		// Initialize projections.
-		if(!params.fsrid || !params.tsrid)
-			throw "SRIDs are not set.";
-		char str[128];
-		if(!params.fgeoid.empty()) {
-			sprintf(str, "+init=epsg:%u +geoidgrids=%s", params.fsrid, params.fgeoid.c_str());
-		} else {
-			sprintf(str, "+init=epsg:%u", params.fsrid);
-		}
+		if(!params.fromSRS || !params.toSRS)
+			throw "SRSes are not set.";
 		if(!quiet)
-			std::cerr << "From projection: " << str << std::endl;
-		projFrom = pj_init_plus(str);
+			std::cerr << "From projection: " << params.fromSRS->GetProj4() << std::endl;
+		projFrom = pj_init_plus(params.fromSRS->GetProj4().c_str());
 		if(!projFrom)
 			throw std::string(pj_strerrno(pj_errno));
-		if(!params.tgeoid.empty()) {
-			sprintf(str, "+init=epsg:%u +geoidgrids=%s", params.tsrid, params.tgeoid.c_str());
-		} else {
-			sprintf(str, "+init=epsg:%u", params.tsrid);
-		}
 		if(!quiet)
-			std::cerr << "To projection: " << str << std::endl;
-		projTo = pj_init_plus(str);
+			std::cerr << "To projection: " << params.toSRS->GetProj4() << std::endl;
+		projTo = pj_init_plus(params.toSRS->GetProj4().c_str());
 		if(!projTo)
 			throw std::string(pj_strerrno(pj_errno));
 		projECEF = pj_init_plus("+proj=geocent +ellps=GRS80 +units=m +no_defs");
@@ -348,21 +353,36 @@ public:
 	 *           as empty. (Example input: HT2_0.gtx for CGVD28)
 	 * tvsrid -- The output geoid model. If ellipsoidal output is desired, leave as empty.
 	 */
-	Transformer(const std::string &ffrom, float efrom, float eto, int fsrid, int tsrid, const std::string &fgeoid, const std::string &tgeoid) {
+	Transformer(const std::string &ffrom, float efrom, float eto, const std::string &fromSRS, const std::string &toSRS) {
+
+		if(ffrom.empty())
+			throw "A source reference frame is required.";
+		if(efrom < 1980)
+			throw "A source epoch is required (should be 1980 or higher.)";
+		if(eto < 1980)
+			throw "A destination epoch is required (should be 1980 or higher.)";
+		if(toSRS.empty())
+			throw "A destination SRS is required. Include geoid information if orthometric output is required.";
+		if(fromSRS.empty())
+			std::cerr << "WARNING: Attempting to load source SRS information from LAS files.";
 
 		if(!quiet) {
 			std::cerr << "Transformer:" << std::endl
 				<< " -- src ref frame: " << ffrom << "; src epoch: " << efrom << "; dst epoch: " << eto << std::endl
-				<< " -- src srid: " << fsrid << "; dst srid: " << tsrid << std::endl
-				<< " -- src vsrid: " << fgeoid << "; dst vsrid: " << tgeoid << std::endl;
+				<< " -- from srs: " << fromSRS << "; to srs: " << toSRS << std::endl;
 		}
+
 		params.efrom = efrom;
 		params.eto = eto;
-		params.fsrid = fsrid;
-		params.tsrid = tsrid;
-		params.fgeoid.assign(fgeoid);
-		params.tgeoid.assign(tgeoid);
 		params.ffrom.assign(ffrom);
+		if(!fromSRS.empty()) {
+			params.fromSRS = new las::SpatialReference();
+			params.fromSRS->SetFromUserInput(fromSRS);
+		}
+		if(!toSRS.empty()) {
+			params.toSRS = new las::SpatialReference();
+			params.toSRS->SetFromUserInput(toSRS);
+		}
 
 		initProjections();
 		loadHelmert(params);
@@ -384,19 +404,6 @@ public:
 		if(!quiet) {
 			std::cerr << "transformPoints" << std::endl;
 			std::cerr << " -- Original: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
-
-			char str[128];
-			sprintf(str, "+init=epsg:%u", params.fsrid);
-			projPJ projTmp = pj_init_plus(str);
-
-			MemRaster<double> tx(count, 1);
-			MemRaster<double> ty(count, 1);
-			MemRaster<double> tz(count, 1);
-			memcpy(tx.grid(), x.grid(), sizeof(double) * count);
-			memcpy(ty.grid(), y.grid(), sizeof(double) * count);
-			memcpy(tz.grid(), z.grid(), sizeof(double) * count);
-			pj_transform(projFrom, projTmp, count, 1, tx.grid(), ty.grid(), tz.grid());
-			std::cerr << " -- Ellipsoidal: " << tx.grid()[0] << ", " << ty.grid()[0] << ", " << tz.grid()[0] << std::endl;
 		}
 
 		// 1) Project to ECEF in the original reference frame.
@@ -503,51 +510,22 @@ public:
 	 * srcfile  -- The folder containing las files, or the path to a single las file.
 	 * dstdir   -- The destination folder.
 	 */
-	int transformLas(std::string &srcfile, std::string &dstdir, bool overwrite) {
+	int transformLas(std::vector<std::string> &srcfiles, std::string &dstdir, bool overwrite) {
 		
 		if(!quiet)
 			std::cerr << "transformLas" << std::endl;
 
-		const fs::path src(srcfile);
-		const fs::path dst(dstdir);
+		if(!srcfiles.size())
+			throw "No source files provided.";
 
-		// Check the files for sanity.
-		if(src == dst)
-			throw "Destination and source are the same: " + dst.string() + "==" + src.string();
-
+		fs::path dst(dstdir);
 		if(!fs::exists(dst)) {
 			if(!fs::create_directory(dst))
 				throw "Failed to create output directory: " + dst.string();
 		}
 
-		// Get the list of las files.
 		if(!quiet)
-			std::cerr << " -- Getting file list." << std::endl;
-
-		std::list<fs::path> files;
-		if(fs::is_regular_file(src)) {
-			if(overwrite || !fs::exists(dst / src.leaf()))
-				files.push_back(src);
-		} else {
-			std::string ext(".las");
-			fs::directory_iterator end;
-			fs::directory_iterator di(src);
-			for(; di != end; ++di) {
-				std::string p(di->path().string());
-				alg::to_lower(p);
-				if((overwrite || !fs::exists(dst / di->path().leaf())) && alg::ends_with(p, ext)) {
-					files.push_back(di->path());
-				} else {
-					throw "The destination file exists and -o is not specified.";
-				}
-			}
-		}
-
-		if(files.size() == 0)
-			throw "No matching files found.";
-
-		if(!quiet)
-			std::cerr << "Processing " << files.size() << " files." << std::endl;
+			std::cerr << "Processing " << srcfiles.size() << " files." << std::endl;
 
 		// Start
 		las::WriterFactory wf;
@@ -556,21 +534,30 @@ public:
 		// The overall bounds: min x, max x, min y, max y, min z, max z
 		double bounds[] = { DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
 
-		for(std::list<fs::path>::iterator it = files.begin(); it != files.end(); ++it) {
-
-			const char * filename = it->c_str();
+		for(std::string filename:srcfiles) {
 
 			std::cout << "Processing file " << filename << std::endl;
 
 			// Open the source file.
-			std::ifstream in(filename, std::ios::in | std::ios::binary);
+			std::ifstream in(filename.c_str(), std::ios::in | std::ios::binary);
 			las::Reader r = rf.CreateWithStream(in);
 			las::Header h = r.GetHeader();
 
-			// Open the destination file.
-			fs::path outfile(dst / it->leaf());
-			las::Header dsth(h);
+			// If no spatial reference has been set for the input, try
+			// to get it from the first las file.
+			if(!params.fromSRS) {
+				params.fromSRS = new las::SpatialReference(h.GetSRS());
+				if(!params.fromSRS)
+					throw "SRS not provided and not found on first LAS file.";
+			}
+			
+			// Check the files for sanity.
+			const fs::path srcfile(filename);
+			const fs::path dstfile(dst / srcfile.leaf());
+			if(srcfile == dstfile)
+				throw "Destination and source are the same: " + dstfile.string() + "==" + srcfile.string();
 
+			las::Header dsth(h);
 			int count = h.GetPointRecordsCount();
 
 			MemRaster<double> x(count, 1);
@@ -591,7 +578,7 @@ public:
 			// Set bounds.
 			dsth.SetMin(bounds[0], bounds[2], bounds[4]);
 			dsth.SetMax(bounds[1], bounds[3], bounds[5]);
-			std::ofstream out(outfile.c_str(), std::ios::out | std::ios::binary);
+			std::ofstream out(dstfile.c_str(), std::ios::out | std::ios::binary);
 			las::Writer w(out, dsth);
 
 			// Iterate over the points.
@@ -626,66 +613,26 @@ public:
 
 	
 void usage() {
-	std::cout << "Usage: las2csrs [options] <src file or dir> <dst dir> <src ref frame> <src epoch> <dst epoch> <src srid> <dst srid> [src geoid] [dst geoid]" << std::endl
-		<< "This program converts coordinates from LAS files from any reference frame to NAD83(CSRS), " << std::endl
-		<< "between any two epochs. If orthometric heights are used, provide the geoid file names (no path)," << std::endl
-		<< "to ensure that the geoid models are used to convert to ellipsoidal heights for the calculations." << std::endl
-		<< "Not doing this will result in small errors." << std::endl;
+	std::cerr   << "Usage: las2csrs <options> <las files>\n\n"
+			    << "This program converts coordinates from LAS files from any reference frame to NAD83(CSRS),\n"
+			    << "between any two epochs.\n\n"
+			    << "If orthometric heights are used, be sure to provide SRSes with geoid parameters, or that the source\n"
+			    << "files contain such information. SRSes are entered in the form, 'epsg:<horizontal code>+<vertical code>'.\n"
+			    << "The + is only required if orthometric heights are desired.\n\n"
 
-	std::cout << " -o     Overwrite existing files. Defaults to false." << std::endl;
-	std::cout << " -v     Verbose output." << std::endl;
-	std::cout << "Set LAS2CSRS_DATA to point to ITRF DB and grid shift file." << std::endl;
-}
+			    << " -o     Overwrite existing files. Defaults to false.\n"
+				<< " -v     Verbose output.\n"
+				<< " -d 	Destination folder. Required.\n"
+				<< " -fs    The source SRS. If left out, will use the first las file's SRS. If the file has no SRS, will fail.\n"
+				<< " -ts    The destination SRS. Required.\n"
+				<< " -fe    The source epoch. Required.\n"
+				<< " -te    The destination epoch. Required.\n"
+				<< " -f     The source reference frame. Required.\n\n"
 
-int test(int argc, char **argv) {
-
-	if(argc < 10) {
-		std::cerr << "Too few arguments." << std::endl;
-		return 1;
-	}
-	try {
-
-		int i = 1;
-		std::string ffrom(argv[++i]);
-		double efrom = atof(argv[++i]);
-		double eto = atof(argv[++i]);
-		int fsrid = atoi(argv[++i]);
-		int tsrid = atoi(argv[++i]);
-		double x = atof(argv[++i]);
-		double y = atof(argv[++i]);
-		double z = atof(argv[++i]);
-		std::string fgeoid;
-		std::string tgeoid;
-
-		Transformer trans(ffrom, efrom, eto, fsrid, tsrid, fgeoid, tgeoid);
-
-		MemRaster<double> xx(1,1);
-		MemRaster<double> yy(1,1);
-		MemRaster<double> zz(1,1);
-
-		xx.set(0, x);
-		yy.set(0, y);
-		zz.set(0, z);
-
-		double bounds[6];
-
-		trans.transformPoints(xx, yy, zz, 1, bounds);
-		std::cerr << xx[0] << " " << yy[0] << " " << zz[0] << std::endl;
-
-	} catch(const char *e) {
-		std::cerr << e << std::endl;
-		return 1;
-	}
-
-	return 0;
+			    << "Set LAS2CSRS_DATA to point to ITRF DB and grid shift file.\n";
 }
 
 int main(int argc, char **argv) {
-
-	std::string comp("test");
-	if(argc >= 2 && comp.compare(argv[1]) == 0) {
-		return test(argc, argv);
-	}
 
 	if(argc < 8) {
 		usage();
@@ -694,44 +641,48 @@ int main(int argc, char **argv) {
 
 	bool overwrite = false;
 
+	std::vector<std::string> srcfiles;
+	std::string dstdir;
+	std::string ffrom;
+	double efrom;
+	double eto;
+	std::string toSRS;
+	std::string fromSRS;
+
+	int i = 1;
+	for(; i < argc; ++i) {
+		std::string arg(argv[i]);
+		if(arg == "-o") {
+			overwrite = true;
+		} else if(arg == "-v") {
+			quiet = false;
+		} else if(arg == "-d") {
+			dstdir.assign(argv[++i]);
+		} else if(arg == "-fs") {
+			fromSRS.assign(argv[++i]);
+		} else if(arg == "-ts") {
+			toSRS.assign(argv[++i]);
+		} else if(arg == "-fe") {
+			efrom = atof(argv[++i]);
+		} else if(arg == "-te") {
+			eto = atof(argv[++i]);
+		} else if(arg == "-f") {
+			ffrom.assign(argv[++i]);
+		} else {
+			srcfiles.push_back(argv[i]);
+		}
+	}
+
+	std::cerr << std::setprecision(15);
+
+	if(!std::getenv(LAS2CSRS_DATA))
+		setenv(LAS2CSRS_DATA, "..", 1);
+
 	try {
 
-		int i = 1;
-		for(; i < argc; ++i) {
-			std::string arg(argv[i]);
-			if(arg.c_str()[0] != '-') {
-				break;
-			} else if(arg == "-o") {
-				overwrite = true;
-			} else if(arg == "-v") {
-				quiet = false;
-			}
-		}
+		Transformer trans(ffrom, efrom, eto, fromSRS, toSRS);
 
-		std::string srcfile(argv[i]);
-		std::string dstdir(argv[++i]);
-		std::string ffrom(argv[++i]);
-		double efrom = atof(argv[++i]);
-		double eto = atof(argv[++i]);
-		int fsrid = atoi(argv[++i]);
-		int tsrid = atoi(argv[++i]);
-		std::string fgeoid;
-		std::string tgeoid;
-		std::cerr << argc << "," << i << std::endl;
-		if(argc - 1 > i)
-			fgeoid.assign(argv[++i]);
-		std::cerr << argc << "," << i << std::endl;
-		if(argc - 1 > i)
-			tgeoid.assign(argv[++i]);
-
-		std::cerr << std::setprecision(15);
-
-		if(!std::getenv(LAS2CSRS_DATA))
-			setenv(LAS2CSRS_DATA, "..", 1);
-
-		Transformer trans(ffrom, efrom, eto, fsrid, tsrid, fgeoid, tgeoid);
-
-		trans.transformLas(srcfile, dstdir, overwrite);
+		trans.transformLas(srcfiles, dstdir, overwrite);
 
 	} catch(const std::exception &err) {
 		std::cerr << err.what() << std::endl;
