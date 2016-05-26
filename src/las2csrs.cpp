@@ -290,21 +290,27 @@ private:
 		char path[PATH_MAX];
 		sprintf(path, "%s%s", std::getenv(LAS2CSRS_DATA), "/itrf.csv");
 
-		char ffrom[64], fto[64];
-		bool found = false;
+		std::string ffrom;
+		std::string fto;
 		float epoch, tx, ty, tz, rx, ry, rz, d, dtx, dty, dtz, drx, dry, drz, dd;
-		FILE *f = fopen(path, "r");
-		if(f == NULL)
-			throw "ITRF database file not found.";
-		while(fscanf(f, " %s %s %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f ",
-						ffrom, fto, &epoch, &tx, &ty, &tz, &rx, &ry, &rz, &d,
-						&dtx, &dty, &dtz, &drx, &dry, &drz, &dd) > 0) {
-			std::string _ffrom(ffrom);
+		bool found = false;
+		std::ifstream f(path);
+		std::string line;
+		while(std::getline(f, line)) {
+			if(line[0] == '/' || line[0] == ' ')
+				continue;
+			std::stringstream ls(line);
+			ls >> ffrom >> fto >> epoch >> tx >> ty >> tz >> rx >> ry >> rz >> d 
+				>> dtx >> dty >> dtz >> drx >> dry >> drz >> dd;
+
+			//fscanf(f, " %s %s %f %f %f %f %f %f %f %f %f %f %f %f %f %f %f ",
+			//			ffrom, fto, &epoch, &tx, &ty, &tz, &rx, &ry, &rz, &d,
+			//			&dtx, &dty, &dtz, &drx, &dry, &drz, &dd) > 0) {
 			if(!quiet)
-				std::cerr << " -- Checking: " << _ffrom << std::endl;
-			if(_ffrom == p.ffrom) {
+				std::cerr << " -- Checking: " << ffrom << std::endl;
+			if(ffrom == p.ffrom) {
 				if(!quiet)
-					std::cerr << " -- Found entry for " << _ffrom << std::endl;
+					std::cerr << " -- Found entry for " << ffrom << std::endl;
 				p.epoch = epoch;
 				p.d = d / 1000000000.0; 		// Listed as ppb.
 				p.dd = dd / 1000000000.0;
@@ -324,7 +330,6 @@ private:
 				break;
 			}
 		}
-		fclose(f);
 
 		if(!found)
 			throw "Failed to find a transformation matching the parameters.";
@@ -413,7 +418,7 @@ public:
 			std::cerr << " -- ECEF (Original): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
 
 		// 2) Transform to NAD83 @ 1997.
-		epochTransform(params, x, y, z, count, params.efrom - 1997.0);
+		epochTransform(params, x, y, z, count, params.efrom - params.epoch);
 
 		if(!quiet)
 			std::cerr << " -- ECEF (CSRS): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0] << std::endl;
