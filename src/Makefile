@@ -9,6 +9,9 @@ CXXFLAGS += -I/usr/include/local/eigen3 -I/usr/include/eigen3
 #CXXFLAGS := -I/opt/include $(CXXFLAGS)
 
 LIB=-L/usr/local/lib -L/usr/lib
+
+#LIB := -L/opt/lib $(LIB)
+
 CC=gcc
 CPP=g++
 
