@@ -17,7 +17,7 @@ CPP=g++
 
 .PHONY: interp
 
-all: mosaic lasmerge lasgrid las2csrs lasclip interp lasstats
+all: mosaic lasmerge lasgrid las2csrs lasclip interp lasstats lasreclass
 
 debug: CXXFLAGS += -DDEBUG -g
 debug: CFLAGS += -DDEBUG -g
@@ -41,6 +41,9 @@ lasmerge:
 
 lasgrid:
 	$(CPP) $(CXXFLAGS) lasgrid.cpp $(LIB) -llas -lgdal -lboost_system -o ../bin/lasgrid
+
+lasreclass:
+	$(CPP) $(CXXFLAGS) lasreclass.cpp $(LIB) -llas -lboost_system -o ../bin/lasreclass
 
 las2csrs:
 	$(CPP) $(CXXFLAGS) las2csrs.cpp $(LIB) -llas -lgdal -lboost_system -lboost_filesystem -lproj -o ../bin/las2csrs
