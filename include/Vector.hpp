@@ -117,8 +117,8 @@ public:
 	 * Construct a Vector with the given output file name, geometry 
 	 * type and projection information.
 	 */
-	Vector(std::string &filename, int type, std::string &proj, 
-		std::string &vecType = std::string("ESRI Shapefile")) {
+	Vector(const std::string &filename, int type, const std::string &proj, 
+		const std::string &vecType = std::string("ESRI Shapefile")) {
 		m_type = 0;
 		m_layer = nullptr;
 		m_ds = nullptr;
@@ -158,8 +158,8 @@ public:
 	 * type and projection information. Also configures fields from 
 	 * the given mapping of attribute properties.
 	 */
-	Vector(std::string &filename, int type, std::string &proj, 
-		std::map<std::string, int> &attributes, std::string &vecType = std::string("ESRI Shapefile")) :
+	Vector(const std::string &filename, int type, const std::string &proj, 
+		std::map<std::string, int> &attributes, const std::string &vecType = std::string("ESRI Shapefile")) :
 		Vector(filename, type, proj, vecType) {
 		for(auto it = attributes.begin(); it != attributes.end(); ++it) {
 			OGRFieldType type;

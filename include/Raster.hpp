@@ -163,24 +163,11 @@ public:
 		q.push(Cell(col, row));
 
 		while(q.size()) {
-			Cell &cel = q.front();
+			Cell cel = q.front();
 			q.pop();
 
-			value = get(cel.col, cel.row);
-
-			// If it's a nodata pixel, ignore it.
-			if(value == nodata())
-				continue;
-
-			// If it's the same as the target, fill it.
-			if(value == target) {
-				set(cel.col, cel.row, fill);
-				if(other)
-					other->set(cel.col, cel.row, otherFill);
-			}
-
 			// Scan out to the left, starting with current.
-			for(int c = cel.col - 1; c >= 0; --c) {
+			for(int c = cel.col; c >= 0; --c) {
 				value = get(c, cel.row);
 				if(value == target) {
 					set(c, cel.row, fill);

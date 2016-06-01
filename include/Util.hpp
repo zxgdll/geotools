@@ -236,5 +236,4 @@ public:
 			samples.push_back(std::make_tuple(id, x, y, z));
 	}
 
-
 };

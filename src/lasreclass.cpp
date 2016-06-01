@@ -33,7 +33,6 @@
 #include <liblas/liblas.hpp>
 
 #include "geotools.h"
-#include "RunningStats.hpp"
 
 #define TIME_GAP 50.0
 
@@ -45,7 +44,9 @@ void usage() {
 				<< " Performs certain operations on LAS attributes.\n"
 				<< " -o              Speficy an output folder (must exist).\n"
 				<< " -m <from> <to>  Specify a class mapping. Points from the first class are reclassified to the second class. Repeatable.\n"
-				<< " -f              Attempt to reconstruct flight lines using point times.\n";
+				<< " -f              Attempt to reconstruct flight lines using point times.\n"
+				<< " -fe             Export flightlines as single LAS files. Will have original filename with ID appended.\n"
+				<< " -fg             The time gap required to signify a break in flight lines. Defaul " << TIME_GAP << "\n";
 }
 
 static bool quiet = true;
@@ -103,28 +104,50 @@ void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<
 	}
 }
 
-void findFlightLine(std::map<double, int> &flightLines, double time, double *diff, int *id) {
-	double nearTime = 0.0;
-	int nearId = 0;
-	for(auto it = flightLines.begin(); it != flightLines.end(); ++it) {
-		if(std::abs(time - it->first) < nearTime) {
-			nearTime = std::abs(time - it->first);
-			nearId = it->second;
-		}
-	}
-	*id = nearId;
-	*diff = nearTime;
-}
-
 class Seg {
 public:
 	int id;
 	double start = nan("");
 	double end = nan("");
+	las::Header *header;
+	las::Writer *writer;
+	std::ofstream out;
+	bool inited = false;
+	double bounds[6] = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
 	Seg(int id, double start, double end) {
 		this->id = id;
 		this->start = start;
 		this->end = end;
+	}
+
+	void initialize(const std::string &filename, las::Header &h) {
+		out.open(filename.c_str(), std::ios::out | std::ios::binary);
+		header = new las::Header(h);
+		writer = new las::Writer(out, *header);
+		inited = true;
+	}
+	~Seg() {
+		finalize();
+	}
+	void addPoint(las::Point &pt) {
+		if(pt.GetX() < bounds[0]) bounds[0] = pt.GetX();
+		if(pt.GetY() < bounds[1]) bounds[1] = pt.GetX();
+		if(pt.GetX() > bounds[2]) bounds[2] = pt.GetX();
+		if(pt.GetY() > bounds[3]) bounds[3] = pt.GetX();
+		if(pt.GetZ() < bounds[4]) bounds[4] = pt.GetX();
+		if(pt.GetZ() < bounds[5]) bounds[5] = pt.GetX();
+		pt.SetPointSourceID(id);
+		writer->WritePoint(pt);
+	}
+	void finalize() {
+		if(header) {
+			header->SetMin(bounds[0], bounds[1], bounds[4]);
+			header->SetMax(bounds[1], bounds[3], bounds[5]);
+			writer->WriteHeader();
+			out.close();
+			delete writer;
+			delete header;
+		}
 	}
 	bool adjoins(Seg *seg) {
 		return std::abs(end - seg->start) < 1.0 || std::abs(start - seg->end) < 1.0;
@@ -134,17 +157,20 @@ public:
 	}
 	bool insert(Seg *seg) {
 		if(contains(seg)) {
-			std::cerr << "> " << id << " contains " << seg->id << std::endl;
+			if(!quiet)
+				std::cerr << "> " << id << " contains " << seg->id << std::endl;
 			return true;
 		} else if(adjoins(seg)) {
-			std::cerr << "> " << id << " adjoins " << seg->id << std::endl;
+			if(!quiet)
+				std::cerr << "> " << id << " adjoins " << seg->id << std::endl;
 			if(seg->start >= end)
 				end = seg->end;
 			if(seg->end <= start)
 				start = seg->start;
 			return true;
 		}
-		std::cerr << "> " << id << " no relationship " << seg->id << std::endl;
+		if(!quiet)
+			std::cerr << "> " << id << " no relationship " << seg->id << std::endl;
 		return false;
 	}
 };
@@ -158,13 +184,14 @@ struct {
 void normalizeFlightLines(std::vector<Seg*> &flightLines) {
 	std::sort(flightLines.begin(), flightLines.end(), segsort);
 	std::set<Seg*> output;
-	for(int i = 0; i < flightLines.size(); ++i) {
+	for(size_t i = 0; i < flightLines.size(); ++i) {
 		Seg *seg = flightLines[i];
 		std::cerr << seg->id << ": " << seg->start << " > " << seg->end << std::endl;
-		for(int j = i + 1; j < flightLines.size(); ++j) {
+		for(size_t j = i + 1; j < flightLines.size(); ++j) {
 			if(seg->insert(flightLines[j])) {
 				output.insert(seg);
 			} else {
+				delete flightLines[j];
 				i = j - 1;
 				break;
 			}
@@ -175,6 +202,7 @@ void normalizeFlightLines(std::vector<Seg*> &flightLines) {
 	std::cerr << flightLines.size() << " to remaining." << std::endl;
 }
 
+// TODO: Replace with interval tree.
 int findFlightLine(std::vector<Seg*> &flightLines, double time) {
 	for(Seg *seg:flightLines) {
 		if(time >= seg->start && time< seg->end)
@@ -183,7 +211,7 @@ int findFlightLine(std::vector<Seg*> &flightLines, double time) {
 	return 0;
 }
 
-void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, double stdDev) {
+void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, double timeGap, bool exportLas) {
 
 	if(outfile.size() == 0) 
 		throw "An output directory (-o) is required.";
@@ -191,8 +219,8 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 	if(files.size() == 0)
 		throw "At least one input file is required.";
 
-	if(stdDev <= 0)
-		throw "Std. deviation must be larger than zero.";
+	if(timeGap <= 0)
+		throw "Time gap must be larger than zero.";
 
 	/* Loop over files and figure out which ones are relevant. */
 	las::ReaderFactory rf;
@@ -223,7 +251,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 				startTime = endTime;
 			} else {
 				double gap = endTime - startTime;
-				if(gap < 0.0 || gap > TIME_GAP) { // One what?
+				if(gap < 0.0 || gap > timeGap) { // One what?
 					flightLines.push_back(new Seg(pointSourceId, startTime, endTime));
 					startTime = endTime;
 					if(!quiet)
@@ -233,7 +261,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 			}
   		}
 
-		if(endTime != startTime) { // One what?
+		if(endTime != startTime) { // TODO: What is the time scale?
 			flightLines.push_back(new Seg(pointSourceId, startTime, endTime));
 			if(!quiet)
 				std::cerr << "Time gap. Flightline: " << pointSourceId << std::endl;
@@ -244,34 +272,43 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 
   	normalizeFlightLines(flightLines);
 
+  	std::map<int, Seg*> flMap;
+  	for(Seg *seg:flightLines)
+  		flMap[seg->id] = seg;
+
   	pointSourceId = 0;
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
 
 		std::string path = files[i];
-		std::string base = path.substr(path.find_last_of("/") + 1);
-		std::string newpath = outfile + "/" + base;
+		std::string base(outfile + "/" + path.substr(path.find_last_of("/") + 1, path.find_last_of(".")));
 		
 		if(!quiet)
-			std::cerr << "Saving " << path << " to " << newpath << std::endl;
+			std::cerr << "Saving " << path << " to " << base << std::endl;
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 
-		std::ofstream out(newpath.c_str(), std::ios::out | std::ios::binary);
-		las::Header wh(h);
-		las::Writer w(out, wh);
-
+		//std::ofstream out((base + ".las").c_str(), std::ios::out | std::ios::binary);
+		//las::Header wh(h);
+		//las::Writer w(out, wh);
+		
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
 			double time = pt.GetTime();
-			pt.SetPointSourceID(findFlightLine(flightLines, time));
-			w.WritePoint(pt);
+			Seg *seg = flMap[findFlightLine(flightLines, time)];
+			if(!seg->inited)
+				seg->initialize(base, h);
+			seg->addPoint(pt);
+  		}
+
+  		for(Seg *seg:flightLines) {
+  			seg->finalize();
+  			delete seg;
   		}
 
 		in.close();
-		out.close();
 
 	}
 }
@@ -312,11 +349,8 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 
 	/* Loop over files and figure out which ones are relevant. */
 	las::ReaderFactory rf;
-	RunningStats rs;
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
-
-		rs.clear();
 
 		std::string path = files[i];
 		std::string base = path.substr(path.find_last_of("/") + 1);
@@ -368,9 +402,10 @@ int main(int argc, char ** argv) {
 	std::map<int, int> mappings;
 	bool mapping = false;
 
-	double flStdDev = 0;
 	bool flightlines = false;
-	
+	double flTimeGap = TIME_GAP;
+	bool flExport = false;
+
 	bool edges = false;
 
 	std::string outfile;
@@ -385,8 +420,11 @@ int main(int argc, char ** argv) {
 			mappings[from] = to;
 			mapping = true;
 		} else if(arg == "-f") {
-			flStdDev = atof(argv[++i]);
 			flightlines = true;
+		} else if(arg == "-fg") {
+			flTimeGap = atof(argv[++i]);
+		} else if(arg == "-fe") {
+			flExport = true;
 		} else if(arg == "-o") {
 			outfile += argv[++i];
 		} else if(arg == "-e") {
@@ -402,7 +440,7 @@ int main(int argc, char ** argv) {
 		if(mapping) {
 			mapClasses(files, outfile, mappings);
 		} else if(flightlines) {
-			recoverFlightlines(files, outfile, flStdDev);
+			recoverFlightlines(files, outfile, flTimeGap, flExport);
 		} else if(edges) {
 			recoverEdges(files, outfile);
 		} else {
