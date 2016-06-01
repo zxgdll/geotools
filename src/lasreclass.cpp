@@ -12,23 +12,11 @@
 #include <memory>
 #include <iomanip>
 #include <queue>
+#include <string>
 
 #include <boost/filesystem.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
-
-#include <ogr_api.h>
-#include <ogrsf_frmts.h>
-#include <gdal_priv.h>
-
-#include <geos/geom/GeometryCollection.h>
-#include <geos/geom/GeometryFactory.h>
-#include <geos/geom/Geometry.h>
-#include <geos/geom/Polygon.h>
-#include <geos/geom/Point.h>
-#include <geos/geom/LinearRing.h>
-#include <geos/geom/CoordinateSequence.h>
-#include <geos/geom/CoordinateSequenceFactory.h>
 
 #include <liblas/liblas.hpp>
 
@@ -37,7 +25,6 @@
 #define TIME_GAP 50.0
 
 namespace las = liblas;
-namespace gg = geos::geom;
 
 void usage() {
 	std::cerr << "Usage: lasreclass [options] srcfiles*\n"
@@ -104,24 +91,30 @@ void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<
 	}
 }
 
+static int __seg_id = 0;
 class Seg {
 public:
-	int id;
+	int id = ++__seg_id;
 	double start = nan("");
 	double end = nan("");
-	las::Header *header;
-	las::Writer *writer;
+	las::Header *header = nullptr;
+	las::Writer *writer = nullptr;
 	std::ofstream out;
 	bool inited = false;
 	double bounds[6] = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
-	Seg(int id, double start, double end) {
-		this->id = id;
+	bool marked;
+	int ptCount = 0;
+	int ptRecByRetCount[5] = {0,0,0,0,0};
+	Seg(double start, double end) {
 		this->start = start;
 		this->end = end;
 	}
 
 	void initialize(const std::string &filename, las::Header &h) {
-		out.open(filename.c_str(), std::ios::out | std::ios::binary);
+		std::string file = filename + "_" + std::to_string(id) + ".las";
+		if(!quiet)
+			std::cerr << "Seg initialized as " << file << std::endl;
+		out.open(file.c_str(), std::ios::out | std::ios::binary);
 		header = new las::Header(h);
 		writer = new las::Writer(out, *header);
 		inited = true;
@@ -131,83 +124,97 @@ public:
 	}
 	void addPoint(las::Point &pt) {
 		if(pt.GetX() < bounds[0]) bounds[0] = pt.GetX();
-		if(pt.GetY() < bounds[1]) bounds[1] = pt.GetX();
+		if(pt.GetY() < bounds[1]) bounds[1] = pt.GetY();
 		if(pt.GetX() > bounds[2]) bounds[2] = pt.GetX();
-		if(pt.GetY() > bounds[3]) bounds[3] = pt.GetX();
-		if(pt.GetZ() < bounds[4]) bounds[4] = pt.GetX();
-		if(pt.GetZ() < bounds[5]) bounds[5] = pt.GetX();
+		if(pt.GetY() > bounds[3]) bounds[3] = pt.GetY();
+		if(pt.GetZ() < bounds[4]) bounds[4] = pt.GetZ();
+		if(pt.GetZ() > bounds[5]) bounds[5] = pt.GetZ();
 		pt.SetPointSourceID(id);
 		writer->WritePoint(pt);
+		++ptCount;
+		++ptRecByRetCount[pt.GetReturnNumber() - 1];
 	}
 	void finalize() {
-		if(header) {
+		if(header != nullptr) {
 			header->SetMin(bounds[0], bounds[1], bounds[4]);
-			header->SetMax(bounds[1], bounds[3], bounds[5]);
+			header->SetMax(bounds[2], bounds[3], bounds[5]);
+			header->SetPointRecordsCount(ptCount);
+			for(size_t i = 0; i < 5; ++i)
+				header->SetPointRecordsByReturnCount(i + 1, ptRecByRetCount[i]);
+			writer->SetHeader(*header);
 			writer->WriteHeader();
 			out.close();
 			delete writer;
 			delete header;
+			header = nullptr;
+			writer = nullptr;
 		}
 	}
-	bool adjoins(Seg *seg) {
-		return std::abs(end - seg->start) < 1.0 || std::abs(start - seg->end) < 1.0;
+	bool intersects(Seg *seg) {
+		return !(seg->end < start || seg->start > end);
 	}
-	bool contains(Seg *seg) {
-		return seg->start > start && seg->end < end;
+	bool near(Seg *seg) {
+		return ((start - seg->end) < 1.0 && start > seg->end) || ((seg->start - end) < 1.0 && seg->start > end);
 	}
 	bool insert(Seg *seg) {
-		if(contains(seg)) {
+		if(!quiet)
+			std::cerr << "Insert: " << seg->id << ": " << seg->start << " > " << seg->end << std::endl;
+		if(seg->id == id) {
 			if(!quiet)
-				std::cerr << "> " << id << " contains " << seg->id << std::endl;
-			return true;
-		} else if(adjoins(seg)) {
+				std::cerr << "> same seg." << std::endl;
+			return false;
+		} else if(intersects(seg) || near(seg)) {
 			if(!quiet)
-				std::cerr << "> " << id << " adjoins " << seg->id << std::endl;
-			if(seg->start >= end)
-				end = seg->end;
-			if(seg->end <= start)
-				start = seg->start;
-			return true;
+				std::cerr << "> " << id << " joins " << seg->id << std::endl;
+			start = _min(start, seg->start);
+			end = _max(end, seg->end);
+		} else {
+			if(!quiet)
+				std::cerr << "> " << id << " no relationship " << seg->id << std::endl;
+			return false;
 		}
 		if(!quiet)
-			std::cerr << "> " << id << " no relationship " << seg->id << std::endl;
-		return false;
+			std::cerr << "New span: " << id << ": " << start << " > " << end << std::endl;
+		return true;
 	}
 };
 
 struct {
   bool operator() (Seg *a, Seg *b) { 
-  	return a->end < b->start;
+  	return a->start < b->start;
   }
 } segsort;
 
 void normalizeFlightLines(std::vector<Seg*> &flightLines) {
+	int count = flightLines.size();
 	std::sort(flightLines.begin(), flightLines.end(), segsort);
 	std::set<Seg*> output;
-	for(size_t i = 0; i < flightLines.size(); ++i) {
-		Seg *seg = flightLines[i];
-		std::cerr << seg->id << ": " << seg->start << " > " << seg->end << std::endl;
-		for(size_t j = i + 1; j < flightLines.size(); ++j) {
-			if(seg->insert(flightLines[j])) {
-				output.insert(seg);
-			} else {
-				delete flightLines[j];
-				i = j - 1;
-				break;
-			}
+	Seg *seg = flightLines[0];
+	output.insert(seg);
+	for(size_t i = 1; i < flightLines.size(); ++i) {
+		if(!seg->insert(flightLines[i])) {
+			seg = flightLines[i];
+			output.insert(seg);
+		} else {
+			delete flightLines[i];
 		}
 	}
 	flightLines.resize(0);
 	flightLines.assign(output.begin(), output.end());
-	std::cerr << flightLines.size() << " to remaining." << std::endl;
+	std::cerr << flightLines.size() << " remaining of " << count << std::endl;
+	std::sort(flightLines.begin(), flightLines.end(), segsort);
+	for(Seg *seg:flightLines)
+		std::cerr << " -- " << seg->id << ": " << seg->start << " > " << seg->end << std::endl;
 }
 
 // TODO: Replace with interval tree.
 int findFlightLine(std::vector<Seg*> &flightLines, double time) {
 	for(Seg *seg:flightLines) {
-		if(time >= seg->start && time< seg->end)
+		if(time >= seg->start && time <= seg->end)
 			return seg->id;
 	}
+	if(!quiet)
+		std::cerr << "Seg for time not found: " << time << std::endl;
 	return 0;
 }
 
@@ -229,7 +236,6 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 	// Subsequent files will search the table to find out if they have a 
 	// continuation of this line.
 	std::vector<Seg*> flightLines;
-	int pointSourceId = 1;
 	double startTime = 0, endTime = 0;
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
@@ -246,71 +252,70 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
-			endTime = pt.GetTime();
+			double time = pt.GetTime();
 			if(startTime == 0) {
-				startTime = endTime;
+				startTime = endTime = time;
 			} else {
-				double gap = endTime - startTime;
+				double gap = time - endTime;
 				if(gap < 0.0 || gap > timeGap) { // One what?
-					flightLines.push_back(new Seg(pointSourceId, startTime, endTime));
-					startTime = endTime;
+					flightLines.push_back(new Seg(startTime, endTime));
 					if(!quiet)
-						std::cerr << "Time gap. Flightline: " << pointSourceId << ", " << gap << std::endl;
-					++pointSourceId;
+						std::cerr << "Time gap. Flightline: " << gap << "; " << startTime << " > " << endTime << std::endl;
+					startTime = time;
 				}
+				endTime = time;
 			}
   		}
 
-		if(endTime != startTime) { // TODO: What is the time scale?
-			flightLines.push_back(new Seg(pointSourceId, startTime, endTime));
+		if(endTime != startTime) { // TODO: What is the time scale?)
+			flightLines.push_back(new Seg(startTime, endTime));
 			if(!quiet)
-				std::cerr << "Time gap. Flightline: " << pointSourceId << std::endl;
-			++pointSourceId;
+				std::cerr << "Time gap. Flightline: " << startTime << " > " << endTime << std::endl;
 		}
   		in.close();
   	}
 
   	normalizeFlightLines(flightLines);
 
-  	std::map<int, Seg*> flMap;
-  	for(Seg *seg:flightLines)
-  		flMap[seg->id] = seg;
 
-  	pointSourceId = 0;
+  	bool initSegs = true;
+  	std::map<int, Seg*> flMap;
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
 
 		std::string path = files[i];
-		std::string base(outfile + "/" + path.substr(path.find_last_of("/") + 1, path.find_last_of(".")));
 		
 		if(!quiet)
-			std::cerr << "Saving " << path << " to " << base << std::endl;
+			std::cerr << "Processing " << path << std::endl;
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 
-		//std::ofstream out((base + ".las").c_str(), std::ios::out | std::ios::binary);
-		//las::Header wh(h);
-		//las::Writer w(out, wh);
+		if(initSegs) {
+			std::string base(outfile + "/flight_line");
+		  	for(Seg *seg:flightLines) {
+		  		flMap[seg->id] = seg;
+				seg->initialize(base, h);
+		  	}
+		  	initSegs = false;
+		}
 		
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
-			double time = pt.GetTime();
-			Seg *seg = flMap[findFlightLine(flightLines, time)];
-			if(!seg->inited)
-				seg->initialize(base, h);
+			Seg *seg = flMap[findFlightLine(flightLines, pt.GetTime())];
 			seg->addPoint(pt);
-  		}
-
-  		for(Seg *seg:flightLines) {
-  			seg->finalize();
-  			delete seg;
   		}
 
 		in.close();
 
 	}
+
+	for(Seg *seg:flightLines) {
+		seg->finalize();
+		delete seg;
+	}
+
 }
 
 void computeDirection(std::queue<las::Point> &pq, double *qdir, double *qvel) {
@@ -437,6 +442,9 @@ int main(int argc, char ** argv) {
 	}
 
 	try {
+
+		std::cerr << std::setprecision(12);
+
 		if(mapping) {
 			mapClasses(files, outfile, mappings);
 		} else if(flightlines) {
