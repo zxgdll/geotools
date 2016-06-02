@@ -8,16 +8,16 @@
 -- ffrom	The origin reference frame. This will be something like 'ITRF90'.
 -- efrom	The origin epoch. Epochs are expressed as decimal years.
 -- eto		The destination epoch.
--- fsrid    The SRID of the origin geometry.
--- tsrid    The SRID of the destination geometry.
-CREATE OR REPLACE FUNCTION ToNAD83CSRS(geom bytea, ffrom text, efrom double precision, eto double precision, fsrid integer, tsrid integer)
+-- fromsrs  The proj string of the origin geometry.
+-- tosrs    The proj string of the destination geometry.
+CREATE OR REPLACE FUNCTION _ToNAD83CSRS(geom bytea, ffrom text, efrom float8, eto float8, fromsrs text, tosrs text)
 RETURNS bytea
 AS $$
 
 import sys
 import os
 
-script_base = '/Users/robskelly/Documents/geotools'
+script_base = '/Users/robskelly/Documents/geotools' # TODO: This needs to go.
 script_path = script_base + '/scripts'
 if not script_path in sys.path:
 	sys.path.append(script_path)
@@ -31,12 +31,22 @@ nad83csrs.SHIFT_FILE = script_base + '/share/NAD83v6VG.tif'
 nad83csrs.ITRF_FILE = script_base + '/share/itrf.csv'
 
 pt = loads(geom)
-t = nad83csrs.Transformer(ffrom.lower(), efrom, eto, fsrid, tsrid)
+t = nad83csrs.Transformer(ffrom, efrom, eto, fromsrs, tosrs)
 x, y, z, bounds = t.transformPoints([pt.x], [pt.y], [pt.z])
 return dumps(Point(x[0], y[0], z[0]))
 
 $$ LANGUAGE 'plpythonu';
 
+CREATE OR REPLACE FUNCTION ToNAD83CSRS(geom geometry, ffrom text, efrom float8, eto float8, fromsrid integer, tosrid integer)
+RETURNS geometry
+AS $$
+BEGIN
+	return st_setsrid(st_geomfromewkb(_ToNAD83CSRS(st_asewkb(geom), ffrom, efrom, eto, 
+		(select proj4text from spatial_ref_sys where srid=fromsrid), 
+		(select proj4text from spatial_ref_sys where srid=tosrid)
+	)), st_srid(geom));
+END;
+$$ LANGUAGE 'plpgsql';
 
 -- Transforms a PostGIS geometry in any coordinate reference system at any epoch and reference frame
 -- to NAD83(CSRS) at any epoch.
@@ -45,9 +55,9 @@ $$ LANGUAGE 'plpythonu';
 -- ffrom	The origin reference frame. This will be something like 'ITRF90'.
 -- efrom	The origin epoch. Epochs are expressed as decimal years.
 -- eto		The destination epoch.
--- fsrid    The SRID of the origin geometry.
--- tsrid    The SRID of the destination geometry.
-CREATE OR REPLACE FUNCTION ToNAD83CSRS(geoms bytea[], ffrom text, efrom double precision, eto double precision, fsrid integer, tsrid integer)
+-- fromSRS  The proj string of the origin geometry.
+-- toSRS    The proj string of the destination geometry.
+CREATE OR REPLACE FUNCTION ToNAD83CSRS(geoms bytea[], ffrom text, efrom float8, eto float8, fromSRS text, toSRS text)
 RETURNS bytea[]
 AS $$
 
@@ -77,7 +87,7 @@ for i in range(count):
 	y[i] = pt.y
 	z[i] = pt.z
 
-t = nad83csrs.Transformer(ffrom.lower(), efrom, eto, fsrid, tsrid)
+t = nad83csrs.Transformer(ffrom, efrom, eto, fromSRS, toSRS)
 x, y, z, bounds = t.transformPoints(x, y, z)
 
 result = [None] * count
