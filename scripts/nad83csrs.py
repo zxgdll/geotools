@@ -110,12 +110,37 @@ class ShiftGrid(object):
 			dz[i] = _binterp(zgrid, c, r, c0, r0, c1, r1, width) / 1000.
 
 
+class Params(object):
+
+	def __init__(self):
+		self.ffrom = None
+		self.efrom = None
+		self.eto = None
+		self.fromSRS = None
+		self.toSRS = None
+		self.tx = None
+		self.ty = None
+		self.tz = None
+		self.rx = None
+		self.ry = None
+		self.rz = None
+		self.drx = None
+		self.dry = None
+		self.drz = None
+		self.dtx = None
+		self.dty = None
+		self.dtz = None
+		self.epoch = None
+		self.d = None
+		self.dd = None
+		self.epoch = None
+
 class Transformer(object):
 	'''
 	Performs the work of transforming coordinates from a given reference frame to NAD83(CSRS).
  	'''
 
-	def __init__(self, ffrom, efrom, eto, fsrid, tsrid):
+	def __init__(self, ffrom, efrom, eto, fromSRS, toSRS):
 		'''
 	 	Prepares the Helmert transformation parameters for the given transformation.
 		These will be used in later method calls.
@@ -123,15 +148,20 @@ class Transformer(object):
 		ffrom -- The name of the reference frame, e.g. 'itrf90'
 		efrom -- The epoch of data collection (decimal years), e.g. 1994.2
 		eto   -- The target epoch. One might select 1997.0 for BC or 2002.0 for Albera (etc.)
-		fsrid -- The SRID (EPSG code) of the source.
-		tsrid -- The SRID of the destination. This is the code for the UTM zone under
+		fromSRS -- The proj string for the source.
+		toSRS -- The proj string of the destination. This is the code for the UTM zone under
 		         NAD83(CSRS), e.g. 2956 for UTM12N.
 	 	'''
-		self.efrom = efrom
-		self.eto = eto
-		self.fsrid = fsrid
-		self.tsrid = tsrid
+
+	 	self.a = None
+
+	 	self.params = Params()
+		self.params.efrom = efrom
+		self.params.eto = eto
+		self.params.fromSRS = fromSRS
+		self.params.toSRS = toSRS
 		self.ffrom = ffrom.lower()
+
 		self.initProjections()
 		self.loadHelmert()
 		self.shiftGrid = ShiftGrid()
@@ -148,13 +178,14 @@ class Transformer(object):
 
 		count = len(x)
 		# Project to Cartesian 3D. (c)
-		x, y, z = pyproj.transform(self.p1, self.p2, x, y, z, True)
-
+		x, y, z = pyproj.transform(self.projFrom, self.projECEF, x, y, z, True)
+		print x, y, z
 		# Transform to csrs using Helmert (etc.) params. (c)
-		self.epochTransform(x, y, z, self.efrom - 1997.)
+		self.epochTransform(x, y, z, self.params.efrom - self.params.epoch)
+		print x, y, z
 
 		# Only use the grid shift if the epoch changes.
-		if self.efrom != self.eto:
+		if self.params.efrom != self.params.eto:
 
 			# Copy the coordinate arrays for transformation.
 			x0 = x[:]
@@ -167,20 +198,20 @@ class Transformer(object):
 			dz = [0.] * count
 			
 			# Transform to latlon. (b)
-			x0, y0, z0 = pyproj.transform(self.p2, self.p4, x0, y0, z0, True)
+			x0, y0, z0 = pyproj.transform(self.projECEF, self.projGeog, x0, y0, z0, True)
 			
 			# Interpolate shifts using latlon coords -- returns in mm. (d)
 			self.shiftGrid.interpolate(x0, y0, dx, dy, dz)
-			
+
 			# Transform mm shifts to latlon
-			# Get projection's spheroid props. This is a hack that relies on proj_ellips for now.
-			a, e2 = self.getEllipsProps("+init=EPSG:4326")
+			# Get GRS80 spheroid props.
+			a, e2 = self.getEllipsProps(self.projTo)
 
 			# Change the shift distance in projected coords to latlon.
 			# This avoids the scale distortion associated with projection.
 			dlon, dlat = _shift2latlon(dx, dy, y0, z0, a, e2)
 
-			dt = self.eto - self.efrom
+			dt = self.params.eto - self.params.efrom
 			# Apply shifts to latlon coords.
 			for i in range(count):
 				x0[i] += dlon[i] * dt
@@ -188,12 +219,12 @@ class Transformer(object):
 				z0[i] += dz[i] * dt
 			
 			# Transform latlon to target proj
-			x, y, z = pyproj.transform(self.p4, self.p3, x0, y0, z0, True)
+			x, y, z = pyproj.transform(self.projGeog, self.projTo, x0, y0, z0, True)
 
 		else:
 
 			# Reproject to the dest coordinates
-			x, y, z = pyproj.transform(self.p2, self.p3, x, y, z, True)
+			x, y, z = pyproj.transform(self.projECEF, self.projTo, x, y, z, True)
 
 		bounds = [FLT_MAX, FLT_MIN, FLT_MAX, FLT_MIN, FLT_MAX, FLT_MIN]
 		# Expand the bounds for the new header.
@@ -213,40 +244,50 @@ class Transformer(object):
 		x, y, z -- 	The coordinate arrays.
 		dt      --  The time delta in decimal years.
 		'''
-		a0 = self.tx + self.dtx * dt
-		a1 = self.ty + self.dty * dt
-		a2 = self.tz + self.dtz * dt
-		bsx = 1. + self.d + self.dd * dt
-		b01 = -_sec2rad(self.rz + self.drz * dt)
-		b02 = _sec2rad(self.ry + self.dry * dt)
-		b10 = _sec2rad(self.rz + self.drz * dt)
-		b12 = -_sec2rad(self.rx + self.drx * dt)
-		b20 = -_sec2rad(self.ry + self.dry * dt)
-		b21 = _sec2rad(self.rx + self.drx * dt)
+		Txt = self.params.tx + self.params.dtx * dt
+		Tyt = self.params.ty + self.params.dty * dt
+		Tzt = self.params.tz + self.params.dtz * dt
+		Dst = self.params.d + self.params.dd * dt
+		Rxt = _sec2rad(self.params.rx + self.params.drx * dt)
+		Ryt = _sec2rad(self.params.ry + self.params.dry * dt)
+		Rzt = _sec2rad(self.params.rz + self.params.drz * dt)
+
+		Dst += 1.
+
 		for i in range(len(x)):
-			x[i] = a0 + bsx * x[i] + b01 * y[i] + b02 * z[i]
-			y[i] = a1 + b10 * x[i] + bsx * y[i] + b12 * z[i]
-			z[i] = a2 + b20 * x[i] + b21 * y[i] + bsx * z[i]
+			x[i] = Txt + (Dst * x[i]) + (-Rzt * y[i]) + (Ryt * z[i])
+			y[i] = Tyt + (Rzt * x[i]) + (Dst * y[i]) + (-Rxt * z[i])
+			z[i] = Tzt + (-Ryt * x[i]) + (Rxt * y[i]) + (Dst * z[i])
 
 	def getEllipsProps(self, proj):
 		'''
-		Return the ellipsoid parameters using the proj_ellips program,
-		which is a total hack until I figure out the python way.
+		Return the ellipsoid parameters a and e2.
 		'''
-		p = subprocess.Popen(['proj_ellips', proj], stdout=subprocess.PIPE)
-		stdout, stderr = p.communicate()
-		return map(float, stdout.split())
+		if not self.a:
+			# ellipsoid, axis, flattening, ref
+			p = subprocess.Popen(['proj', '-le'], stdout=subprocess.PIPE)
+			stdout, stderr = p.communicate()
+			ellps = {}
+			for x in [x for x in stdout.split('\n')]:
+				x = tuple(x.split())
+				try:
+					ellps[x[0]] = x
+				except: pass
+			f = 1. / float(ellps['GRS80'][2].split('=')[1])
+			self.a = float(ellps['GRS80'][1].split('=')[1])
+			self.e2 = 2 * f - f * f
+		return (self.a, self.e2)
 
 	def initProjections(self):
 		'''
 		Initialize projections.
 		'''
-		if not self.fsrid or not self.tsrid:
-			raise Exception("SRIDs are not set.")
-		self.p1 = pyproj.Proj("+init=EPSG:%u" % (self.fsrid,))
-		self.p3 = pyproj.Proj("+init=EPSG:%u" % (self.tsrid,))
-		self.p2 = pyproj.Proj("+init=EPSG:4978")
-		self.p4 = pyproj.Proj("+init=EPSG:4326")
+		if not self.params.fromSRS or not self.params.toSRS:
+			raise Exception("SRSes are not set.")
+		self.projFrom = pyproj.Proj(self.params.fromSRS)
+		self.projTo = pyproj.Proj(self.params.toSRS)
+		self.projECEF = pyproj.Proj("+proj=geocent +ellps=GRS80 +units=m +no_defs")
+		self.projGeog = pyproj.Proj("+proj=latlon +ellps=GRS80 +no_defs")
 
 	def loadHelmert(self):
 		'''
@@ -260,21 +301,21 @@ class Transformer(object):
 				if line[0] == self.ffrom:
 					ffrom, fto = line[:2]
 					epoch, tx, ty, tz, rx, ry, rz, d, dtx, dty, dtz, drx, dry, drz, dd = map(float, line[2:])
-					self.epoch = epoch
-					self.d = d / 1000000000. 		# Listed as ppb.
-					self.dd = dd / 1000000000.
-					self.tx = tx
-					self.ty = ty
-					self.tz = tz
-					self.rx = rx
-					self.ry = ry
-					self.rz = rz
-					self.dtx = dtx
-					self.dty = dty 
-					self.dtz = dtz
-					self.drx = drx
-					self.dry = dry
-					self.drz = drz
+					self.params.epoch = epoch
+					self.params.d = d / 1000000000. 		# Listed as ppb.
+					self.params.dd = dd / 1000000000.
+					self.params.tx = tx
+					self.params.ty = ty
+					self.params.tz = tz
+					self.params.rx = rx
+					self.params.ry = ry
+					self.params.rz = rz
+					self.params.dtx = dtx
+					self.params.dty = dty 
+					self.params.dtz = dtz
+					self.params.drx = drx
+					self.params.dry = dry
+					self.params.drz = drz
 					found = True
 					break
 				line = f.readline()
@@ -284,20 +325,36 @@ class Transformer(object):
 
 if __name__ == '__main__':
 
-	ffrom = sys.argv[1]
-	efrom = float(sys.argv[2])
-	eto = float(sys.argv[3])
-	fsrid = int(sys.argv[4])
-	tsrid = int(sys.argv[5])
+	try:
 
-	t = Transformer(ffrom, efrom, eto, fsrid, tsrid)
-	x = []
-	y = []
-	z = []
-	for i in range(6, len(sys.argv), 3):
-		x.append(float(sys.argv[i]))
-		y.append(float(sys.argv[i+1]))
-		z.append(float(sys.argv[i+2]))
+		params = sys.argv[1:]
+		ffrom = params[0]
+		efrom = float(params[1])
+		eto = float(params[2])
+		fromSRS = params[3]
+		toSRS = params[4]
+		coords = map(float, params[5:])
 
-	x, y, z, bounds = t.transformPoints(x, y, z)
-	print x, y, z, bounds
+		t = Transformer(ffrom, efrom, eto, fromSRS, toSRS)
+		x = []
+		y = []
+		z = []
+		for i in range(0, len(coords), 3):
+			x.append(coords[i])
+			y.append(coords[i+1])
+			z.append(coords[i+2])
+
+		x, y, z, bounds = t.transformPoints(x, y, z)
+		print x, y, z, bounds
+
+	except:
+		import traceback
+		traceback.print_exc()
+		print "Usage: nad83csrs.py <from frame> <from epoch> <to epoch> <from SRS> <to SRS> <coords [coords ...]>"
+		print "  This program transforms coordinates from some reference frame/epoch to NAD83(CSRS) at another epoch."
+		print "  from frame    -- The source's reference frame."
+		print "  from epoch    -- The source epoch as a decimal."
+		print "  to epoch      -- The destination epoch."
+		print "  from SRS      -- The source's SRS; a proj string. Can use +init=epsg:0000 format for EPSG codes."
+		print "  to SRS        -- The destination SRS."
+		print "  coords        -- A coordinate in the form 'x y z'; can repeat as many times as allowed by the OS."
