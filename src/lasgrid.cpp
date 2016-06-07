@@ -282,7 +282,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 
 		if(!quiet)
 			std::cerr << "File " << ++current << " of " << indices.size() << std::endl;
-	
+
 		while(reader.ReadNextPoint()) {
 			las::Point pt = reader.GetPoint();
 			double px = pt.GetX();
@@ -315,36 +315,34 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 					if(radius > 0.0 && !inRadius(px, py, cc, rr, radius, resolution, bounds)) continue;
 					// Compute the grid index. The rows are assigned from the bottom.
 					int idx = (rows - rr - 1) * cols + cc;
+
+					counts.set(idx, counts.get(idx) + 1);
+
 					switch(type){
-					case TYPE_COUNT:
-						counts.set(idx, counts.get(idx) + 1);
-						break;
 					case TYPE_MIN:
 						if(counts[idx] == 0 || pz < grid1[idx])
 							grid1.set(idx, pz);
-						counts.set(idx, counts.get(idx) + 1);
 						break;
 					case TYPE_MAX:
 						if(counts[idx] == 0 || pz > grid1[idx])
 							grid1.set(idx, pz);
-						counts.set(idx, counts.get(idx) + 1);
 						break;
-					case TYPE_MEAN:
 					case TYPE_VARIANCE:
 					case TYPE_STDDEV:
+						if(counts[idx] == 0) {
+							grid2.set(idx, _sq(pz));
+						} else {
+							grid2.set(idx, grid2.get(idx) + _sq(pz));
+						}
+					case TYPE_MEAN:
 						if(counts[idx] == 0) {
 							grid1.set(idx, pz);
 						} else {
 							grid1.set(idx, grid1.get(idx) + pz);
 						}
-						counts.set(idx, counts.get(idx) + 1);
-						break;
-					case TYPE_DENSITY:
-						counts.set(idx, counts.get(idx) + 1);
 						break;
 					case TYPE_QUANTILE:
 						qGrid[idx]->push_back(pz);
-						counts.set(idx, counts.get(idx) + 1);
 						break;
 					}
 				}
@@ -355,11 +353,21 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	// Calculate cells or set nodata.
 	switch(type) {
 	case TYPE_MEAN:
-	case TYPE_VARIANCE:
-	case TYPE_STDDEV:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 			if(counts[i] > 0)
 				grid1.set(i, grid1.get(i) / counts[i]);
+		}
+		break;
+	case TYPE_VARIANCE:
+		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+			if(counts[i] > 0)
+				grid1.set(i, (grid2.get(i) - _sq(grid1.get(i))) / counts.get(i));
+		}
+		break;
+	case TYPE_STDDEV:
+		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+			if(counts[i] > 0)
+				grid1.set(i, sqrt((grid2.get(i) - _sq(grid1.get(i))) / counts.get(i)));
 		}
 		break;
 	case TYPE_DENSITY:
@@ -386,7 +394,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 					// If index == numQuantiles, return the max.
 					grid1.set(i, (*qGrid[i])[qGrid[i]->size() - 1]);
 				} else {
-					float idx = (((float) qGrid[i]->size() - 1) / numQuantiles) * quantile;
+					double idx = (((double) qGrid[i]->size() - 1) / numQuantiles) * quantile;
 					if(floor(idx) == idx) {
 						grid1.set(i, (*qGrid[i])[(int) idx]);
 					} else {
@@ -396,85 +404,6 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 			}
 		}
 		break;
-	}
-
-	// If we're doing the variance or stddev within cells, we have to run through the files again.
-	if(type == TYPE_VARIANCE || type == TYPE_STDDEV) {
-		current = 0;
-		int c, r, cc, rr, idx;
-		double px, py, pz;
-		for(unsigned int j = 0; j < indices.size(); ++j) {
-			unsigned int i = indices[j];
-			std::ifstream in(files[i].c_str());
-			las::Reader reader = rf.CreateWithStream(in);
-			las::Header header = reader.GetHeader();
-
-			if(!quiet) {
-				std::cerr << "File " << ++current << " of " << indices.size() << std::endl;
-				std::cerr << "Second run..." << std::endl;
-			}	
-
-			while(reader.ReadNextPoint()) {
-				las::Point pt = reader.GetPoint();
-				px = pt.GetX();
-				py = pt.GetY();
-				// Check if in bounds, but only if clipping is desired.
-				if(hasBounds && !Util::inBounds(px, py, bounds)) 
-					continue;
-				// If point is not in class list, skip.
-				if(!Util::inList(classes, pt.GetClassification().GetClass())) 
-					continue;
-				// Get value for height or intensity.
-				if(attribute == ATT_INTENSITY) {
-					pz = pt.GetIntensity();
-				} else {
-					pz = pt.GetZ();
-				}
-
-				// Translate point to row/col.
-				c = (int) ((px - bounds[0]) / resolution);
-				r = (int) ((py - bounds[1]) / resolution);
-				// If the radius is > 0, compute the cell offset to accomodate it.
-				int offset = radius > 0.0 ? (int) ceil(radius / resolution) : 0;
-				for(cc = c - offset; cc < c + offset + 1; ++cc) {
-					// Skip if out of bounds.
-					if(cc < 0 || cc >= cols) 
-						continue;
-					for(rr = r - offset; rr < r + offset + 1; ++rr) {
-						// Skip if out of bounds.
-						if(rr < 0 || rr >= rows) 
-							continue;
-						// If the coordinate is out of the cell's radius, continue.
-						if(radius > 0.0 && !inRadius(px, py, cc, rr, radius, resolution, bounds))
-							continue;
-						// The rows are assigned from the bottom.
-						idx = (rows - rr - 1) * cols + cc;
-						switch(type){
-						case TYPE_VARIANCE:
-						case TYPE_STDDEV:
-							grid2.set(idx, grid2.get(idx) + _sq(grid1[idx] - pz));
-							break;
-						}
-					}
-				}
-			}
-		}
-
-		// Calculate cells or set nodata.
-		switch(type) {
-		case TYPE_VARIANCE:
-			for(int i=0;i<cols*rows;++i) {
-				if(counts[i] > 0)
-					grid1.set(i, grid2.get(i) / counts[i]);
-			}
-			break;
-		case TYPE_STDDEV:
-			for(int i=0;i<cols*rows;++i) {
-				if(counts[i] > 0)
-					grid1.set(i, sqrt(grid2[i] / counts[i]));
-			}
-			break;
-		}
 	}
 
 	Raster<float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
