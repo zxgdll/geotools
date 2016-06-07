@@ -179,11 +179,10 @@ class Transformer(object):
 		count = len(x)
 		# Project to Cartesian 3D. (c)
 		x, y, z = pyproj.transform(self.projFrom, self.projECEF, x, y, z, True)
-		print x, y, z
+	
 		# Transform to csrs using Helmert (etc.) params. (c)
 		self.epochTransform(x, y, z, self.params.efrom - self.params.epoch)
-		print x, y, z
-
+	
 		# Only use the grid shift if the epoch changes.
 		if self.params.efrom != self.params.eto:
 
@@ -257,7 +256,7 @@ class Transformer(object):
 		for i in range(len(x)):
 			x[i] = Txt + (Dst * x[i]) + (-Rzt * y[i]) + (Ryt * z[i])
 			y[i] = Tyt + (Rzt * x[i]) + (Dst * y[i]) + (-Rxt * z[i])
-			z[i] = Tzt + (-Ryt * x[i]) + (Rxt * y[i]) + (Dst * z[i])
+			z[i] = Tzt + (-Ryt * x[i]) + (Rxt * y[i]) + 	(Dst * z[i])
 
 	def getEllipsProps(self, proj):
 		'''
@@ -345,7 +344,7 @@ if __name__ == '__main__':
 			z.append(coords[i+2])
 
 		x, y, z, bounds = t.transformPoints(x, y, z)
-		print x, y, z, bounds
+		#print x, y, z, bounds
 
 	except:
 		import traceback

@@ -22,6 +22,7 @@ script_path = script_base + '/scripts'
 if not script_path in sys.path:
 	sys.path.append(script_path)
 	os.environ['PATH'] += os.pathsep + script_base + '/bin'
+	os.environ['PROJ_LIB'] = os.pathsep + '/usr/local/share/proj'
 
 import nad83csrs
 from shapely.geometry import Point
@@ -32,8 +33,17 @@ nad83csrs.ITRF_FILE = script_base + '/share/itrf.csv'
 
 pt = loads(geom)
 t = nad83csrs.Transformer(ffrom, efrom, eto, fromsrs, tosrs)
-x, y, z, bounds = t.transformPoints([pt.x], [pt.y], [pt.z])
-return dumps(Point(x[0], y[0], z[0]))
+tries = 5;
+exc = None
+while tries >= 0:
+	try:
+		x, y, z, bounds = t.transformPoints([pt.x], [pt.y], [pt.z])
+		return dumps(Point(x[0], y[0], z[0]))
+	except Exception, e:
+		exc = e
+	tries -= 1
+if exc:
+	raise exc
 
 $$ LANGUAGE 'plpythonu';
 
@@ -44,7 +54,7 @@ BEGIN
 	return st_setsrid(st_geomfromewkb(_ToNAD83CSRS(st_asewkb(geom), ffrom, efrom, eto, 
 		(select proj4text from spatial_ref_sys where srid=fromsrid), 
 		(select proj4text from spatial_ref_sys where srid=tosrid)
-	)), st_srid(geom));
+	)), tosrid);
 END;
 $$ LANGUAGE 'plpgsql';
 
