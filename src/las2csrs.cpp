@@ -86,16 +86,21 @@ public:
 	 * Load the shift grid raster and store the x, y, z shifts internally.
 	 */
 	void load() {
-		char path[PATH_MAX];
-		sprintf(path, "%s%s", std::getenv("LAS2CSRS_DATA"), "/NAD83v6VG.tif");
 
 		GDALAllRegister();
 		GDALDataset *ds;
 		GDALRasterBand *xband, *yband, *zband;
 
-		ds = (GDALDataset *) GDALOpen(path, GA_ReadOnly);
+		// Try to load from the adjacent share path
+		ds = (GDALDataset *) GDALOpen("../share/NAD83v6VG.tif", GA_ReadOnly);
+		// Otherwise try to load from the configured path.
+		if(!ds) {
+			char path[PATH_MAX];
+			sprintf(path, "%s%s", std::getenv("LAS2CSRS_DATA"), "/NAD83v6VG.tif");
+			ds = (GDALDataset *) GDALOpen(path, GA_ReadOnly);
+		}
 		if(!ds)
-			throw "Failed to load shift grid.";
+			throw "Failed to load shift grid. Set the LAS2CSRS_DATA variable to point to the itrf database and grid shift file.";
 
 		xband = ds->GetRasterBand(1);
 		yband = ds->GetRasterBand(2);
@@ -287,14 +292,19 @@ private:
 		if(!quiet)
 			std::cerr << "loadHelmert " << p.ffrom << std::endl;
 
-		char path[PATH_MAX];
-		sprintf(path, "%s%s", std::getenv(LAS2CSRS_DATA), "/itrf.csv");
-
 		std::string ffrom;
 		std::string fto;
 		float epoch, tx, ty, tz, rx, ry, rz, d, dtx, dty, dtz, drx, dry, drz, dd;
 		bool found = false;
-		std::ifstream f(path);
+		std::ifstream f;
+		f.open("../share/itrf.csv");
+		if(!f.is_open()) {
+			char path[PATH_MAX];
+			sprintf(path, "%s%s", std::getenv(LAS2CSRS_DATA), "/itrf.csv");
+			f.open(path);
+		}
+		if(!f.is_open()) 
+			throw "Failed to open itrf database. If necessary, set LAS2CSRS_DATA environment variable.";
 		std::string line;
 		while(std::getline(f, line)) {
 			if(line[0] == '/' || line[0] == ' ')
