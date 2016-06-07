@@ -168,7 +168,7 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			if(rowHeight0 < 1)
 				continue;
 
-			std::cout << "Thread: " << omp_get_thread_num() << ": " << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
+			//std::cout << "Thread: " << omp_get_thread_num() << ": " << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
 
 			// Load the overlay.
 			#pragma omp critical

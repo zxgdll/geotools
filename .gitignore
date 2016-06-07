@@ -1,4 +1,1 @@
-bin
-data
-.DS_Store
-*.pyc
+makefiles

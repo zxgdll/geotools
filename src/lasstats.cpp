@@ -248,7 +248,7 @@ public:
 			double s = 0.0;
 			for(auto it = m_values.begin(); it != m_values.end(); ++it)
 				s += _sq((*it) - m);
-			m_variance = s / count();
+			m_variance = s / (count() - 1.0);
 		}
 		return m_variance;
 	}
