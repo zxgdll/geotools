@@ -33,6 +33,7 @@ protected:
 	T m_max = 0;
 	T m_mean = 0;
 	T m_stddev = 0;
+	T m_variance = 0;
 	bool m_stats = false;
 
 public:
@@ -123,7 +124,8 @@ public:
 			if(v != nodata())
 				variance += _sq(v - m_mean);
 		}
-		m_stddev = sqrt(variance / count);
+		m_variance = variance / (count - 1);
+		m_stddev = sqrt(m_variance);
 		m_stats = true;
 	}
 
@@ -149,6 +151,12 @@ public:
 		if(!m_stats)
 			computeStats();
 		return m_stddev;
+	}
+
+	T variance() {
+		if(!m_stats)
+			computeStats();
+		return m_variance;
 	}
 
 	void floodFill(int col, int row, T target, T fill, Grid<T> *other = nullptr, T otherFill = 0) {
@@ -233,7 +241,7 @@ private:
 	 */
 	void checkInit() const {
 		if(m_grid == nullptr)
-			throw "This instance has not been initialized.";
+			_runerr("This instance has not been initialized.");
 	}
 
 public:
@@ -291,7 +299,7 @@ public:
 	 */
 	void init(int cols, int rows) {
 		if(cols <= 0 || rows <= 0)
-			throw "Invalid row or column count.";
+			_argerr("Invalid row or column count.");
 		if(cols != m_cols || rows != m_rows) {
 			m_cols = cols;
 			m_rows = rows;
@@ -316,7 +324,7 @@ public:
 	T &get(unsigned long idx) {
 		checkInit();
 		if(idx >= size())
-			throw "Index out of bounds.";
+			_argerr("Index out of bounds.");
 		return m_grid[idx];
 	}
 
@@ -332,7 +340,7 @@ public:
 
 	void set(unsigned long idx, const T value) {
 		if(idx >= size())
-			throw "Index out of bounds.";
+			_argerr("Index out of bounds.");
 		checkInit();
 		m_grid[idx] = value;
 	}
@@ -343,7 +351,7 @@ public:
 	T &operator[](unsigned long idx) {
 		checkInit();
 		if(idx >= size())
-			throw "Index out of bounds.";
+			_argerr("Index out of bounds.");
 		return m_grid[idx];
 	}
 
@@ -469,7 +477,7 @@ public:
 	~Block() {}
 };
 
-template <class T>
+template <class T, class U = T>
 class Raster : public Grid<T> {
 private:
 	int m_cols, m_rows;		// Raster cols/rows
@@ -492,15 +500,15 @@ private:
 	 */
 	void loadBlock(int col, int row) {
 		if(!has(col, row))
-			throw "Row or column out of bounds.";
+			_argerr("Row or column out of bounds.");
 		int bcol = (int) (col / m_bw);
 		int brow = (int) (row / m_bh);
 		if(bcol >= m_bcols || bcol < 0 || brow >= m_brows || brow < 0)
-			throw "Illegal block column or row.";
+			_argerr("Illegal block column or row.");
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
 			if(m_band->ReadBlock(bcol, brow, m_block) != CE_None)
-				throw "Failed to read block.";
+				_runerr("Failed to read block.");
 			m_currow = brow;
 			m_curcol = bcol;
 		}
@@ -512,7 +520,7 @@ private:
 	void flush() {
 		if(m_writable && m_dirty) {
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
-				throw "Flush error.";
+				_runerr("Flush error.");
 			m_dirty = false;
 		}
 	}
@@ -567,7 +575,7 @@ public:
 		m_ds = nullptr;
 		m_band = nullptr;
 		m_block = nullptr;
-		m_type = getType((T) 0);
+		m_type = getType((U) 0);
 	}
 
 	/**
@@ -605,17 +613,19 @@ public:
 	 */
 	void init(const std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolution, double nodata, std::string proj) {
-		if(minx >= maxx || miny >= maxy)
-			throw "Invalid boundaries.";
-		if(resolution <= 0.0)
-			throw "Invalid resolution.";
+		if(resolution <= 0)
+			_argerr("Resolution must be larger than 0.");
+		if(maxx < minx)
+			_argerr("Minimum x must be smaller than or equal to maximum x.");
+		if(maxy < miny)
+			_argerr("Minimum y must be smaller than or equal to maximum y.");
 		int width = (int) ((maxx - minx) / resolution) + 1;
 		int height = (int) ((maxy - miny) / resolution) + 1;
 		GDALAllRegister();
 		m_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(),
 				width, height, 1, m_type, NULL);
 		if(m_ds == nullptr)
-			throw "Failed to create file.";
+			_runerr("Failed to create file.");
 		// TODO: Proper type.
 		m_trans[0] = minx, m_trans[1] = resolution, m_trans[2] = 0.0,
 				m_trans[3] = maxy, m_trans[4] = 0.0, m_trans[5] = -resolution;
@@ -626,7 +636,7 @@ public:
 		m_cols = m_ds->GetRasterXSize();
 		m_band = m_ds->GetRasterBand(1);
 		if(m_band == NULL)
-			throw "Failed to get band.";
+			_runerr("Failed to get band.");
 		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_band->SetNoDataValue(nodata);
 		m_nodata = m_band->GetNoDataValue();
@@ -649,12 +659,12 @@ public:
 		GDALAllRegister();
 		m_ds = (GDALDataset *) GDALOpen(filename.c_str(), writable ? GA_Update : GA_ReadOnly);
 		if(m_ds == NULL)
-			throw "Failed to open raster.";
+			_runerr("Failed to open raster.");
 		m_bandn = band;
 		m_ds->GetGeoTransform(m_trans);
 		m_band = m_ds->GetRasterBand(band);
 		if(m_band == nullptr)
-			throw "Failed to get band.";
+			_runerr("Failed to get band.");
 		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
@@ -714,7 +724,7 @@ public:
 	 */
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
-			throw "Error reading block.";
+			_runerr("Error reading block.");
 	}
 
 	void readBlock(int col, int row, Grid<T> &block) {
@@ -726,7 +736,7 @@ public:
 	 */
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
-			throw "Error writing block.";
+			_runerr("Error writing block.");
 	}
 
 	void writeBlock(int col, int row, Grid<T> &block) {
@@ -833,7 +843,7 @@ public:
 	}
 
 	void nodata(T nodata) {
-		throw "Cannot set nodata on Raster.";
+		_runerr("Cannot set nodata on Raster.");
 	}
 
 	/*
@@ -964,7 +974,7 @@ public:
 	}
 
 	T *grid() {
-		throw "grid() Not implemented in Raster.";
+		_implerr("grid() Not implemented in Raster.");
 	}
 	
 	/**
@@ -1011,7 +1021,7 @@ public:
 
 	void set(unsigned long idx, T v) {
 		if(idx >= size())
-			throw "Index out of bounds.";
+			_runerr("Index out of bounds.");
 		m_block[idx] = v;
 		m_dirty = true;
 	}

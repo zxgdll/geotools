@@ -129,15 +129,13 @@ void vector_dealloc(std::vector<double> *item) {
  */
 bool inRadius(double px, double py, int col, int row, double radius,
 		double resolution, std::vector<double> &bounds){
-	if(radius == 0.0) return false;
+	if(radius == 0.0) return true;
 	// If a radius is given, extract the x and y of the current cell's centroid
 	// and measure its distance (squared) from the point.
 	double x = col * resolution + bounds[0] + resolution * 0.5;
 	double y = row * resolution + bounds[1] + resolution * 0.5;
 	// If the cell is outside the radius, ignore it.
-	double a = _sq(x - px) + _sq(y - py);
-	double b = _sq(radius);
-	return a <= b;
+	return sqrt(_sq(x - px) + _sq(y - py)) > radius;
 }
 
 
@@ -230,8 +228,9 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	Util::printBounds(bounds, 2);
 
 	// Prepare grid
-	int cols = (int) ceil((bounds[2] - bounds[0]) / resolution);
-	int rows = (int) ceil((bounds[3] - bounds[1]) / resolution);
+	int cols;
+	int rows;
+	Util::boundsToColsRows(bounds, resolution, &cols, &rows);
 
 	// Compute the radius given the cell size, if it is not given.
 	if(radius == -1.0)
@@ -261,7 +260,6 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	// Create a grid for maintaining counts.
 	counts.init(cols, rows);
 	counts.fill(0);
-
 
 	_log("Using " << indices.size() << " of " << files.size() << " files.");
 
@@ -296,7 +294,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 			int c = (int) ((px - bounds[0]) / resolution);
 			int r = (int) ((py - bounds[1]) / resolution);
 			// If the radius is > 0, compute the size of the window.
-			int offset = radius > 0.0 ? (int) ceil(radius / resolution) : 0;
+			int offset = radius > 0.0 ? (int) radius / resolution : 0;
 			for(int cc = c - offset; cc < c + offset + 1; ++cc) {
 				// Ignore out-of-bounds pixels.
 				if(cc < 0 || cc >= cols) continue;
@@ -304,10 +302,11 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 					// Ignore out-of-bounds pixels.
 					if(rr < 0 || rr >= rows) continue;
 					// If the coordinate is out of the cell's radius, continue.
-					if(radius > 0.0 && !inRadius(px, py, cc, rr, radius, resolution, bounds)) continue;
+					if(!inRadius(px, py, cc, rr, radius, resolution, bounds)) continue;
 					// Compute the grid index. The rows are assigned from the bottom.
 					int idx = (rows - rr - 1) * cols + cc;
 
+					_log("IDX " << idx << "; cc " << cc << "; rr " << rr << " coord " << px << " " << py << " " << pz);
 					counts.set(idx, counts.get(idx) + 1);
 
 					switch(type){
@@ -347,8 +346,8 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	switch(type) {
 	case TYPE_MEAN:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
-			if(counts[i] > 0)
-				grid1.set(i, grid1.get(i) / counts.get(i));
+			//if(counts[i] > 0)
+			//	grid1.set(i, grid1.get(i) / counts.get(i));
 		}
 		break;
 	case TYPE_VARIANCE:
@@ -401,7 +400,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		break;
 	}
 
-	Raster<double> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
+	Raster<double, float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
 				resolution, -9999.0, crs);
 	rast.writeBlock(grid1);
 
@@ -451,11 +450,16 @@ int main(int argc, char **argv) {
 	}
 
 	try {
-		lasgrid(dstFile, files, classes, crs, quantiles, att,
-				type, radius, resolution, bounds);
+		lasgrid(dstFile, files, classes, crs, quantiles, att, type, radius, resolution, bounds);
 	} catch(const std::exception &ex) {
 		_log(ex.what());
 		usage();
 		return 1;
+	} catch(const char *ex) {
+		_log(ex);
+		usage();
+		return 1;
 	}
+
+	return 0;
 }

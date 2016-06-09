@@ -9,6 +9,7 @@ namespace las = liblas;
 
 #include "csv.h"
 
+#include "geotools.h"
 
 /**
  * Provides utility methods for working with LiDAR data.
@@ -94,8 +95,10 @@ public:
 		if(dims == 2 || dims == 3) {
 			bounds[0] = floor(bounds[0] / res) * res;
 			bounds[1] = floor(bounds[1] / res) * res;
-			bounds[2] = ceil(bounds[2] / res) * res;
-			bounds[3] = ceil(bounds[3] / res) * res;
+			bounds[2] = (floor(bounds[2] / res) + 1.0) * res;
+			bounds[3] = (floor(bounds[3] / res) + 1.0) * res;
+			//if(bounds[0] == bounds[2]) bounds[2] += res;
+			//if(bounds[1] == bounds[3]) bounds[3] += res;
 		}
 		if(dims == 3) {
 			bounds[4] = floor(bounds[4] / res) * res;
@@ -109,11 +112,18 @@ public:
 	 */
 	static void printBounds(std::vector<double> &bounds, int dims) {
 		if(dims == 2 || dims == 3) {
-			std::cerr << "Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3];
-			if(dims == 3)
-				std::cerr << "," << bounds[4] << "," << bounds[5];
+			if(dims != 3) {
+				_log("Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3]);
+			} else {
+				_log("Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3] << "," << bounds[4] << "," << bounds[5]);
+			}
 			std::cerr << std::endl;
 		}
+	}
+
+	static void boundsToColsRows(std::vector<double> &bounds, double resolution, int *cols, int *rows) {
+		*cols = (int) (bounds[2] - bounds[0]) / resolution;
+		*rows = (int) (bounds[3] - bounds[1]) / resolution;
 	}
 
 	/**
@@ -133,7 +143,12 @@ public:
 	* Coordinates are assumed to have the same CRS as the bounds.
 	*/
 	static bool inBounds(double x, double y, std::vector<double> &bounds) {
-		return x >= bounds[0] && x < bounds[2] && y >= bounds[1] && y < bounds[3];
+		return ((bounds[0] == bounds[2] && x == bounds[0]) || (x >= bounds[0] && x < bounds[2]))
+			&& ((bounds[1] == bounds[3] && y == bounds[1]) || (y >= bounds[1] && y < bounds[3]));
+	}
+
+	static bool inBounds(double x, double y, double z, std::vector<double> &bounds) {
+		return inBounds(x, y, bounds) && ((bounds[4] == bounds[5] && z == bounds[4]) || (z >= bounds[4] && z < bounds[5]));
 	}
 
 	/**
@@ -141,7 +156,8 @@ public:
 	* Coordinates are assumed to have the same CRS as the bounds.
 	*/
 	static bool inBounds(double x, double y, double *bounds) {
-		return x >= bounds[0] && x < bounds[2] && y >= bounds[1] && y < bounds[3];
+		return ((bounds[0] == bounds[2] && x == bounds[0]) || (x >= bounds[0] && x < bounds[2]))
+			&& ((bounds[1] == bounds[3] && y == bounds[1]) || (y >= bounds[1] && y < bounds[3]));
 	}
 
 	/**
@@ -149,7 +165,7 @@ public:
 	* Coordinates are assumed to have the same CRS as the bounds.
 	*/
 	static bool inBounds(double x, double y, double z, double *bounds) {
-		return x >= bounds[0] && x < bounds[2] && y >= bounds[1] && y < bounds[3] && z >= bounds[4] && z < bounds[5];
+		return inBounds(x, y, bounds) && ((bounds[4] == bounds[5] && z == bounds[4]) || (z >= bounds[4] && z < bounds[5]));
 	}
 
 	/**
