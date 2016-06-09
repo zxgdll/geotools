@@ -9,7 +9,7 @@ add_executable (lasgrid src/lasgrid.cpp)
 
 target_include_directories (lasgrid PUBLIC include)
 target_include_directories (lasgrid PUBLIC /usr/local/include)
-target_link_libraries (lasgrid gdal las boost_system boost_filesystem)
+target_link_libraries (lasgrid gdal las laszip boost_system boost_filesystem)
 
 add_executable (lasvalidate src/lasvalidate.cpp)
 
@@ -21,7 +21,7 @@ add_executable (las2csrs src/las2csrs.cpp)
 
 target_include_directories (las2csrs PUBLIC include)
 target_include_directories (las2csrs PUBLIC /usr/local/include)
-target_link_libraries (las2csrs gdal las proj boost_system boost_filesystem)
+target_link_libraries (las2csrs gdal las laszip proj boost_system boost_filesystem)
 
 add_executable (lasstats src/lasstats.cpp)
 

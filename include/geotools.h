@@ -2,6 +2,7 @@
 #define __GEOTOOLS_H__
 
 #include <limits>
+#include <exception>
 
 #ifdef __GNUC__
 #define DEPRECATED __attribute__((deprecated))
@@ -27,5 +28,12 @@
 
 #define _deg(x) (x * 180.0 / PI)
 #define _rad(x) (x * PI / 180.0)
+
+static int __loglevel = 0;
+
+#define _loglevel(x) (__loglevel = x);
+#define _log(x) if(__loglevel) { std::cerr << x << std::endl; }
+#define _print(x) std::cerr << x << std::endl;
+#define _argerr(x) throw std::invalid_argument(x);
 
 #endif
