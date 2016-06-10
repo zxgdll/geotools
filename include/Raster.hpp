@@ -619,8 +619,8 @@ public:
 			_argerr("Minimum x must be smaller than or equal to maximum x.");
 		if(maxy < miny)
 			_argerr("Minimum y must be smaller than or equal to maximum y.");
-		int width = (int) ((maxx - minx) / resolution) + 1;
-		int height = (int) ((maxy - miny) / resolution) + 1;
+		int width = (int) ((maxx - minx) / resolution);
+		int height = (int) ((maxy - miny) / resolution);
 		GDALAllRegister();
 		m_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(),
 				width, height, 1, m_type, NULL);
@@ -723,6 +723,7 @@ public:
 	 * Load the contents of a single block into the given Grid instance.
 	 */
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
+		// TODO: Use readblock/writeblock
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
 			_runerr("Error reading block.");
 	}

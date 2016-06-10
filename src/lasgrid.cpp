@@ -135,7 +135,8 @@ bool inRadius(double px, double py, int col, int row, double radius,
 	double x = col * resolution + bounds[0] + resolution * 0.5;
 	double y = row * resolution + bounds[1] + resolution * 0.5;
 	// If the cell is outside the radius, ignore it.
-	return sqrt(_sq(x - px) + _sq(y - py)) > radius;
+	double r = sqrt(_sq(x - px) + _sq(y - py));
+	return r < radius;
 }
 
 
