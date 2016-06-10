@@ -136,7 +136,7 @@ bool inRadius(double px, double py, int col, int row, double radius,
 	double y = row * resolution + bounds[1] + resolution * 0.5;
 	// If the cell is outside the radius, ignore it.
 	double r = sqrt(_sq(x - px) + _sq(y - py));
-	return r < radius;
+	return r <= radius;
 }
 
 
@@ -306,8 +306,6 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 					if(!inRadius(px, py, cc, rr, radius, resolution, bounds)) continue;
 					// Compute the grid index. The rows are assigned from the bottom.
 					int idx = (rows - rr - 1) * cols + cc;
-
-					_log("IDX " << idx << "; cc " << cc << "; rr " << rr << " coord " << px << " " << py << " " << pz);
 					counts.set(idx, counts.get(idx) + 1);
 
 					switch(type){
@@ -347,8 +345,8 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	switch(type) {
 	case TYPE_MEAN:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
-			//if(counts[i] > 0)
-			//	grid1.set(i, grid1.get(i) / counts.get(i));
+			if(counts[i] > 0)
+				grid1.set(i, grid1.get(i) / counts.get(i));
 		}
 		break;
 	case TYPE_VARIANCE:
@@ -380,7 +378,9 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		quantile = 1;
 	case TYPE_QUANTILE:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
-			if(counts[i] > numQuantiles) {
+			if(counts[i] == 1) {
+				grid1.set(i, (*qGrid[i])[0]);
+			} else if(counts[i] >= numQuantiles) {
 				std::sort(qGrid[i]->begin(), qGrid[i]->end());
 				if(quantile == 0) {
 					// If index is zero, just return the min.
@@ -401,9 +401,10 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		break;
 	}
 
-	Raster<double, float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
+	Raster<float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
 				resolution, -9999.0, crs);
-	rast.writeBlock(grid1);
+	MemRaster<float> tmp = (MemRaster<float>) grid1;
+	rast.writeBlock(tmp);
 
 }
 
