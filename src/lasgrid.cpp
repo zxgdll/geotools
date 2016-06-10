@@ -35,6 +35,8 @@
 #define TYPE_DENSITY 4
 #define TYPE_VARIANCE 7
 #define TYPE_STDDEV 8
+#define TYPE_PVARIANCE 12
+#define TYPE_PSTDDEV 13
 #define TYPE_COUNT 9
 #define TYPE_QUANTILE 10
 #define TYPE_MEDIAN 11
@@ -76,10 +78,12 @@ int parseType(char *typeStr) {
 		return TYPE_VARIANCE;
 	} else if(!strcmp("stddev", typeStr)) {
 		return TYPE_STDDEV;
+	} else if(!strcmp("pvariance", typeStr)) {
+		return TYPE_PVARIANCE;
+	} else if(!strcmp("pstddev", typeStr)) {
+		return TYPE_PSTDDEV;
 	} else if(!strcmp("count", typeStr)) {
 		return TYPE_COUNT;
-	} else if(!strcmp("quantile", typeStr)) {
-		return TYPE_QUANTILE;
 	} else if(!strcmp("median", typeStr)) {
 		return TYPE_MEDIAN;
 	}
@@ -98,7 +102,7 @@ int _fcmp(const void * a, const void * b) {
 void usage() {
 	_print("Usage: lasgrid <options> <file [file [file]]>\n"
 				<< " -o <output file>\n"
-				<< " -t <type>                   Output quantile, median, mean, max, min, variance (sample), pvariance (population),\n"
+				<< " -t <type>                   Output median, mean, max, min, variance (sample), pvariance (population),\n"
 			 	<< "                             count, density, stddev (sample), pstddev (population). Default mean.\n"
 				<< " -r <resolution>             Resolution (default 2).\n"
 				<< " -s <srid>                   The EPSG ID of the CRS.\n"
@@ -107,9 +111,6 @@ void usage() {
 				<< " -d <radius>                 Radius (not diameter); use zero for cell bounds.\n"
 				<< "                             For example, if the cell size is 2, the circumcircle's radius is sqrt(2) (~1.41).\n"
 				<< " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size.\n"
-				<< " -q <num-quantiles,quantile> Gives the number of quantiles, and the index of the desired quantile.\n"
-				<< "                             If there are n quantiles, there are n+1 possible indices, with 0 being\n"
-				<< "                             the lower bound, and n+1 being the upper. For quartiles enter 4, for deciles 10, etc.\n"
 				<< " -v                          Verbose output.");
 }
 
@@ -141,7 +142,7 @@ bool inRadius(double px, double py, int col, int row, double radius,
 
 
 void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
-			int crs, std::vector<int> &quantiles, int attribute, int type, double radius,
+			int crs, int attribute, int type, double radius,
 			double resolution, std::vector<double> &bounds) {
 
 	if(files.size() == 0)
@@ -159,26 +160,6 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	if(type == 0)
 		_argerr("A valid type is required.");
 	_log("Type: " << type);
-
-	int quantile = 0;
-	int numQuantiles = 0;
-	if(type == TYPE_QUANTILE && quantiles.size() < 2) {
-		_argerr("If the type is quantiles, there must be a -q argument with 2 values.");
-	} else if(type == TYPE_QUANTILE) {
-		quantile = quantiles[1];
-		numQuantiles = quantiles[0];
-		if(quantile == 0) {
-			_log("Using min because q = 0.");
-			type = TYPE_MIN;
-		} else if(quantile == numQuantiles) {
-			_log("Using max because q = numQuantiles.");
-			type = TYPE_MAX;
-		} else {
-			if(numQuantiles < 2)
-				_argerr("The number of quantiles must be >=2 and the quantile must be between 0 and n, inclusive.");
-			_log("Quantiles: " << quantile << ", Q: " << numQuantiles);
-		}
-	}
 
 	if(classes.size() == 0) {
 		_log("WARNING: No classes given. Matching all classes.");
@@ -207,6 +188,9 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	}
 
 	for(unsigned int i=0; i<files.size(); ++i) {
+
+		_log("Checking file " << files[i]);
+
 		std::ifstream in(files[i].c_str());
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
@@ -244,14 +228,14 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		grid1.init(cols, rows);
 		grid1.fill(-9999.0);
 		// For variance and stddev, we need 2 double grids.
-		if(type == TYPE_VARIANCE || type == TYPE_STDDEV) {
+		if(type == TYPE_VARIANCE || type == TYPE_STDDEV || type == TYPE_PVARIANCE || type == TYPE_PSTDDEV) {
 			grid2.init(cols, rows);
 			grid2.fill(-9999.0);
 		}
 	}
 
-	// For the quantile grid.
-	if(type == TYPE_QUANTILE || type == TYPE_MEDIAN) {
+	// For the median grid.
+	if(type == TYPE_MEDIAN) {
 		qGrid.init(cols, rows);
 		qGrid.setDeallocator(*vector_dealloc);
 		for(int i = 0; i < cols * rows; ++i)
@@ -319,6 +303,8 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 						break;
 					case TYPE_VARIANCE:
 					case TYPE_STDDEV:
+					case TYPE_PVARIANCE:
+					case TYPE_PSTDDEV:
 						if(counts[idx] == 1) {
 							grid2.set(idx, _sq(pz));
 						} else {
@@ -349,16 +335,40 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 				grid1.set(i, grid1.get(i) / counts.get(i));
 		}
 		break;
+	case TYPE_PVARIANCE:
+		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+			if(counts[i] > 1) {
+				grid1.set(i, (grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / counts.get(i));
+			} else {
+				grid1.set(i, grid1.nodata());
+			}
+		}
+		break;
 	case TYPE_VARIANCE:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
-			if(counts[i] > 0)
-				grid1.set(i, (grid2.get(i) - _sq(grid1.get(i))) / counts.get(i));
+			if(counts[i] > 1) {
+				grid1.set(i, (grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / (counts.get(i) - 1));
+			} else {
+				grid1.set(i, grid1.nodata());
+			}
+		}
+		break;
+	case TYPE_PSTDDEV:
+		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+			if(counts[i] > 1) {
+				grid1.set(i, sqrt((grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / counts.get(i)));
+			} else {
+				grid1.set(i, grid1.nodata());
+			}
 		}
 		break;
 	case TYPE_STDDEV:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
-			if(counts[i] > 0)
-				grid1.set(i, sqrt((grid2.get(i) - _sq(grid1.get(i))) / counts.get(i)));
+			if(counts[i] > 1) {
+				grid1.set(i, sqrt((grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / (counts.get(i) - 1)));
+			} else {
+				grid1.set(i, grid1.nodata());
+			}
 		}
 		break;
 	case TYPE_DENSITY:
@@ -374,38 +384,30 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		}
 		break;
 	case TYPE_MEDIAN:
-		numQuantiles = 2;
-		quantile = 1;
-	case TYPE_QUANTILE:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
-			if(counts[i] == 1) {
-				grid1.set(i, (*qGrid[i])[0]);
-			} else if(counts[i] >= numQuantiles) {
-				std::sort(qGrid[i]->begin(), qGrid[i]->end());
-				if(quantile == 0) {
-					// If index is zero, just return the min.
-					grid1.set(i, (*qGrid[i])[0]);
-				} else if(quantile == numQuantiles) {
-					// If index == numQuantiles, return the max.
-					grid1.set(i, (*qGrid[i])[qGrid[i]->size() - 1]);
-				} else {
-					double idx = (((double) qGrid[i]->size() - 1) / numQuantiles) * quantile;
-					if(floor(idx) == idx) {
-						grid1.set(i, (*qGrid[i])[(int) idx]);
-					} else {
-						grid1.set(i, ((*qGrid[i])[(int) idx] + (*qGrid[i])[(int) idx + 1]) / 2.0);
-					}
-				}
+			std::sort(qGrid[i]->begin(), qGrid[i]->end());
+			int size = qGrid[i]->size();
+			if(size % 2 == 0) {
+				int idx = size / 2;
+				grid1.set(i, ((*qGrid[i])[idx - 1] + (*qGrid[i])[idx]) / 2.0);
+			} else {
+				grid1.set(i, (*qGrid[i])[size / 2]);
 			}
 		}
 		break;
 	}
 
-	Raster<float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
-				resolution, -9999.0, crs);
-	MemRaster<float> tmp = (MemRaster<float>) grid1;
-	rast.writeBlock(tmp);
-
+	if(type == TYPE_COUNT) {
+		Raster<int> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
+					resolution, -1, crs);
+		rast.writeBlock(counts);
+	} else {
+		Raster<float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
+					resolution, -9999.0, crs);
+		// Cast the double grid to float for writing.
+		MemRaster<float> tmp = (MemRaster<float>) grid1;
+		rast.writeBlock(tmp);
+	}
 }
 
 int main(int argc, char **argv) {
@@ -419,7 +421,6 @@ int main(int argc, char **argv) {
 	std::vector<double> bounds;
 	std::set<int> classes;
 	std::vector<std::string> files;
-	std::vector<int> quantiles;
 
 	for(int i = 1; i < argc; ++i) {
 		std::string s(argv[i]);
@@ -433,8 +434,6 @@ int main(int argc, char **argv) {
 			resolution = atof(argv[++i]);
 		} else if(s == "-c") {
 			Util::intSplit(classes, argv[++i]);
-		} else if(s == "-q") {
-			Util::intSplit(quantiles, argv[++i]);
 		} else if(s == "-a") {
 			att = parseAtt(argv[++i]);
 		} else if(s == "-d") {
@@ -452,7 +451,7 @@ int main(int argc, char **argv) {
 	}
 
 	try {
-		lasgrid(dstFile, files, classes, crs, quantiles, att, type, radius, resolution, bounds);
+		lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds);
 	} catch(const std::exception &ex) {
 		_log(ex.what());
 		usage();
