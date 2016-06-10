@@ -281,6 +281,17 @@ public:
 		return m_grid;
 	}
 
+	/**
+	 * Cast a MemRaster to some other type.
+	 */
+	template <class U>
+	operator MemRaster<U>() {
+		MemRaster<U> g(cols(), rows());
+		for(unsigned long i = 0; i < size(); ++i)
+			g.set(i, (U) get(i));
+		return g;
+	}
+
 	int rows() const {
 		return m_rows;
 	}
@@ -477,7 +488,7 @@ public:
 	~Block() {}
 };
 
-template <class T, class U = T>
+template <class T>
 class Raster : public Grid<T> {
 private:
 	int m_cols, m_rows;		// Raster cols/rows
@@ -575,7 +586,7 @@ public:
 		m_ds = nullptr;
 		m_band = nullptr;
 		m_block = nullptr;
-		m_type = getType((U) 0);
+		m_type = getType((T) 0);
 	}
 
 	/**
@@ -724,8 +735,13 @@ public:
 	 */
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		// TODO: Use readblock/writeblock
-		if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
-			_runerr("Error reading block.");
+		if(col % m_bw == 0 && row % m_bh == 0 && block.cols() == m_bw && block.rows() == m_bh) {
+			if(m_band->ReadBlock(col / m_bw, row / m_bh, block.grid()) != CE_None)
+				_runerr("Error reading block (1).");
+		} else {
+			if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
+				_runerr("Error reading block (2).");
+		}	
 	}
 
 	void readBlock(int col, int row, Grid<T> &block) {
@@ -736,8 +752,15 @@ public:
 	 * Write a part of the given block to the raster.
 	 */
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
-		if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
-			_runerr("Error writing block.");
+		if(col % m_bw == 0 && row % m_bh == 0 && block.cols() == m_bw && block.rows() == m_bh) {
+			_log("write block " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh);
+			if(m_band->WriteBlock(col / m_bw, row / m_bh, block.grid()) != CE_None)
+				_runerr("Error writing block (1).");
+		} else {
+			_log("rasterio " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh << "," << block.cols() << "," << block.rows());
+			if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
+				_runerr("Error writing block (2).");
+		}
 	}
 
 	void writeBlock(int col, int row, Grid<T> &block) {
