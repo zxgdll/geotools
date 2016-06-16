@@ -36,18 +36,14 @@ void usage() {
 				<< " -fg             The time gap required to signify a break in flight lines. Defaul " << TIME_GAP << "\n";
 }
 
-static bool quiet = true;
-
 void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<int, int> &mappings) {
 
 	if(mappings.size() == 0)
 		throw "At least one mapping is required.";
 
-	if(!quiet) {
-		std::cerr << "Mappings: " << std::endl;
-		for(std::map<int, int>::iterator it = mappings.begin(); it != mappings.end(); ++it)
-			std::cerr << " " << it->first << " > " << it->second << std::endl;
-	}
+	_log("Mappings:");
+	for(std::map<int, int>::iterator it = mappings.begin(); it != mappings.end(); ++it)
+		_log(" " << it->first << " > " << it->second);
 
 	if(outfile.size() == 0) 
 		throw "An output directory (-o) is required.";
@@ -64,8 +60,7 @@ void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<
 		std::string base = path.substr(path.find_last_of("/") + 1);
 		std::string newpath = outfile + "/" + base;
 		
-		if(!quiet)
-			std::cerr << "Saving " << path << " to " << newpath << std::endl;
+		_log("Saving " << path << " to " << newpath);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -112,8 +107,7 @@ public:
 
 	void initialize(const std::string &filename, las::Header &h) {
 		std::string file = filename + "_" + std::to_string(id) + ".las";
-		if(!quiet)
-			std::cerr << "Seg initialized as " << file << std::endl;
+		_log("Seg initialized as " << file);
 		out.open(file.c_str(), std::ios::out | std::ios::binary);
 		header = new las::Header(h);
 		writer = new las::Writer(out, *header);
@@ -157,24 +151,19 @@ public:
 		return ((start - seg->end) < 1.0 && start > seg->end) || ((seg->start - end) < 1.0 && seg->start > end);
 	}
 	bool insert(Seg *seg) {
-		if(!quiet)
-			std::cerr << "Insert: " << seg->id << ": " << seg->start << " > " << seg->end << std::endl;
+		_log("Insert: " << seg->id << ": " << seg->start << " > " << seg->end);
 		if(seg->id == id) {
-			if(!quiet)
-				std::cerr << "> same seg." << std::endl;
+			_log("> same seg.");
 			return false;
 		} else if(intersects(seg) || near(seg)) {
-			if(!quiet)
-				std::cerr << "> " << id << " joins " << seg->id << std::endl;
+			_log("> " << id << " joins " << seg->id);
 			start = _min(start, seg->start);
 			end = _max(end, seg->end);
 		} else {
-			if(!quiet)
-				std::cerr << "> " << id << " no relationship " << seg->id << std::endl;
+			_log("> " << id << " no relationship " << seg->id);
 			return false;
 		}
-		if(!quiet)
-			std::cerr << "New span: " << id << ": " << start << " > " << end << std::endl;
+		_log("New span: " << id << ": " << start << " > ");
 		return true;
 	}
 };
@@ -201,10 +190,10 @@ void normalizeFlightLines(std::vector<Seg*> &flightLines) {
 	}
 	flightLines.resize(0);
 	flightLines.assign(output.begin(), output.end());
-	std::cerr << flightLines.size() << " remaining of " << count << std::endl;
+	_log(flightLines.size() << " remaining of " << count);
 	std::sort(flightLines.begin(), flightLines.end(), segsort);
 	for(Seg *seg:flightLines)
-		std::cerr << " -- " << seg->id << ": " << seg->start << " > " << seg->end << std::endl;
+		_log(" -- " << seg->id << ": " << seg->start << " > " << seg->end);
 }
 
 // TODO: Replace with interval tree.
@@ -213,8 +202,7 @@ int findFlightLine(std::vector<Seg*> &flightLines, double time) {
 		if(time >= seg->start && time <= seg->end)
 			return seg->id;
 	}
-	if(!quiet)
-		std::cerr << "Seg for time not found: " << time << std::endl;
+	_log("Seg for time not found: " << time);
 	return 0;
 }
 
@@ -241,8 +229,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 	for(unsigned int i = 0; i < files.size(); ++i) {
 		std::string path = files[i];
 
-		if(!quiet)
-			std::cerr << "Checking " << path << std::endl;
+		_log("Checking " << path);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -259,8 +246,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 				double gap = time - endTime;
 				if(gap < 0.0 || gap > timeGap) { // One what?
 					flightLines.push_back(new Seg(startTime, endTime));
-					if(!quiet)
-						std::cerr << "Time gap. Flightline: " << gap << "; " << startTime << " > " << endTime << std::endl;
+					_log("Time gap. Flightline: " << gap << "; " << startTime << " > " << endTime);
 					startTime = time;
 				}
 				endTime = time;
@@ -269,8 +255,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 
 		if(endTime != startTime) { // TODO: What is the time scale?)
 			flightLines.push_back(new Seg(startTime, endTime));
-			if(!quiet)
-				std::cerr << "Time gap. Flightline: " << startTime << " > " << endTime << std::endl;
+			_log("Time gap. Flightline: " << startTime << " > " << endTime);
 		}
   		in.close();
   	}
@@ -285,8 +270,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 
 		std::string path = files[i];
 		
-		if(!quiet)
-			std::cerr << "Processing " << path << std::endl;
+		_log("Processing " << path);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -318,36 +302,21 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 
 }
 
-void computeDirection(std::queue<las::Point> &pq, double *qdir, double *qvel) {
-	bool first = true;
-	double dir = 0;
-	double vel = 0;
-	las::Point *pt0;
-	std::queue<las::Point> pq0(pq);
-	while(pq0.size()) {
-		las::Point &pt = pq0.front();
-		pq0.pop();
-		if(first) {
-			first = false;
-		} else {
-			dir += atan2(pt.GetY() - pt0->GetY(), pt.GetX() - pt0->GetX());
-			vel += sqrt(_sq(pt.GetY() - pt0->GetY()) + _sq(pt.GetX() - pt0->GetX()));
-		}
-		pt0 = &pt;
-	}
-	*qdir = dir / 5.0;
-	*qvel = vel / 5.0;
-}
-
-void computeDirection(las::Point &pt0, las::Point &pt, double *pdir, double *pvel) {
-	*pdir = atan2(pt.GetY() - pt0.GetY(), pt.GetX() - pt0.GetX());
-	*pvel = sqrt(_sq(pt.GetY() - pt0.GetY()) + _sq(pt.GetX() - pt0.GetX()));
+void computeDirection(std::list<las::Point> &q, double *pdir) {
+	las::Point pt0 = q.front();
+	las::Point pt1 = q.back();
+	double d = atan2(pt1.GetY() - pt0.GetY(), pt1.GetX() - pt0.GetX());
+	while(d < 0)
+		d += PI * 2.0;
+	while(d > PI * 2.0)
+		d -= PI * 2.0;
+	*pdir = d;
 }
 
 void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 
 	if(outfile.size() == 0) 
-		throw "An output directory (-o) is required.";
+		throw "An output directory is required.";
 
 	if(files.size() == 0)
 		throw "At least one input file is required.";
@@ -361,8 +330,7 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 		std::string base = path.substr(path.find_last_of("/") + 1);
 		std::string newpath = outfile + "/" + base;
 		
-		if(!quiet)
-			std::cerr << "Saving " << path << " to " << newpath << std::endl;
+		_log("Saving " << path << " to " << newpath);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -372,28 +340,51 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 		las::Header wh(h);
 		las::Writer w(out, wh);
 
-		//int lastPSId = 0;
-		double qdir = 0, qvel = 0; // queue direction
-		double pdir = 0, pvel = 0; // point direction
-		std::queue<las::Point> pq;
-
+		double dir0 = 0, dir1 = 0; // queue direction
+		std::list<las::Point> pq0;
+		std::list<las::Point> pq1;
+		int limit = 100;
 		while(r.ReadNextPoint()) {
-			las::Point pt(r.GetPoint());
-			if(pq.size() == 5) {
-				computeDirection(pq.front(), pq.back(), &qdir, &qvel);
-				computeDirection(pq.back(), pt, &pdir, &pvel);
-				pq.pop();
-				while(qdir < 0)
-					qdir += PI * 2;
-				while(pdir < 0)
-					pdir += PI * 2;
-				//std::cerr << _deg(qdir) << ", " << qvel << "; " << _deg(pdir) << ", " << pvel << std::endl;
-				if(std::abs(qdir - pdir) > PI * 0.75)
-					pt.GetClassification().SetClass(31);
+			//_log("Q0: " << pq0.size() << "; Q1: " << pq1.size());
+			las::Point pt = r.GetPoint();
+			pq0.push_back(pt);
+			if(pq0.size() <= limit) {
+				continue;
+			} else {
+				pq1.push_back(pq0.front());
+				pq0.pop_front();
 			}
-			pq.push(pt);
-			w.WritePoint(pt);
+			if(pq1.size() == limit) {
+				computeDirection(pq0, &dir0);
+				computeDirection(pq1, &dir1);
+				//_log("Dirs: " << dir0 << ", " << dir1);
+				if(std::abs(std::abs(dir0) - std::abs(dir1)) > PI * 0.75) {
+					for(las::Point &p:pq0) {
+						las::Classification c = p.GetClassification();
+						c.SetClass(31);
+						p.SetClassification(c);
+						w.WritePoint(p);
+					}
+					for(las::Point &p:pq1) {
+						las::Classification c = p.GetClassification();
+						c.SetClass(31);
+						p.SetClassification(c);
+						w.WritePoint(p);
+					}
+					pq0.erase(pq0.begin(), pq0.end());
+					pq1.erase(pq1.begin(), pq1.end());
+					//_log("Flip " << dir0 << "," << dir1 << ": " << (int) pq1.front()->GetClassification().GetClass());
+				} else {
+					w.WritePoint(pq1.front());
+					pq1.pop_front();
+				}
+			}
   		}
+
+  		for(las::Point p:pq0)
+  			w.WritePoint(p);
+  		for(las::Point p:pq1)
+  			w.WritePoint(p);
 
 		in.close();
 		out.close();
@@ -435,7 +426,7 @@ int main(int argc, char ** argv) {
 		} else if(arg == "-e") {
 			edges = true;
 		} else if(arg == "-v") {
-			quiet = false;
+			_loglevel(1);
 		} else {
 			files.push_back(std::string(argv[i]));
 		}
