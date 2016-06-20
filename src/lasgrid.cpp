@@ -385,13 +385,15 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		break;
 	case TYPE_MEDIAN:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
-			std::sort(qGrid[i]->begin(), qGrid[i]->end());
-			int size = qGrid[i]->size();
-			if(size % 2 == 0) {
-				int idx = size / 2;
-				grid1.set(i, ((*qGrid[i])[idx - 1] + (*qGrid[i])[idx]) / 2.0);
-			} else {
-				grid1.set(i, (*qGrid[i])[size / 2]);
+			if(counts[i] > 0) {
+				std::sort(qGrid[i]->begin(), qGrid[i]->end());
+				int size = qGrid[i]->size();
+				if(size % 2 == 0) {
+					int idx = size / 2;
+					grid1.set(i, ((*qGrid[i])[idx - 1] + (*qGrid[i])[idx]) / 2.0);
+				} else {
+					grid1.set(i, (*qGrid[i])[size / 2]);
+				}
 			}
 		}
 		break;
