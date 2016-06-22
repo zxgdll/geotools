@@ -143,7 +143,7 @@ bool inRadius(double px, double py, int col, int row, double radius,
 
 void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
 			int crs, int attribute, int type, double radius,
-			double resolution, std::vector<double> &bounds) {
+			double resolution, std::vector<double> &bounds, unsigned char angleLimit) {
 
 	if(files.size() == 0)
 		_argerr("At least one input file is required.");
@@ -166,6 +166,9 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	} else {
 		_log("Classes: " << classes.size());
 	}
+
+	if(angleLimit <= 0)
+		_argerr("Angle limit must be greater than zero.");
 
 	// Snap bounds
 	if(bounds.size() == 4) 
@@ -260,6 +263,10 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 
 		while(reader.ReadNextPoint()) {
 			las::Point pt = reader.GetPoint();
+			
+			if(_abs(pt.GetScanAngleRank()) > angleLimit)
+				continue;
+
 			double px = pt.GetX();
 			double py = pt.GetY();
 			// Check if in bounds, but only if clipping is desired.
@@ -420,6 +427,7 @@ int main(int argc, char **argv) {
 	int att = ATT_HEIGHT;
 	double resolution = 2.0;
 	double radius = -1.0;
+	unsigned char angleLimit = 100;
 	std::vector<double> bounds;
 	std::set<int> classes;
 	std::vector<std::string> files;
@@ -442,6 +450,8 @@ int main(int argc, char **argv) {
 			radius = atof(argv[++i]);
 		} else if(s == "-v") {
 			_loglevel(1);
+		} else if(s == "--angle-limit") {
+			angleLimit = (unsigned char) atoi(argv[++i]);
 		} else if(s == "-b") {
 			bounds.push_back(atof(argv[++i]));
 			bounds.push_back(atof(argv[++i]));
@@ -453,7 +463,7 @@ int main(int argc, char **argv) {
 	}
 
 	try {
-		lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds);
+		lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit);
 	} catch(const std::exception &ex) {
 		_log(ex.what());
 		usage();
