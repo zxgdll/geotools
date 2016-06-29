@@ -313,7 +313,19 @@ void computeDirection(std::list<las::Point> &q, double *pdir) {
 	*pdir = d;
 }
 
-void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
+void dumpQueue(std::list<las::Point> &pq, las::Writer &w, int cls = -1) {
+	for(las::Point &p:pq) {
+		if(cls > -1) {
+			las::Classification c = p.GetClassification();
+			c.SetClass(cls);
+			p.SetClassification(c);
+		}
+		w.WritePoint(p);
+	}
+	pq.clear();
+}
+
+void recoverEdges(std::vector<std::string> &files, std::string &outfile) { 
 
 	if(outfile.size() == 0) 
 		throw "An output directory is required.";
@@ -343,10 +355,21 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 		double dir0 = 0, dir1 = 0; // queue direction
 		std::list<las::Point> pq0;
 		std::list<las::Point> pq1;
-		int limit = 100;
+		int limit = 20;
+		double lastTime = 0.0;
+
 		while(r.ReadNextPoint()) {
 			//_log("Q0: " << pq0.size() << "; Q1: " << pq1.size());
 			las::Point pt = r.GetPoint();
+			//_print("time " << pt.GetTime());
+			double t = pt.GetTime();
+			if(lastTime == 0.0) {
+				lastTime = t;
+			} else if(t - lastTime > 0.4) {
+				lastTime = t;
+				dumpQueue(pq0, w);
+				dumpQueue(pq1, w);
+			}
 			pq0.push_back(pt);
 			if(pq0.size() <= limit) {
 				continue;
@@ -359,20 +382,8 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 				computeDirection(pq1, &dir1);
 				//_log("Dirs: " << dir0 << ", " << dir1);
 				if(std::abs(std::abs(dir0) - std::abs(dir1)) > PI * 0.75) {
-					for(las::Point &p:pq0) {
-						las::Classification c = p.GetClassification();
-						c.SetClass(31);
-						p.SetClassification(c);
-						w.WritePoint(p);
-					}
-					for(las::Point &p:pq1) {
-						las::Classification c = p.GetClassification();
-						c.SetClass(31);
-						p.SetClassification(c);
-						w.WritePoint(p);
-					}
-					pq0.erase(pq0.begin(), pq0.end());
-					pq1.erase(pq1.begin(), pq1.end());
+					dumpQueue(pq0, w, 31);
+					dumpQueue(pq1, w, 31);
 					//_log("Flip " << dir0 << "," << dir1 << ": " << (int) pq1.front()->GetClassification().GetClass());
 				} else {
 					w.WritePoint(pq1.front());
@@ -381,10 +392,74 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 			}
   		}
 
-  		for(las::Point p:pq0)
-  			w.WritePoint(p);
-  		for(las::Point p:pq1)
-  			w.WritePoint(p);
+		dumpQueue(pq0, w);
+		dumpQueue(pq1, w);
+
+		in.close();
+		out.close();
+
+	}
+}
+
+void recoverEdgesWEdgeMarker(std::vector<std::string> &files, std::string &outfile) { 
+
+	if(outfile.size() == 0) 
+		throw "An output directory is required.";
+
+	if(files.size() == 0)
+		throw "At least one input file is required.";
+
+	/* Loop over files and figure out which ones are relevant. */
+	las::ReaderFactory rf;
+
+	for(unsigned int i = 0; i < files.size(); ++i) {
+
+		std::string path = files[i];
+		std::string base = path.substr(path.find_last_of("/") + 1);
+		std::string newpath = outfile + "/" + base;
+		
+		_log("Saving " << path << " to " << newpath);
+		
+		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
+		las::Reader r = rf.CreateWithStream(in);
+		las::Header h = r.GetHeader();
+
+		std::ofstream out(newpath.c_str(), std::ios::out | std::ios::binary);
+		las::Header wh(h);
+		las::Writer w(out, wh);
+
+		std::list<las::Point> pq0;
+		std::list<las::Point> pq1;
+		int limit = 20;
+
+		while(r.ReadNextPoint()) {
+			//_log("Q0: " << pq0.size() << "; Q1: " << pq1.size());
+			las::Point pt = r.GetPoint();
+			//_print("time " << pt.GetTime());
+			pq0.push_back(pt);
+			if(pq0.size() > limit) {
+				// If the first queue is over the limit:
+				las::Point pt0 = pq0.front();
+				if(pt0.GetFlightLineEdge()) {
+					// If it is an edge, dump all the points on either side.
+					dumpQueue(pq0, w, 18);
+					dumpQueue(pq1, w, 18);
+				} else {
+					// Otherwise add it to the second queue
+					pq0.pop_front();
+					pq1.push_back(pt0);
+				}
+			}
+			if(pq1.size() == limit) {
+				// If the second queue is at the limit, write the last point.
+				w.WritePoint(pq1.front());
+				pq1.pop_front();
+			}
+  		}
+
+  		// TODO: If there's an edge in here, deal with it.
+		dumpQueue(pq0, w);
+		dumpQueue(pq1, w);
 
 		in.close();
 		out.close();
@@ -441,7 +516,9 @@ int main(int argc, char ** argv) {
 		} else if(flightlines) {
 			recoverFlightlines(files, outfile, flTimeGap, flExport);
 		} else if(edges) {
-			recoverEdges(files, outfile);
+			// Only works with edge markers. 
+			// TODO: Add other mechanisms of finding edges.
+			recoverEdgesWEdgeMarker(files, outfile);
 		} else {
 			throw "No command given.";
 		}
