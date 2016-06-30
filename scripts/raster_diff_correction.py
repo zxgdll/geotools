@@ -12,7 +12,9 @@ import os
 import sys
 import gdal
 import json
+import re
 import numpy as np
+import subprocess as sub
 
 def compute_stats(srcdir, nodata, cache = True):
 	'''
@@ -26,6 +28,7 @@ def compute_stats(srcdir, nodata, cache = True):
 	'''
 
 	if cache:
+		print 'Using cache'
 		try:
 			with open('diffs.json', 'rU') as f:
 				return json.loads(f.read())
@@ -79,7 +82,6 @@ def compute_stats(srcdir, nodata, cache = True):
 
 				# Difference the masked arrays.
 				v0 = v1[0][test] - v2[0][test]
-
 				if len(v0):
 					v += v0.sum()
 					c += len(v0)
@@ -88,9 +90,8 @@ def compute_stats(srcdir, nodata, cache = True):
 				result.append((k, j, f, g, v, c, v / c))
 
 	# Save the cache
-	if cache:
-		with open('diffs.json', 'w') as f:
-			f.write(json.dumps(result))
+	with open('diffs.json', 'w') as f:
+		f.write(json.dumps(result))
 
 	return result
 
@@ -111,6 +112,12 @@ class Edge(object):
 	def __str__(self):
 		return self.__repr__()
 
+	def __eq__(self, other):
+		return other.nfrom == self.nfrom and other.nto == self.nto and self.count == other.count and self.mean == other.mean
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
 
 class Node(object):
 	'''
@@ -118,8 +125,8 @@ class Node(object):
 	'''
 	def __init__(self, filename):
 		self.filename = filename
-		self.incoming = []
-		self.outgoing = []
+		self.incoming = set()
+		self.outgoing = set()
 
 	def __repr__(self):
 		return '[Node: %s; in %u, out %u]' % (self.filename, len(self.incoming), len(self.outgoing))
@@ -127,7 +134,24 @@ class Node(object):
 	def __str__(self):
 		return self.__repr__()
 
-def build_chains(pairs, reference):
+	def __eq__(self, other):
+		return other.filename == self.filename
+
+	def __ne__(self, other):
+		return not self.__eq__(other)
+
+def find_node(node, root, result = []):
+	#print 'Node', node
+	for edge in sorted(node.outgoing, key = lambda x: x.count, reverse = True):
+		#print ' --> ', edge.nto, result
+		result = result[:]
+		result.append(edge)
+		if edge.nto == root:
+			return result
+		else:
+			return find_node(edge.nto, root, result)
+
+def build_chains(pairs, root):
 	'''
 	Builds and returns a series of 'chains' -- lists of
 	edges from which shifts can be computed.
@@ -144,24 +168,25 @@ def build_chains(pairs, reference):
 			n2 = nodes[pair[3]] = Node(pair[3])
 		e1 = Edge(n1, n2, pair[5], -pair[6])
 		e2 = Edge(n2, n1, pair[5], pair[6])
-		n1.incoming.append(e1)
-		n2.outgoing.append(e2)
+		n1.incoming.add(e1)
+		n2.outgoing.add(e2)
 
-	# Find the leaves
-	leaves = []
-	for k, n in nodes.iteritems():
-		if not len(n.incoming):
-			leaves.append(n)
+	match = re.compile(root)
+	root = None
+	output = []
 
-	# Build the chains from the leaves
+	for n in nodes.values():
+		if match.match(n.filename):
+			root = n
+	
+	if not root:
+		raise Exception('Root node not found.')
+
+	print 'Root', root
 	chains = []
-	for n in leaves:
-		chain = []
-		while n and len(n.outgoing):
-			e = sorted(n.outgoing, key = lambda x: x.count, reverse = True)[0]
-			n = e.nto
-			chain.append(e)
-		chains.append(chain)
+	for node in nodes.values():
+		#print 'Node', node
+		chains.append(find_node(node, root))
 
 	return chains
 
@@ -169,23 +194,46 @@ if __name__ == '__main__':
 
 	try:
 		srcdir = sys.argv[1]
+		lasdir = sys.argv[2]
+		dstdir = sys.argv[3]
+		root = sys.argv[4]
 		nodata = -9999.
 		try:
-			nodata = sys.argv[2]
+			nodata = float(sys.argv[5])
+		except: pass
+		cache = False
+		try:
+			cache = sys.argv[6] == '1'
 		except: pass
 
+		if not dstdir or not lasdir or dstdir == lasdir:
+			raise Exception('Dst and las dirs must be given and not the same.')
+
 		# Compute the differences
-		result = compute_stats(srcdir, nodata)
+		result = compute_stats(srcdir, nodata, cache)
 		# Build the chains
-		chains = build_chains(result, None)
+		chains = build_chains(result, root)
 
 		# Output a table of filenames and shifts.
 		for c in chains:
-			diff = 0.
-			for e in c[::-1]:
-				diff += e.mean
-				print '%s,%f,%f' % (e.nfrom.filename, e.mean, diff)
+			if not c: continue
+			shiftmean = 0.
+			for e in c:
+				shiftmean += e.mean
+
+			name, ext = os.path.splitext(c[0].nfrom.filename)
+			print 'Processing', name
+			print 'Shift', shiftmean
+
+			lasfile = name + '.las'
+			if not os.path.exists(os.path.join(lasdir, lasfile)):
+				lasfile = name + '.laz'
+
+			oper = '' if shiftmean < 0 else '+'
+			cmd = ['las2las', '--point-translate', 'x*1.0 y*1.0 z%s%f' % (oper, shiftmean,), '-i', os.path.join(lasdir, lasfile), '-o', os.path.join(dstdir, lasfile)]
+			sub.Popen(cmd).wait()
+
 	except Exception, e:
 		print e
-		print "Usage: diffs.py <src dir> [nodata value]"
+		print "Usage: raster_diff_correction.py <tif dir> <las dir> <dst dir> <root pattern> [nodata value] [use cache]"
 
