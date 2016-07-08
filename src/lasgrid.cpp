@@ -111,6 +111,7 @@ void usage() {
 				<< " -d <radius>                 Radius (not diameter); use zero for cell bounds.\n"
 				<< "                             For example, if the cell size is 2, the circumcircle's radius is sqrt(2) (~1.41).\n"
 				<< " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size.\n"
+				<< " -f                          Fill voids.\n"
 				<< " -v                          Verbose output.");
 }
 
@@ -140,10 +141,39 @@ bool inRadius(double px, double py, int col, int row, double radius,
 	return r <= radius;
 }
 
+void void_fill(Grid<float> &rast, double resolution) {
+	int rlimit = _max(rast.rows(), rast.cols());
+	double angle = 0.0;
+	for(int r = 0; r < rast.rows(); ++r) {
+		for(int c = 0; c < rast.cols(); ++c) {
+			if(rast.get(c, r) != rast.nodata())
+				continue;
+			for(int rad = 1; rad < rlimit; ++rad) {
+				// We'll average the values of pixels at this radius?
+				float total = 0.0;
+				int count = 0;
+				for(double ang = 0; ang < 2.0 * PI; ang += std::atan(1.0 / rad)) {
+					int r0 = (int) (r + std::sin(ang) * rad + 0.5);
+					int c0 = (int) (c + std::cos(ang) * rad + 0.5);
+					if(r0 < 0 || c0 < 0 || r0 >= rast.rows() || c0 >= rast.cols())
+						continue;
+					if(rast.get(c0, r0) != rast.nodata()) {
+						total += rast.get(c0, r0);
+						++count;
+					}
+				}
+				if(count > 0) {
+					rast.set(c, r, total / count);
+					break;
+				}
+			}
+		}
+	}
+}
 
 void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
 			int crs, int attribute, int type, double radius,
-			double resolution, std::vector<double> &bounds, unsigned char angleLimit) {
+			double resolution, std::vector<double> &bounds, unsigned char angleLimit, bool fill) {
 
 	if(files.size() == 0)
 		_argerr("At least one input file is required.");
@@ -415,9 +445,14 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 					resolution, -9999.0, crs);
 		// Cast the double grid to float for writing.
 		MemRaster<float> tmp = (MemRaster<float>) grid1;
+		tmp.nodata(rast.nodata());
+		if(fill)
+			void_fill(tmp, resolution);
 		rast.writeBlock(tmp);
 	}
+
 }
+
 
 int main(int argc, char **argv) {
 
@@ -425,6 +460,7 @@ int main(int argc, char **argv) {
 	int crs = 0;
 	int type = TYPE_MEAN;
 	int att = ATT_HEIGHT;
+	bool fill = false;
 	double resolution = 2.0;
 	double radius = -1.0;
 	unsigned char angleLimit = 100;
@@ -438,6 +474,8 @@ int main(int argc, char **argv) {
 			dstFile = argv[++i];
 		} else if(s == "-s") {
 			crs = atoi(argv[++i]);
+		} else if(s == "-f") {
+			fill = true;
 		} else if(s == "-t") {
 			type = parseType(argv[++i]);
 		} else if(s == "-r") {
@@ -463,7 +501,7 @@ int main(int argc, char **argv) {
 	}
 
 	try {
-		lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit);
+		lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit, fill);
 	} catch(const std::exception &ex) {
 		_log(ex.what());
 		usage();
