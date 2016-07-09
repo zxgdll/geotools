@@ -3,6 +3,7 @@
 
 #include <limits>
 #include <exception>
+#include <iostream>
 
 #ifdef __GNUC__
 #define DEPRECATED __attribute__((deprecated))
