@@ -26,7 +26,7 @@
 #define _min(a, b) ((a) > (b) ? (b) : (a))
 #define _max(a, b) ((a) < (b) ? (b) : (a))
 #define _sq(a) ((a) * (a))
-
+#define _abs(x) (x < 0 ? -x : x)
 #define _deg(x) (x * 180.0 / PI)
 #define _rad(x) (x * PI / 180.0)
 

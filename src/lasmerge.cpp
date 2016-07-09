@@ -22,62 +22,27 @@
 namespace las = liblas;
 
 void usage() {
-	std::cerr << "Usage: lasmerge [options] srcfiles*" << std::endl;
-	std::cerr << " -o Speficy an output file." << std::endl;
-	std::cerr << " --maxx, --maxy, -- minx, --miny Specify the bounds of the data set. Any combination of these can be used." << std::endl;	
+	_print("Usage: lasmerge [options] srcfiles*\n"
+		<< " -o                              Speficy an output file.\n"
+		<< " -v                              Verbose output.\n"
+		<< " --maxx, --maxy, --minx, --miny  Specify the bounds of the data set.\n"
+		<< "                                 Any combination of these can be used.");
 }
 
-int main(int argc, char ** argv) {
+void merge(std::vector<std::string> &files, std::string &outfile, double minx, double miny, double maxx, double maxy) {
 
-	std::vector<char *> files;
-	double minx = DBL_MAX_NEG;
-	double maxx = DBL_MAX_POS;
-	double miny = DBL_MAX_NEG;
-	double maxy = DBL_MAX_POS;
-	char *outfile = NULL;
-	bool quiet = false;
+	_log("Processing " << files.size() << " files.");
 
-	for(int i=1;i<argc;++i) {
-		std::string arg(argv[i]);
-		if(arg == "--maxx") {
-			maxx = atof(argv[++i]);
-		} else if(arg == "--minx") {
-			minx = atof(argv[++i]);
-		} else if(arg == "--maxy") {
-			maxy = atof(argv[++i]);
-		} else if(arg == "--miny") {
-			miny = atof(argv[++i]);
-		} else if(arg == "-q") {
-			quiet = true;
-		} else if(arg == "-o") {
-			outfile = argv[++i];
-		} else {
-			files.push_back(argv[i]);
-		}
-	}
+	if(outfile.empty())
+		_argerr("An output file (-o) is required.");
 
-	if(!quiet)
-		std::cerr << "Processing " << files.size() << " files." << std::endl;
+	if(files.size() == 0)
+		_argerr("At least one input file is required.");
 
-	if(outfile == NULL) {
-		std::cerr << "An output file (-o) is required." << std::endl;
-		usage();
-		return 1;
-	}
+	if(minx >= maxx || miny >= maxy)
+		_argerr("The bounds are silly.");
 
-	if(files.size() == 0) {
-		std::cerr << "At least one input file is required." << std::endl;
-		usage();
-		return 1;
-	}
-
-	if(minx >= maxx || miny >= maxy) {
-		std::cerr << "The bounds are silly: " << minx << ", " << miny << ", " << maxx << ", " << maxy << std::endl;
-		usage();
-		return 1;
-	}
-
-	las::Header * dsth = NULL;
+	las::Header *dsth = nullptr;
 	las::Header::RecordsByReturnArray recs;
 	las::ReaderFactory rf;
 
@@ -88,13 +53,11 @@ int main(int argc, char ** argv) {
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
 
-		const char * filename = files[i];
-		std::ifstream in(filename, std::ios::in | std::ios::binary);
+		_log("Checking file " << files[i]);
+
+		std::ifstream in(files[i], std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
-
-		if(!quiet)
-			std::cout << "Checking file " << filename << std::endl;
 
 		if(h.GetMinX() > maxx || h.GetMinY() > maxy || h.GetMaxX() < minx || h.GetMaxY() < miny)
 			continue;
@@ -110,7 +73,7 @@ int main(int argc, char ** argv) {
 
 		las::Header::RecordsByReturnArray rr = h.GetPointRecordsByReturnCount();
 
-		if(dsth == NULL) {
+		if(dsth == nullptr) {
 			// Create the destination header from the first source header. 
 			// Initialize the return counts to zero.
 			dsth = new las::Header(h);
@@ -131,10 +94,8 @@ int main(int argc, char ** argv) {
 		in.close();
 	}
 
-	if(indices.size() == 0) {
-		std::cerr << "No files matched the given bounds." << std::endl;
-		return 1;
-	}
+	if(indices.size() == 0)
+		_argerr("No files matched the given bounds.")
 
 	// Set the total count and update the point record counts.
 	dsth->SetPointRecordsCount(count);
@@ -148,17 +109,16 @@ int main(int argc, char ** argv) {
 	las::WriterFactory wf;
 	las::Writer w(out, *dsth);
 
-	if(!quiet)
-		std::cout << "Using points from " << indices.size() << " files." << std::endl;
+	_log("Using points from " << indices.size() << " files.");
+
 	for(unsigned int i = 0; i < indices.size(); ++i) {
 
-		const char * filename = files[indices[i]];
+		_log("Processing file " << files[indices[i]]);
+
+		std::string filename = files[indices[i]];
 		std::ifstream in(filename, std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
-
-		if(!quiet)
-			std::cout << "Processing file " << filename << std::endl;
 
 		while(r.ReadNextPoint()) {
 			las::Point pt = r.GetPoint();
@@ -172,6 +132,43 @@ int main(int argc, char ** argv) {
 
 	out.close();
 	delete dsth;	
+
+}
+int main(int argc, char ** argv) {
+
+	std::vector<std::string> files;
+	double minx = DBL_MAX_NEG;
+	double maxx = DBL_MAX_POS;
+	double miny = DBL_MAX_NEG;
+	double maxy = DBL_MAX_POS;
+	std::string outfile;
+
+	for(int i=1;i<argc;++i) {
+		std::string arg(argv[i]);
+		if(arg == "--maxx") {
+			maxx = atof(argv[++i]);
+		} else if(arg == "--minx") {
+			minx = atof(argv[++i]);
+		} else if(arg == "--maxy") {
+			maxy = atof(argv[++i]);
+		} else if(arg == "--miny") {
+			miny = atof(argv[++i]);
+		} else if(arg == "-v") {
+			_loglevel(1);
+		} else if(arg == "-o") {
+			outfile = argv[++i];
+		} else {
+			files.push_back(argv[i]);
+		}
+	}
+
+	try {
+		merge(files, outfile, minx, miny, maxx, maxy);
+	} catch(const std::exception &e) {
+		_print(e.what());
+		usage();
+		return 1;
+	}
 
 	return 0;
 
