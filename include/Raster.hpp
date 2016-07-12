@@ -510,6 +510,8 @@ private:
 	 * Loads the block that contains the given row and column.
 	 */
 	void loadBlock(int col, int row) {
+		if(!m_inited)
+			_runerr("Not inited before attempted read.");
 		if(!has(col, row))
 			_argerr("Row or column out of bounds.");
 		int bcol = (int) (col / m_bw);
@@ -518,6 +520,7 @@ private:
 			_argerr("Illegal block column or row.");
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
+			//std::cerr << "read " << bcol << " " << brow << " " << m_bcols << " " << m_brows << " " << m_block << std::endl;
 			if(m_band->ReadBlock(bcol, brow, m_block) != CE_None)
 				_runerr("Failed to read block.");
 			m_currow = brow;
@@ -620,6 +623,14 @@ public:
 	}
 
 	/**
+	 * Open the given raster and load the given band. Set the writable argument to true
+	 * to enable writing.
+	 */
+	Raster(std::string &filename, int band = 1, bool writable = false) : Raster() {
+		init(filename, band, writable);
+	}
+
+	/**
 	 * Initializes the raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	void init(const std::string &filename, double minx, double miny, double maxx, double maxy,
@@ -654,17 +665,13 @@ public:
 		m_bcols = (m_cols + m_bw - 1) / m_bw;
 		m_brows = (m_rows + m_bh - 1) / m_bh;
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
+		if(!m_block)
+			_runerr("Failed to allocate memory for raster.");
+		std::cerr << (long) m_block << " " << m_bw << " " << m_bh << " " << sizeof(T) << std::endl;
 		m_writable = true;
 		m_inited = true;
 	}
 
-	/**
-	 * Open the given raster and load the given band. Set the writable argument to true
-	 * to enable writing.
-	 */
-	Raster(std::string &filename, int band = 1, bool writable = false) : Raster() {
-		init(filename, band, writable);
-	}
 
 	void init(std::string &filename, int band = 1, bool writable = false) {
 		GDALAllRegister();
@@ -683,6 +690,9 @@ public:
 		m_bcols = (m_cols + m_bw - 1) / m_bw;
 		m_brows = (m_rows + m_bh - 1) / m_bh;
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
+		if(!m_block)
+			_runerr("Failed to allocate memory for raster.");
+		std::cerr << (long) m_block << " " << m_bw << " " << m_bh << " " << sizeof(T) << std::endl;
 		m_writable = writable;
 		m_inited = true;
 	}

@@ -6,6 +6,7 @@ namespace las = liblas;
 #include <list>
 #include <sstream>
 #include <algorithm>
+#include <fstream>
 
 #include "csv.h"
 
