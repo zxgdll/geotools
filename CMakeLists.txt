@@ -5,6 +5,10 @@ project (geotools)
 
 link_directories(/usr/local/lib)
 
+add_executable (rasterstats src/rasterstats.cpp)
+target_include_directories (rasterstats PUBLIC include /usr/local/include /usr/include/gdal)
+target_link_libraries (rasterstats gdal)
+
 add_executable (lasgrid src/lasgrid.cpp)
 target_include_directories (lasgrid PUBLIC include /usr/local/include /usr/include/gdal)
 target_link_libraries (lasgrid gdal las laszip boost_system boost_filesystem)
@@ -41,6 +45,7 @@ add_executable (mosaic src/mosaic.cpp)
 target_include_directories (mosaic PUBLIC include /usr/include/gdal /usr/local/include)
 target_link_libraries (mosaic gdal boost_system boost_filesystem)
 
+
 install (TARGETS lasgrid DESTINATION bin)
 install (TARGETS lasvalidate DESTINATION bin)
 install (TARGETS las2csrs DESTINATION bin)
@@ -50,3 +55,5 @@ install (TARGETS lasmerge DESTINATION bin)
 install (TARGETS lasreclass DESTINATION bin)
 install (TARGETS lasclip DESTINATION bin)
 install (TARGETS mosaic DESTINATION bin)
+install (TARGETS rasterstats DESTINATION bin)
+
