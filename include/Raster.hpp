@@ -933,7 +933,7 @@ public:
 	 * Returns the row for a given y-coordinate.
 	 */
 	int toRow(double y) const {
-		return (int) ((y - m_trans[3]) / m_trans[5]) - rows();
+		return (int) ((y - m_trans[3]) / m_trans[5]);
 	}
 
 	/**

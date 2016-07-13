@@ -170,7 +170,7 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 	std::map<std::string, std::map<std::string, std::map<int, Stat> > > stats;
 	std::set<int> classes;
 
-	Raster<char> clsrast(clsfile);
+	Raster<unsigned char> clsrast(clsfile);
 
 	// Loop over every pair of files.
 	for(int f0 = 0; f0 < files.size(); ++f0) {
@@ -193,13 +193,14 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 			int cols = (int) (maxx - minx) / frast0.resolutionX();
 			int rows = (int) (miny - maxy) / frast0.resolutionY();
 
-			//std::cerr << cols << " " << rows << std::endl;
+			//std::cerr << files[f0] << ": " << frast0.minx() << ", " << frast0.miny() << ", " << frast0.maxx() << ", " << frast0.maxy() << std::endl;
+			//std::cerr << files[f1] << ": " << frast1.minx() << ", " << frast1.miny() << ", " << frast1.maxx() << ", " << frast1.maxy() << std::endl;
+			//std::cerr << "range: " << minx << ", " << miny << ", " << maxx << ", " << maxy << std::endl;
 
-			for(int r = 0; r < rows; ++r) {
-				for(int c = 0; c < cols; ++c) {
+			int stop = 1;
 
-					double x = c * frast0.resolutionX() + minx;
-					double y = r * frast0.resolutionY() + miny;
+			for(double y = miny; y < maxy; y += std::abs(frast0.resolutionY())) {
+				for(double x = minx; x < maxx; x += std::abs(frast0.resolutionX())) {
 
 					int c0 = frast0.toCol(x);
 					int r0 = frast0.toRow(y);
@@ -210,8 +211,8 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 
 					// If any of the indices are out of bands, skip.
 					if(c0 < 0 || c1 < 0 || cc < 0 || r0 < 0 || r1 < 0 || cr < 0 ||
-						c0 >= cols || c1 >= cols || cc >= clsrast.cols() ||
-						r0 >= rows || r1 >= rows || cr >= clsrast.rows())
+						c0 >= frast0.cols() || c1 >= frast1.cols() || cc >= clsrast.cols() ||
+						r0 >= frast0.rows() || r1 >= frast1.rows() || cr >= clsrast.rows())
 						continue;
 
 					float v0 = frast0.get(c0, r0);
@@ -225,7 +226,6 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 					int cls = clsrast.get(cc, cr);
 					classes.insert(cls);
 					stats[files[f0]][files[f1]][cls].add(v0 - v1);
-
 				}
 			}
 		}
@@ -233,18 +233,13 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 	}
 
 	// Print the header.
-	std::cout << "file1,file2";
-	for(int cls : classes)
-		std::cout << "," << cls << "_sum," << cls << "_count," << cls << "_min," 
-			<< cls << "_max," << cls << "_mean," << cls << "_var," << cls << "_stddev";
-	std::cout << std::endl;
+	std::cout << "file1,file2,class,count,sum,min,max,mean,variance,stddev" << std::endl;
 
 	// Print the data rows.
 	for(auto it = stats.begin(); it != stats.end(); ++it) {
-		std::cout << it->first;
 		for(auto it0 = it->second.begin(); it0 != it->second.end(); ++it0) {
-			std::cout << "," << it0->first;
 			for(int cls : classes) {
+				std::cout << it->first << "," << it0->first << "," << cls;
 				if(it0->second.find(cls) == it0->second.end()) {
 					std::cout << ",,,,,,,";
 				} else {
@@ -253,8 +248,8 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 						<< it0->second[cls].mean() << "," << it0->second[cls].variance() << "," 
 						<< it0->second[cls].stddev();
 				}
+				std::cout << std::endl;
 			}
-			std::cout << std::endl;
 		}
 	}
 }
