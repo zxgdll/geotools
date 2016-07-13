@@ -9,6 +9,7 @@
 #define INCLUDE_RASTER_HPP_
 
 #include <queue>
+#include <stdexcept>
 
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
@@ -219,6 +220,14 @@ public:
 			}
 		}
 	}
+
+	/**
+	 * The radius is given with cells as the unit, but
+	 * can be rational. When determining which cells to
+	 * include in the calculation, any cell which partially
+	 * falls in the radius will be included.
+	 */
+	void voidFillIDW(double radius, int count = 4, double exp = 2.0);
 
 };
 
@@ -667,7 +676,6 @@ public:
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
 			_runerr("Failed to allocate memory for raster.");
-		std::cerr << (long) m_block << " " << m_bw << " " << m_bh << " " << sizeof(T) << std::endl;
 		m_writable = true;
 		m_inited = true;
 	}
@@ -692,7 +700,6 @@ public:
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
 			_runerr("Failed to allocate memory for raster.");
-		std::cerr << (long) m_block << " " << m_bw << " " << m_bh << " " << sizeof(T) << std::endl;
 		m_writable = writable;
 		m_inited = true;
 	}
@@ -926,7 +933,7 @@ public:
 	 * Returns the row for a given y-coordinate.
 	 */
 	int toRow(double y) const {
-		return (int) ((y - m_trans[3]) / m_trans[5]);
+		return (int) ((y - m_trans[3]) / m_trans[5]) - rows();
 	}
 
 	/**
@@ -1090,5 +1097,79 @@ public:
 	}
 
 };
+
+/**
+ * The radius is given with cells as the unit, but
+ * can be rational. When determining which cells to
+ * include in the calculation, any cell which partially
+ * falls in the radius will be included.
+ */
+template <class T>
+void Grid<T>::voidFillIDW(double radius, int count, double exp) {
+
+	if(radius <= 0.0)
+		throw std::invalid_argument("Radius must be larger than 0.");
+
+	if(count <= 0)
+		throw std::invalid_argument("Count must be larger than 0.");
+
+	if(exp <= 0.0)
+		throw std::invalid_argument("Exponent must be larger than 0.");
+
+	MemRaster<T> tmp(cols(), rows());
+	tmp.nodata(nodata());
+	tmp.fill(nodata());
+	
+	for(int r = 0; r < rows(); ++r) {
+		for(int c = 0; c < cols(); ++c) {
+
+			if(get(c, r) != nodata())
+				continue;
+
+			double rad = radius;
+			bool found = false;
+
+			do {
+
+				double d = _sq(rad);
+				double a = 0.0;
+				double b = 0.0;
+				int cnt = 0;
+				//std::list<std::pair<T, double> > values;
+				//_log(rad << ", " << _min(cols(), rows()));
+
+				for(int r0 = _max(0, r - rad); r0 < _min(rows(), r + rad + 1); ++r0) {
+					for(int c0 = _max(0, c - rad); c0 < _min(cols(), c + rad + 1); ++c0) {
+
+						double d0 = _sq((double) c0 - c) + _sq((double) r0 - r);
+						//_log(d0 << ", " << d << ", " << get(c0, r0));
+
+						if(d0 <= d && get(c0, r0) != nodata()) {
+							double dp = 1.0 / std::pow(d0, exp);
+							//values.push_back(std::pair<T, double>(get(c0, r0), d0));
+							a += dp * get(c0, r0);
+							b += dp;
+							++cnt;
+						}
+					}
+				}
+
+				if(cnt >= count) {
+					tmp.set(c, r, a / b);
+					found = true;
+					break;
+				}
+
+				rad += 1.0;
+
+			} while(rad < _min(cols(), rows()));
+
+			if(!found)
+				std::cerr << "WARNING: Pixel not filled at " << c << "," << r << ". Consider larger radius or smaller count." << std::endl;
+		}
+	}
+
+	writeBlock(tmp);
+}
 
 #endif /* INCLUDE_RASTER_HPP_ */
