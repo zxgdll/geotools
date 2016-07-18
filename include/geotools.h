@@ -35,8 +35,8 @@ static int __loglevel = 0;
 #define _loglevel(x) (__loglevel = x);
 #define _log(x) if(__loglevel) { std::cerr << x << std::endl; }
 #define _print(x) std::cerr << x << std::endl;
-#define _argerr(x) throw std::invalid_argument(x);
-#define _implerr(x) throw std::runtime_error(x);
-#define _runerr(x) throw std::runtime_error(x);
+#define _argerr(x) {std::stringstream _ss; _ss << x; throw std::invalid_argument(_ss.str());}
+#define _implerr(x) {std::stringstream _ss; _ss << x; throw std::runtime_error(_ss.str());}
+#define _runerr(x) {std::stringstream _ss; _ss << x; throw std::runtime_error(_ss.str());}
 
 #endif

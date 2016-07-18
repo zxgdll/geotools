@@ -233,7 +233,7 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 	}
 
 	// Print the header.
-	std::cout << "file1,file2,class,count,sum,min,max,mean,variance,stddev" << std::endl;
+	std::cout << "file1,file2,class,count,sum,min,max,mean,median,variance,stddev" << std::endl;
 
 	// Print the data rows.
 	for(auto it = stats.begin(); it != stats.end(); ++it) {
@@ -245,8 +245,8 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 				} else {
 					std::cout << "," << it0->second[cls].sum() << "," << it0->second[cls].count() << "," 
 						<< it0->second[cls].min() << "," << it0->second[cls].max() << ","
-						<< it0->second[cls].mean() << "," << it0->second[cls].variance() << "," 
-						<< it0->second[cls].stddev();
+						<< it0->second[cls].mean() << "," << it0->second[cls].median() << "," 
+						<< it0->second[cls].variance() << "," << it0->second[cls].stddev();
 				}
 				std::cout << std::endl;
 			}
@@ -255,9 +255,10 @@ void rasterstats(std::string &clsfile, std::vector<std::string> &files) {
 }
 
 void usage() {
-	std::cerr << "Usage: lasstats [options] <class raster> <raster [raster [...]]>\n"
+	std::cerr << "Usage: rasterstats <class raster> <raster [raster [...]]>\n"
 		<< "	Produces a table containing statistics for each class in the class raster\n"
-		<< "	for the difference in every pixel for each pair of rasters.\n";
+		<< "	for the difference in every pixel for each pair of rasters.\n"
+		<< "    Prints to stdout; a CSV table.\n";
 }
 
 int main(int argc, char ** argv) {

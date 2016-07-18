@@ -27,6 +27,33 @@ public:
 	}
 };
 
+/**
+ * Used by Grid::floodFill to determine whether
+ * a pixel should be filled.
+ */
+template <class T>
+class FillOperator {
+public:
+	virtual bool fill(T value) const =0;
+};
+
+template <class T>
+class TargetOperator : public FillOperator<T> {
+private:
+	T m_match;
+public:
+	TargetOperator(T match) :
+		m_match(match) {
+	}
+
+	bool fill(T value) const {
+		return value == m_match;
+	}
+};
+
+/**
+ * Abstract class for grids (rasters).
+ */
 template <class T>
 class Grid {
 protected:
@@ -35,6 +62,8 @@ protected:
 	T m_mean = 0;
 	T m_stddev = 0;
 	T m_variance = 0;
+	T m_sum = 0;
+	int m_count = 0;
 	bool m_stats = false;
 
 public:
@@ -66,6 +95,12 @@ public:
 	virtual void set(int col, int row, const T value) =0;
 
 	virtual void set(unsigned long idx, const T value) =0;
+
+	virtual bool has(int col, int row) const =0;
+	virtual bool has(unsigned long idx) const =0;
+
+	virtual bool isNoData(int col, int row) =0;
+	virtual bool isNoData(unsigned long idx) =0;
 
 	/**
 	 * Return the element at the given index.
@@ -103,31 +138,41 @@ public:
 	virtual void readBlock(Grid<T> &block) =0;
 
 	void computeStats() {
-		T total = 0;
-		T max = get(0);
-		T min = get(0);
-		int count = 0;
-		for(unsigned int i = 0; i < size(); ++i) {
-			T v = get(i);
-			if(v != nodata()) {
-				total += v;
-				if(v > max) max = v;
-				if(v < min) min = v;
-				++count;
+		unsigned int i;
+		for(i = 0; i < size(); ++i) {
+			if(!isNoData(i)) {
+				m_min = m_max = get(i);
+				break;
 			}
 		}
-		m_mean = total / count;
-		m_min = min;
-		m_max = max;
-		T variance = 0;
-		for(unsigned int i = 0; i < size(); ++i) {
+
+		m_sum = 0;
+		m_count = 0;
+		T m = 0;
+		T s = 0;
+		int k = 1;
+		// Welford's method for variance.
+		// i has the index of the first non-nodata element.
+		for(; i < size(); ++i) {
 			T v = get(i);
-			if(v != nodata())
-				variance += _sq(v - m_mean);
+			if(v != nodata()) {
+				T oldm = m;
+				m = m + (v - m) / k;
+				s = s + (v - m) * (v - oldm);
+				m_sum += v;
+				m_min = _min(m_min, v);
+				m_max = _max(m_max, v);
+				++m_count;
+				++k;
+			}
 		}
-		m_variance = variance / (count - 1);
-		m_stddev = sqrt(m_variance);
+		m_mean = m_sum / m_count;
+		m_variance = s / m_count;
+		m_stddev = std::sqrt(m_variance);
 		m_stats = true;
+		_log("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min 
+			<< "; Max: " << m_max << "; Mean: " << m_mean 
+			<< "; Variance: " << m_variance << "; Std Dev: " << m_stddev << std::endl);
 	}
 
 	T max() {
@@ -160,13 +205,29 @@ public:
 		return m_variance;
 	}
 
-	void floodFill(int col, int row, T target, T fill, Grid<T> *other = nullptr, T otherFill = 0) {
+	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill) {
 
 		// If other is provided, fill pixels in it too, rather than just the current raster.
+		// Other fill is the value to fill the other raster with.
 
-		T value = get(col, row);
-		if(value != target)
-			return;
+		return floodFill(col, row, op, *this, fill);
+
+	}
+
+	template <class U>
+	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U otherFill) {
+
+		// If other is provided, fill pixels in it too, rather than just the current raster.
+		// Other fill is the value to fill the other raster with.
+
+		int minc = cols() + 1;
+		int minr = rows() + 1;
+		int maxc = -1;
+		int maxr = -1;
+		int area = 0;
+
+		if(other.get(col, row) == otherFill || !op.fill(get(col, row)))
+			return {minc, minr, maxc, maxr, area};
 
 		std::queue<Cell> q;
 		q.push(Cell(col, row));
@@ -175,21 +236,29 @@ public:
 			Cell cel = q.front();
 			q.pop();
 
+			other.set(cel.col, cel.row, otherFill);
+
+			minc = _min(cel.col, minc);
+			maxc = _max(cel.col, maxc);
+			minr = _min(cel.row, minr);
+			maxr = _max(cel.row, maxr);
+			++area;
+
 			// Scan out to the left, starting with current.
-			for(int c = cel.col; c >= 0; --c) {
-				value = get(c, cel.row);
-				if(value == target) {
-					set(c, cel.row, fill);
-					if(other)
-						other->set(c, cel.row, otherFill);;
+			for(int c = cel.col - 1; c >= 0; --c) {
+				if(other.get(c, cel.row) != otherFill && op.fill(get(c, cel.row))) {
+
+					minc = _min(c, minc);
+					++area;
+
+					other.set(c, cel.row, otherFill);
+
 					if(cel.row > 0) {
-						value = get(c, cel.row - 1);
-						if(value == target)
+						if(other.get(c, cel.row - 1) != otherFill && op.fill(get(c, cel.row - 1)))
 							q.push(Cell(c, cel.row - 1));
 					}
 					if(cel.row < rows() - 1) {
-						value = get(c, cel.row + 1);
-						if(value == target) 
+						if(other.get(c, cel.row + 1) != otherFill && op.fill(get(c, cel.row + 1)))
 							q.push(Cell(c, cel.row + 1));
 					}
 				} else {
@@ -199,19 +268,19 @@ public:
 
 			// Scan out to the right.
 			for(int c = cel.col + 1; c < cols(); ++c) {
-				value = get(c, cel.row);
-				if(value == target) {
-					set(c, cel.row, fill);
-					if(other)
-						other->set(c, cel.row, otherFill);
+				if(other.get(c, cel.row) != otherFill && op.fill(get(c, cel.row))) {
+
+					maxc = _max(c, maxc);
+					++area;
+
+					other.set(c, cel.row, otherFill);
+
 					if(cel.row > 0) {
-						value = get(c, cel.row - 1);
-						if(value == target)
+						if(other.get(c, cel.row - 1) != otherFill && op.fill(get(c, cel.row - 1)))
 							q.push(Cell(c, cel.row - 1));
 					}
 					if(cel.row < rows() - 1) {
-						value = get(c, cel.row + 1);
-						if(value == target)
+						if(other.get(c, cel.row + 1) != otherFill && op.fill(get(c, cel.row + 1)))
 							q.push(Cell(c, cel.row + 1));
 					}
 				} else {
@@ -219,8 +288,20 @@ public:
 				}
 			}
 		}
+		return {minc, minr, maxc, maxr, area};
 	}
 
+	template <class U>
+	std::vector<int> floodFill(int col, int row, T target, Grid<U> &other, U otherFill) {
+		TargetOperator<T> op(target);
+		return floodFill(col, row, op, other, otherFill);
+	}
+
+	std::vector<int> floodFill(int col, int row, T target, T fill) {
+		TargetOperator<T> op(target);
+		return floodFill(col, row, op, fill);
+	}
+	
 	/**
 	 * The radius is given with cells as the unit, but
 	 * can be rational. When determining which cells to
@@ -264,6 +345,11 @@ public:
 
 	MemRaster(int cols, int rows) : MemRaster() {
 		init(cols, rows);
+	}
+
+	template <class U>
+	MemRaster(Grid<U> &tpl) : MemRaster() {
+		init(tpl.cols(), tpl.rows());
 	}
 
 	~MemRaster() {
@@ -313,6 +399,11 @@ public:
 		return (unsigned long) m_rows * m_cols;
 	}
 
+	template <class U>
+	void init(Grid<U> &tpl) {
+		init(tpl.cols(), tpl.rows());
+	}
+
 	/**
 	 * Initialize with the given number of cols and rows.
 	 * (Re)allocates memory for the internal grid.
@@ -344,13 +435,21 @@ public:
 	T &get(unsigned long idx) {
 		checkInit();
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			_argerr("Index out of bounds: " << idx << "; " << m_cols << ", " << m_rows << "; " << size());
 		return m_grid[idx];
 	}
 
 	T &get(int col, int row) {
 		unsigned long idx = (unsigned long) (row * m_cols + col);	
 		return get(idx);
+	}
+
+	bool isNoData(int col, int row) {
+		return get(col, row) == m_nodata;
+	}
+
+	bool isNoData(unsigned long idx) {
+		return get(idx) == m_nodata;
 	}
 
 	void set(int col, int row, const T value) {
@@ -360,9 +459,17 @@ public:
 
 	void set(unsigned long idx, const T value) {
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			_argerr("Index out of bounds: " << idx << "; " << m_cols << ", " << m_rows << "; " << size());
 		checkInit();
 		m_grid[idx] = value;
+	}
+
+	bool has(int col, int row) const {
+		return col >= 0 && col < m_cols && row >= 0 && row < m_rows;
+	}
+
+	bool has(unsigned long idx) const {
+		return idx < (unsigned long) (m_cols * m_rows);
 	}
 
 	/**
@@ -542,6 +649,7 @@ private:
 	 */
 	void flush() {
 		if(m_writable && m_dirty) {
+			std::cerr << "write " << m_curcol << " " << m_currow << " " << m_block << std::endl;
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
 				_runerr("Flush error.");
 			m_dirty = false;
@@ -608,61 +716,88 @@ public:
 	Raster(const std::string &filename, Raster<D> &tpl) : Raster() {
 		std::string proj;
 		tpl.projection(proj);
-		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolution(), (T) tpl.nodata(), proj);
+		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
+			tpl.resolutionY(), (T) tpl.nodata(), proj);
 	}
 
 	Raster(const std::string &filename, Raster<T> &tpl) : Raster() {
-		std::string proj;
-		tpl.projection(proj);
-		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolution(), tpl.nodata(), proj);
+		init(filename, tpl);
 	}
 
 	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	Raster(const std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolution, double nodata, std::string &proj) : Raster() {
-		init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
+			double resolutionX, double resolutionY, double nodata, std::string &proj) : Raster() {
+		init(filename, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
 	}
 
+	/**
+	 * Build a new raster with the given filename, bounds, resolution, nodata and SRID.
+	 */
 	Raster(const std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolution, double nodata, int crs) : Raster() {
+			double resolutionX, double resolutionY, double nodata, int crs) : Raster() {
 		std::string proj = epsg2ProjText(crs);
-		init(filename, minx, miny, maxx, maxy, resolution, nodata, proj);
+		init(filename, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
 	}
 
 	/**
 	 * Open the given raster and load the given band. Set the writable argument to true
 	 * to enable writing.
 	 */
-	Raster(std::string &filename, int band = 1, bool writable = false) : Raster() {
+	Raster(const std::string &filename, int band = 1, bool writable = false) : Raster() {
 		init(filename, band, writable);
+	}
+
+	/**
+	 * Initialize the raster using the given file (which may not exist) using
+	 * another raster as a template. The raster pixel types need not be the same.
+	 */
+	template <class D>
+	void init(const std::string &filename, Raster<D> &tpl) {
+		std::string proj;
+		tpl.projection(proj);
+		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
+			tpl.resolutionY(), tpl.nodata(), proj);
 	}
 
 	/**
 	 * Initializes the raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	void init(const std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolution, double nodata, std::string proj) {
-		if(resolution <= 0)
-			_argerr("Resolution must be larger than 0.");
+			double resolutionX, double resolutionY, double nodata, std::string proj) {
+		
+		if(resolutionX == 0 || resolutionY == 0)
+			_argerr("Resolution must be larger or smaller than 0.");
 		if(maxx < minx)
 			_argerr("Minimum x must be smaller than or equal to maximum x.");
 		if(maxy < miny)
 			_argerr("Minimum y must be smaller than or equal to maximum y.");
-		int width = (int) ((maxx - minx) / resolution);
-		int height = (int) ((maxy - miny) / resolution);
+		
+		// Compute columns/rows
+		int width = (int) ((maxx - minx) / resolutionX) * (resolutionX < 0 ? -1 : 1);
+		int height = (int) ((maxy - miny) / resolutionY) * (resolutionY < 0 ? -1 : 1);
+
+		// Create GDAL dataset.
 		GDALAllRegister();
 		m_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(),
 				width, height, 1, m_type, NULL);
 		if(m_ds == nullptr)
 			_runerr("Failed to create file.");
-		// TODO: Proper type.
-		m_trans[0] = minx, m_trans[1] = resolution, m_trans[2] = 0.0,
-				m_trans[3] = maxy, m_trans[4] = 0.0, m_trans[5] = -resolution;
+
+		// Initialize geotransform.
+		auto lst = std::initializer_list<double>({ 
+			resolutionX < 0 ? maxx : minx, resolutionX, 0.0, 
+			resolutionY < 0 ? maxy : miny, 0.0, resolutionY 
+		});
+		std::copy(lst.begin(), lst.end(), m_trans);
 		m_ds->SetGeoTransform(m_trans);
+
+		// Set projection.
 		if(!proj.empty())
 			m_ds->SetProjection(proj.c_str());
+
+		// Save some dataset properties.
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
 		m_band = m_ds->GetRasterBand(1);
@@ -671,21 +806,26 @@ public:
 		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_band->SetNoDataValue(nodata);
 		m_nodata = m_band->GetNoDataValue();
-		m_bcols = (m_cols + m_bw - 1) / m_bw;
-		m_brows = (m_rows + m_bh - 1) / m_bh;
+		m_bcols = m_cols / m_bw;
+		m_brows = m_rows / m_bh;
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
-			_runerr("Failed to allocate memory for raster.");
+			_runerr("Failed to allocate memory for raster block.");
 		m_writable = true;
 		m_inited = true;
 	}
 
-
-	void init(std::string &filename, int band = 1, bool writable = false) {
+	/**
+	 * Initializes a Raster from the existing file.
+	 */
+	void init(const std::string &filename, int band = 1, bool writable = false) {
+		// Attempt to open the dataset.
 		GDALAllRegister();
 		m_ds = (GDALDataset *) GDALOpen(filename.c_str(), writable ? GA_Update : GA_ReadOnly);
 		if(m_ds == NULL)
 			_runerr("Failed to open raster.");
+
+		// Save some raster
 		m_bandn = band;
 		m_ds->GetGeoTransform(m_trans);
 		m_band = m_ds->GetRasterBand(band);
@@ -695,11 +835,11 @@ public:
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
 		m_nodata = m_band->GetNoDataValue();
-		m_bcols = (m_cols + m_bw - 1) / m_bw;
-		m_brows = (m_rows + m_bh - 1) / m_bh;
+		m_bcols = m_cols / m_bw;
+		m_brows = m_rows / m_bh;
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
-			_runerr("Failed to allocate memory for raster.");
+			_runerr("Failed to allocate memory for raster block.");
 		m_writable = writable;
 		m_inited = true;
 	}
@@ -770,11 +910,11 @@ public:
 	 */
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		if(col % m_bw == 0 && row % m_bh == 0 && block.cols() == m_bw && block.rows() == m_bh) {
-			_log("write block " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh);
+			//_log("write block " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh);
 			if(m_band->WriteBlock(col / m_bw, row / m_bh, block.grid()) != CE_None)
 				_runerr("Error writing block (1).");
 		} else {
-			_log("rasterio " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh << "," << block.cols() << "," << block.rows());
+			//_log("rasterio " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh << "," << block.cols() << "," << block.rows());
 			if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
 				_runerr("Error writing block (2).");
 		}
@@ -838,28 +978,28 @@ public:
 	 * The minimum bounding x.
 	 */
 	double minx() const {
-		return toX(0);
+		return m_trans[1] > 0 ? m_trans[0] : m_trans[0] + m_cols * m_trans[1];
 	}
 
 	/**
 	 * The maximum bounding x.
 	 */
 	double maxx() const {
-		return toX(cols());
+		return m_trans[1] < 0 ? m_trans[0] : m_trans[0] + m_cols * m_trans[1];
 	}
 
 	/**
 	 * The minimum bounding y.
 	 */
 	double miny() const {
-		return toY(rows());
+		return m_trans[5] > 0 ? m_trans[3] : m_trans[3] + m_cols * m_trans[5];
 	}
 
 	/**
 	 * The maximum bounding y.
 	 */
 	double maxy() const {
-		return toY(0);
+		return m_trans[5] > 0 ? m_trans[3] : m_trans[3] + m_cols * m_trans[5];
 	}
 
 	/**
@@ -971,6 +1111,10 @@ public:
 		return get(col, row) == m_nodata;
 	}
 
+	bool isNoData(unsigned long idx) {
+		return get(idx) == m_nodata;
+	}
+
 	/**
 	 * Returns true if the pixel is nodata.
 	 */
@@ -1035,36 +1179,36 @@ public:
 	}
 
 	T &get(unsigned long idx) {
-		int col = idx % m_bw;
-		int row = (int) (idx / m_bw);
-		return get(col, row);
+		if(idx >= size())
+			_argerr("Index out of bounds.");
+		return get(idx % m_cols, (int) idx / m_rows);
 	}
 
 	/**
 	 * Return the element at the given index.
 	 */
 	T &operator[](unsigned long idx) {
-		int col = idx % m_bw;
-		int row = (int) (idx / m_bw);
-		return get(col, row);
+		return get(idx);
 	}
 
 	/**
 	 * Sets the pixel value at the given row/column.
 	 */
 	void set(int col, int row, T v) {
+		_log("Raster::set: " << col << ", " << row << ", " << v << "; " << m_writable);
 		if(!m_writable) return;
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
+		_log(" -> idx: " << idx);
 		m_block[idx] = v;
+		_log(" -> val: " << m_block[idx]);
 		m_dirty = true;
 	}
 
 	void set(unsigned long idx, T v) {
 		if(idx >= size())
-			_runerr("Index out of bounds.");
-		m_block[idx] = v;
-		m_dirty = true;
+			_argerr("Index out of bounds.");
+		set(idx % m_cols, (int) idx / m_rows, v);
 	}
 
 	/**
@@ -1090,6 +1234,10 @@ public:
 	 */
 	bool has(double x, double y) const {
 		return has(toCol(x), toRow(y));
+	}
+
+	bool has(unsigned long idx) const {
+		return idx < (unsigned long) (m_cols * m_rows);
 	}
 
 	~Raster() {
@@ -1171,5 +1319,8 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 
 	writeBlock(tmp);
 }
+
+
+
 
 #endif /* INCLUDE_RASTER_HPP_ */

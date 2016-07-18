@@ -94,122 +94,93 @@ void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, int co
 void mosaic(std::vector<std::string> &files, std::string &outfile, float distance) {
 	
 	if(distance <= 0.0)
-		throw "Invalid distance.";
+		_argerr("Invalid distance: " << distance);
 
 	if(outfile.size() == 0)
-		throw "No output file given.";
+		_argerr("No output file given.");
 
 	if(files.size() < 2)
-		throw "Less than 2 files. Nothing to do.";
+		_argerr("Less than 2 files. Nothing to do.");
+
+	_loglevel(1)
 
 	// Copy the background file to the destination.
-	std::cout << "Copying background file." << std::endl;
+	_log("Copying background file.");
 	Util::copyfile(files[0], outfile);
 
 	// Open the destination file to modify it.
-	Raster<float> output(outfile);
+	Raster<float> output(outfile, 1, true);
 
 	// Iterate over the files, adding each one to the background.
 	for(unsigned int i = 1; i < files.size(); ++i) {
 
-		std::cout << "Processing file: " << files[i] << std::endl;
+		_log("Processing file: " << files[i]);
 
 		Raster<float> input(files[i]);
 		if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
-			throw "Raster's resolution does not match the background.";
+			_argerr("Raster's (" << files[i] << ") resolution does not match the background (" << files[0] << ").");
 
 		// Get the origin of the input w/r/t the output.
 		int col = output.toCol(input.minx());
-		int row = output.toRow(input.maxy());
+		int row = output.toRow(input.miny());
 		int cols = output.toCol(input.maxx()) - col;
-		int rows = output.toRow(input.miny()) - row;
+		int rows = output.toRow(input.maxy()) - row;
 
 		float imNodata = input.nodata();
 		float outNodata = output.nodata();
 
 		// TODO: Configurable row height.
-		int rowHeight = 500 > rows ? rows : 500;
-		int rowOffset = (int) (distance / input.resolution()) + 1;
-		int bufRows = rowHeight + rowOffset * 2;
+		int blkHeight = 500 > rows ? rows : 500; 					// The unbuffered height of a block
+		int blkBuffer = (int) (distance / input.resolution()) + 1;  // The size of the buffer.
+
+		_log("Loop rows: " << rows << ", " << blkHeight);
 
 		// Move the window down by rowHeight and one rowOffset *not* two.
 		#pragma omp parallel for
-		for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) {
+		for(int blkRow = 0; blkRow < (rows / blkHeight) + 1; blkRow += blkHeight) {
 
 			// Initialize the grids.
-			MemRaster<float> imGrid(cols, bufRows);
-			MemRaster<float> outGrid(cols, bufRows);
-			MemRaster<float> alphaGrid(cols, bufRows);
+			MemRaster<float> imGrid(cols, blkHeight + blkBuffer * 2);
+			MemRaster<float> outGrid(cols, blkHeight + blkBuffer * 2);
+			MemRaster<float> alphaGrid(cols, blkHeight + blkBuffer * 2);
 			// Set to zero or nodata depending on the band.
 			outGrid.fill(outNodata);
 			imGrid.fill(imNodata);
 			alphaGrid.fill(1.0);
 
-			//int addrOffset = 0;
-			int bufRows0 = bufRows;
-			int bufRow0 = bufRow;
-			int rowHeight0 = rowHeight;
-			int rowOffset0 = rowOffset;
-			
-			if(bufRow0 < 0) {
-				bufRow0 = 0;
-			//	addrOffset = rowOffset * cols;
-				bufRows0 = bufRows - rowOffset;
-				rowOffset0 = 0;
-			}
+			int blkRow0 = _max(0, blkRow - blkBuffer);
+			int blkHeight0 = _min(rows - blkRow0 - 1, blkHeight + blkBuffer * 2);
 
-			// The last row might have to be smaller.
-			if(bufRow0 + bufRows0 > rows) {
-				bufRows0 = rows - bufRow0;
-				rowHeight0 = bufRows0 - rowOffset0;
-			}
-
-			// Could happen with multiple threads.
-			if(rowHeight0 < 1)
-				continue;
-
-			//std::cout << "Thread: " << omp_get_thread_num() << ": " << bufRow0 << " - " << bufRows0 << " - " << rowHeight0 << " - " << rows << std::endl;
+			//std::cout << "Thread: " << omp_get_thread_num() << std::endl;
+			_log("Indices: " << blkHeight << ", " << blkBuffer << ", " << blkRow << ", " << blkRow0 << ", " << blkHeight0);
 
 			// Load the overlay.
 			#pragma omp critical
 			{
-				imGrid.readBlock(0, bufRow0, cols, bufRows0, imGrid);
-				/*
-				if(CPLE_None != imDS->RasterIO(GF_Read, 0, bufRow0, cols, bufRows0, (imGrid.grid() + addrOffset), cols, bufRows0,
-					GDT_Float32, 1, NULL, 0, 0, 0))
-					throw "Failed to read raster.";
-					*/
+				imGrid.readBlock(0, blkRow0, cols, blkHeight0, imGrid);
 			}
 
-			std::cout << "Feathering" << std::endl;
+			_log("Feathering...");
+
 			// Feather the overlay
-			feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, input.resolution());
+			feather(imGrid, alphaGrid, cols, blkHeight0, distance, imNodata, input.resolution());
 
 			// Read background data.
 			#pragma omp critical 
 			{
-				output.readBlock(col, row + bufRow0, cols, bufRows0, outGrid);
-				/*
-				if(CPLE_None != outDS->RasterIO(GF_Read, col, row + bufRow0, cols, bufRows0, (outGrid.grid() + addrOffset), cols, bufRows0,
-					GDT_Float32, 1, NULL, 0, 0, 0))
-					throw "Failed to read raster.";
-					*/
+				output.readBlock(col, row + blkRow0, cols, blkHeight0, outGrid);
 			}
 
-			std::cout << "Blending" << std::endl;
+			_log("Blending...");
+
 			// Blend the overlay into the output.
-			blend(imGrid, outGrid, alphaGrid, cols, bufRows0, imNodata, outNodata);
+			blend(imGrid, outGrid, alphaGrid, cols, blkHeight0, imNodata, outNodata);
 
 			// Write back to the output.
 			// We are extracting a slice out of the buffer, not writing the whole thing.
 			#pragma omp critical 
 			{
-				output.writeBlock(col, row + bufRow0 + rowOffset0, cols, rowHeight0, outGrid);
-				/*
-				if(CPLE_None != outDS->RasterIO(GF_Write, col, row + bufRow0 + rowOffset0, cols, rowHeight0, (outGrid.grid() + addrOffset + rowOffset0 * cols), cols, rowHeight0,
-					GDT_Float32, 1, NULL, 0, 0, 0))
-					throw "Failed to write raster.";
-					*/
+				output.writeBlock(col, row + blkRow0 + blkBuffer, cols, blkHeight0, outGrid);
 			}
 
 		}
