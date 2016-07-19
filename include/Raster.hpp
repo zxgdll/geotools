@@ -10,6 +10,7 @@
 
 #include <queue>
 #include <stdexcept>
+#include <memory>
 
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
@@ -17,10 +18,55 @@
 
 #include "geotools.h"
 
+namespace raster {
+
+namespace util {
+
+	/**
+	 * These methods return the GDAL data type given the template
+	 * type of the class.
+	 */
+	GDALDataType getType(double v) {
+		(void) v;
+		return GDT_Float64;
+	}
+	GDALDataType getType(float v) {
+		(void) v;
+		return GDT_Float32;
+	}
+	GDALDataType getType(unsigned int v) {
+		(void) v;
+		return GDT_UInt32;
+	}
+	GDALDataType getType(int v) {
+		(void) v;
+		return GDT_Int32;
+	}
+	GDALDataType getType(unsigned short v) {
+		(void) v;
+		return GDT_UInt16;
+	}
+	GDALDataType getType(short v) {
+		(void) v;
+		return GDT_Int16;
+	}
+	GDALDataType getType(char v) {
+		(void) v;
+		return GDT_Byte;
+	}
+
+}
+
+/**
+ * Convenience class for storing row/column coordinates.
+ */
 class Cell {
 public:
 	int col;
 	int row;
+	/**
+	 * Construct an instance using the given row and column.
+	 */
 	Cell(int col, int row) {
 		this->col = col;
 		this->row = row;
@@ -37,6 +83,10 @@ public:
 	virtual bool fill(T value) const =0;
 };
 
+/**
+ * A simple FillOperator that simply matches the given value
+ * to the given target.
+ */
 template <class T>
 class TargetOperator : public FillOperator<T> {
 private:
@@ -69,11 +119,16 @@ protected:
 public:
 	
 	virtual int rows() const =0;
-
 	virtual int cols() const =0;
 	
+	/**
+	 * The number of pixels in the raster.
+	 */
 	virtual unsigned long size() const =0;
 
+	/**
+	 * Fill the entire raster with the given value.
+	 */
 	virtual void fill(const T value) =0;
 
 	/**
@@ -83,61 +138,83 @@ public:
 	virtual T *grid() =0;
 	
 	/**
-	 * Return a reference to the value held at
-	 * the given index in the grid.
-	 * Not const because the get operation might imply (e.g.)
-	 * a buffering operation in the subclass.
+	 * Return a reference to the value held at the given index in the grid.
+	 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
 	 */
 	virtual T &get(unsigned long idx) =0;
-
 	virtual T &get(int col, int row) =0;
+	virtual T &operator[](unsigned long idx) =0;
 
+	/**
+	 * Set the value at the given position in the raster. 
+	 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
+	 */
 	virtual void set(int col, int row, const T value) =0;
-
 	virtual void set(unsigned long idx, const T value) =0;
 
+	/**
+	 * Returns true if the position is legal for the grid.
+	 */
 	virtual bool has(int col, int row) const =0;
 	virtual bool has(unsigned long idx) const =0;
 
+	/**
+	 * Returns true if the value at the given position is a nodata value.
+ 	 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
+	 */
 	virtual bool isNoData(int col, int row) =0;
 	virtual bool isNoData(unsigned long idx) =0;
 
 	/**
-	 * Return the element at the given index.
+	 * Returns true if a nodata value has been explicitly set.
 	 */
-	virtual T &operator[](unsigned long idx) =0;
+	virtual bool hasNodata() const =0;
 
+	/**
+	 * Returns true if the raster is a square.
+	 */
 	virtual bool isSquare() const =0;
 
 	virtual T nodata() const =0;
-
 	virtual void nodata(T nodata) =0;
 
 	/**
 	 * Load the contents of a single block into the given Grid instance.
+	 * col and row parameters give the location of the start of the read in the source raster.
+	 * cols and rows give the width and height of the read block.
 	 */
 	virtual void readBlock(int col, int row, int cols, int rows, Grid<T> &block) =0;
-
 	virtual void readBlock(int col, int row, Grid<T> &block) =0;
+	virtual void readBlock(Grid<T> &block) =0;
 
 	/**
 	 * Write a part of the given block to the raster.
+	 * col and row parameters give the location of the start of the write in the destination raster.
+	 * cols and rows give the width and height of the written block.
 	 */
 	virtual void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) =0;
-
 	virtual void writeBlock(int col, int row, Grid<T> &block) =0;
-
-	/**
-	 * Write the full block to the raster.
-	 */
 	virtual void writeBlock(Grid<T> &block) =0;
 
 	/**
-	 * Read the full block from the raster.
+	 * Return a "slice" of the raster.
+	 * col and row are the location of the start of reading in the source raster.
+	 * cols and rows are the width and height of the read region.
+	 * A new Grid is constructed and returned with the same dimensions given.
 	 */
-	virtual void readBlock(Grid<T> &block) =0;
+	virtual std::unique_ptr<Grid<T> > slice(int col, int row, int cols, int rows) =0;
 
+	/**
+	 * Compute statistics for this grid. 
+	 * Statistics are, min, max, mean, variance and std. deviation.
+	 * A nodata value must be set if the dataset has any such values, otherwise
+	 * these statistics are bogus. Therefore an exception is thrown is it is not set.
+	 */
 	void computeStats() {
+		if(!hasNodata())
+			_runerr("No nodata value set. Statistics cannot be computed.");
+		
+		// Locate the first non-nodata value.
 		unsigned int i;
 		for(i = 0; i < size(); ++i) {
 			if(!isNoData(i)) {
@@ -146,13 +223,13 @@ public:
 			}
 		}
 
+		// Welford's method for variance.
+		// i has the index of the first non-nodata element.
 		m_sum = 0;
 		m_count = 0;
 		T m = 0;
 		T s = 0;
 		int k = 1;
-		// Welford's method for variance.
-		// i has the index of the first non-nodata element.
 		for(; i < size(); ++i) {
 			T v = get(i);
 			if(v != nodata()) {
@@ -170,8 +247,8 @@ public:
 		m_variance = s / m_count;
 		m_stddev = std::sqrt(m_variance);
 		m_stats = true;
-		_log("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min 
-			<< "; Max: " << m_max << "; Mean: " << m_mean 
+		_trace("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min << "; Max: " 
+			<< m_max << "; Mean: " << m_mean 
 			<< "; Variance: " << m_variance << "; Std Dev: " << m_stddev << std::endl);
 	}
 
@@ -205,20 +282,14 @@ public:
 		return m_variance;
 	}
 
-	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill) {
-
-		// If other is provided, fill pixels in it too, rather than just the current raster.
-		// Other fill is the value to fill the other raster with.
-
-		return floodFill(col, row, op, *this, fill);
-
-	}
-
+	/**
+	 * Performs a flood fill operation beginning at the given column and row.
+	 * The FillOperator determines whether a target is valid. 
+	 * The fill is actually applied to the other Grid, using the current grid as the target for
+	 * matching purposes.
+	 */
 	template <class U>
 	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U otherFill) {
-
-		// If other is provided, fill pixels in it too, rather than just the current raster.
-		// Other fill is the value to fill the other raster with.
 
 		int minc = cols() + 1;
 		int minr = rows() + 1;
@@ -291,17 +362,24 @@ public:
 		return {minc, minr, maxc, maxr, area};
 	}
 
+	/**
+	 * Fill the grid using a value for the target, rather than a FillOperator.
+	 */
 	template <class U>
 	std::vector<int> floodFill(int col, int row, T target, Grid<U> &other, U otherFill) {
 		TargetOperator<T> op(target);
 		return floodFill(col, row, op, other, otherFill);
 	}
 
-	std::vector<int> floodFill(int col, int row, T target, T fill) {
-		TargetOperator<T> op(target);
-		return floodFill(col, row, op, fill);
-	}
-	
+	/**
+	 * Fill the present grid with the fill using the given target.
+	 */
+	std::vector<int> floodFill(int col, int row, T target, T fill);
+
+	/**
+	 * Fill the present grid with the fill using the given operator.
+	 */	
+	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill);
 	/**
 	 * The radius is given with cells as the unit, but
 	 * can be rational. When determining which cells to
@@ -323,6 +401,7 @@ private:
 	int m_rows;
 	T *m_grid;
 	T m_nodata;
+	bool m_nodataSet;
 
 	void (*m_item_dealloc)(T);
 
@@ -335,12 +414,11 @@ private:
 	}
 
 public:
-	MemRaster() {
-		m_grid = nullptr;
-		m_cols = -1;
-		m_rows = -1;
-		m_item_dealloc = nullptr;
-		m_nodata = 0; // TODO: Choose a nodata based on type?
+	MemRaster() :
+		m_cols(-1), m_rows(-1),
+		m_grid(nullptr),
+		m_nodata(0), m_nodataSet(false),
+		m_item_dealloc(nullptr) {
 	}
 
 	MemRaster(int cols, int rows) : MemRaster() {
@@ -377,7 +455,7 @@ public:
 	}
 
 	/**
-	 * Cast a MemRaster to some other type.
+	 * Cast a MemRaster to some other type. Might cause bad things.
 	 */
 	template <class U>
 	operator MemRaster<U>() {
@@ -420,27 +498,33 @@ public:
 		}
 	}
 
-	/**
-	 * Fill the grid with the given value.
-	 */
 	void fill(const T value) {
 		checkInit();
 		std::fill_n(m_grid, size(), value);
 	}
 
-	/**
-	 * Return a reference to the value held at
-	 * the given index in the grid.
-	 */
+	std::unique_ptr<Grid<T> > slice(int col, int row, int cols, int rows) {
+		Grid<T> *g = new MemRaster<T>(cols, rows);
+		for(int r = 0; r < rows; ++r) {
+			for(int c = 0; c < cols; ++c)
+				g->set(c, r, get(c + col, r + row));
+		}
+		return std::unique_ptr<Grid<T> >(g);
+	}
+
 	T &get(unsigned long idx) {
 		checkInit();
 		if(idx >= size())
-			_argerr("Index out of bounds: " << idx << "; " << m_cols << ", " << m_rows << "; " << size());
+			_argerr("Index out of bounds: size: " << size() << "; idx: " << idx);
 		return m_grid[idx];
 	}
 
 	T &get(int col, int row) {
 		unsigned long idx = (unsigned long) (row * m_cols + col);	
+		return get(idx);
+	}
+
+	T &operator[](unsigned long idx) {
 		return get(idx);
 	}
 
@@ -459,7 +543,7 @@ public:
 
 	void set(unsigned long idx, const T value) {
 		if(idx >= size())
-			_argerr("Index out of bounds: " << idx << "; " << m_cols << ", " << m_rows << "; " << size());
+			_argerr("Index out of bounds: size: " << size() << "; idx: " << idx);
 		checkInit();
 		m_grid[idx] = value;
 	}
@@ -472,20 +556,13 @@ public:
 		return idx < (unsigned long) (m_cols * m_rows);
 	}
 
-	/**
-	 * Return the element at the given index.
-	 */
-	T &operator[](unsigned long idx) {
-		checkInit();
-		if(idx >= size())
-			_argerr("Index out of bounds.");
-		return m_grid[idx];
-	}
-
 	bool isSquare() const {
 		return cols() == rows();
 	}
 
+	/**
+	 * Configures an Eigen::Matrix with the contents of this grid.
+	 */
 	void toMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
 		for(int r = 1; r < rows(); ++r) {
 			for(int c = 0; c < cols(); ++c)
@@ -493,6 +570,9 @@ public:
 		}
 	}
 
+	/**
+	 * Configures this grid with the contents of the Eigen::Matrix.
+	 */
 	void fromMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx) {
 		for(int r = 1; r < rows(); ++r) {
 			for(int c = 0; c < cols(); ++c)
@@ -506,11 +586,13 @@ public:
 
 	void nodata(T nodata) {
 		m_nodata = nodata;
+		m_nodataSet = true;
 	}
 
-	/**
-	 * Load the contents of a single block into the given Grid instance.
-	 */
+	bool hasNodata() const {
+		return m_nodataSet;
+	}
+
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		for(int r = 0; r < rows; ++r) {
 			for(int c = 0; c < cols; ++c)
@@ -522,9 +604,10 @@ public:
 		readBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
 	}
 
-	/**
-	 * Write a part of the given block to the raster.
-	 */
+	void readBlock(Grid<T> &block) {
+		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+	}
+
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		for(int r = 0; r < rows; ++r) {
 			for(int c = 0; c < cols; ++c)
@@ -536,23 +619,17 @@ public:
 		writeBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
 	}
 
-	/**
-	 * Write the full block to the raster.
-	 */
 	void writeBlock(Grid<T> &block) {
 		writeBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
-	}
-
-	/**
-	 * Read the full block from the raster.
-	 */
-	void readBlock(Grid<T> &block) {
-		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
 	}
 
 
 };
 
+/**
+ * This is a helper class that permits the user to iterate over the blocks in a
+ * Raster.
+ */
 template <class T>
 class Block {
 private:
@@ -604,6 +681,9 @@ public:
 	~Block() {}
 };
 
+/**
+ * This class represents a file-based raster.
+ */
 template <class T>
 class Raster : public Grid<T> {
 private:
@@ -615,11 +695,12 @@ private:
 	bool m_writable;		// True if the raster is writable
 	bool m_dirty;			// True if there is a modification that should be flushed.
 	T m_nodata;				// Nodata value.
+	bool m_nodataSet;       // True if nodata is explicitly set.
 	T *m_block;				// Block storage
 	GDALDataset *m_ds;		// GDAL dataset
 	GDALRasterBand *m_band;	// GDAL band
 	double m_trans[6];		// Raster transform
-	bool m_inited = false;	// True if the instance is initialized.
+	bool m_inited;	        // True if the instance is initialized.
 	GDALDataType m_type;	// GDALDataType -- limits the possible template types.
 
 	/**
@@ -636,7 +717,6 @@ private:
 			_argerr("Illegal block column or row.");
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
-			//std::cerr << "read " << bcol << " " << brow << " " << m_bcols << " " << m_brows << " " << m_block << std::endl;
 			if(m_band->ReadBlock(bcol, brow, m_block) != CE_None)
 				_runerr("Failed to read block.");
 			m_currow = brow;
@@ -649,46 +729,10 @@ private:
 	 */
 	void flush() {
 		if(m_writable && m_dirty) {
-			std::cerr << "write " << m_curcol << " " << m_currow << " " << m_block << std::endl;
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
 				_runerr("Flush error.");
 			m_dirty = false;
 		}
-	}
-
-	GDALDataType getType(double v) {
-		(void) v;
-		return GDT_Float64;
-	}
-
-	GDALDataType getType(float v) {
-		(void) v;
-		return GDT_Float32;
-	}
-
-	GDALDataType getType(unsigned int v) {
-		(void) v;
-		return GDT_UInt32;
-	}
-
-	GDALDataType getType(int v) {
-		(void) v;
-		return GDT_Int32;
-	}
-
-	GDALDataType getType(unsigned short v) {
-		(void) v;
-		return GDT_UInt16;
-	}
-
-	GDALDataType getType(short v) {
-		(void) v;
-		return GDT_Int16;
-	}
-
-	GDALDataType getType(char v) {
-		(void) v;
-		return GDT_Byte;
 	}
 
 public:
@@ -702,11 +746,12 @@ public:
 		m_curcol(-1), m_currow(-1),
 		m_bandn(1),
 		m_bw(-1), m_bh(-1),
-		m_writable(false), m_dirty(false) {
-		m_ds = nullptr;
-		m_band = nullptr;
-		m_block = nullptr;
-		m_type = getType((T) 0);
+		m_writable(false), m_dirty(false),
+		m_nodata(0), m_nodataSet(false),
+		m_block(nullptr),
+		m_ds(nullptr), m_band(nullptr),
+		m_inited(false),
+		m_type(util::getType((T) 0)) {
 	}
 
 	/**
@@ -718,10 +763,6 @@ public:
 		tpl.projection(proj);
 		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
 			tpl.resolutionY(), (T) tpl.nodata(), proj);
-	}
-
-	Raster(const std::string &filename, Raster<T> &tpl) : Raster() {
-		init(filename, tpl);
 	}
 
 	/**
@@ -806,6 +847,7 @@ public:
 		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_band->SetNoDataValue(nodata);
 		m_nodata = m_band->GetNoDataValue();
+		m_nodataSet = true;
 		m_bcols = m_cols / m_bw;
 		m_brows = m_rows / m_bh;
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
@@ -835,6 +877,7 @@ public:
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
 		m_nodata = m_band->GetNoDataValue();
+		m_nodataSet = true;
 		m_bcols = m_cols / m_bw;
 		m_brows = m_rows / m_bh;
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
@@ -905,16 +948,18 @@ public:
 		readBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
 	}
 
+	void readBlock(Grid<T> &block) {
+		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+	}
+
 	/**
 	 * Write a part of the given block to the raster.
 	 */
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
 		if(col % m_bw == 0 && row % m_bh == 0 && block.cols() == m_bw && block.rows() == m_bh) {
-			//_log("write block " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh);
 			if(m_band->WriteBlock(col / m_bw, row / m_bh, block.grid()) != CE_None)
 				_runerr("Error writing block (1).");
 		} else {
-			//_log("rasterio " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh << "," << block.cols() << "," << block.rows());
 			if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
 				_runerr("Error writing block (2).");
 		}
@@ -930,22 +975,7 @@ public:
 	void writeBlock(Grid<T> &block) {
 		writeBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
 	}
-	
-	/**
-	 * Read the full block from the raster.
-	 */
-	void readBlock(Grid<T> &block) {
-		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
-	}
-	
-	/**
-	 * Return the resolution. If the x and y resolution are different,
-	 * use resolutionX and resolutionY.
-	 */
-	double resolution() const {
-		return m_trans[1];
-	}
-
+		
 	/**
 	 * Get the x resolution.
 	 */
@@ -967,11 +997,52 @@ public:
 		proj.assign(m_ds->GetProjectionRef());
 	}
 
+	std::unique_ptr<Grid<T> > slice(int col, int row, int cols, int rows) {
+		Grid<T> *g = new MemRaster<T>(cols, rows);
+		for(int r = 0; r < rows; ++r) {
+			for(int c = 0; c < cols; ++c)
+				g->set(c, r, get(c + col, r + row));
+		}
+		return std::unique_ptr<Grid<T> >(g);
+	}
+
 	/**
 	 * Return the GDAL datatype of the raster.
 	 */
 	GDALDataType type() const {
 		return m_band->GetRasterDataType();
+	}
+
+	/**
+	 * Return the leftmost X coordinate of the raster. For negative resolution, 
+	 * this could be larger than the rightmost.
+	 */
+	double lx() {
+		return m_trans[0];
+	}
+
+	/**
+	 * Return the rightmost X coordinate of the raster. For negative resolution, 
+	 * this could be smaller than the leftmost.
+	 */
+	double rx() {
+		return m_trans[0] + m_cols * m_trans[1];
+	}
+
+	/**
+	 * Return the top X coordinate of the raster. For negative resolution, 
+	 * this could be larger than the bottom.
+	 */
+	double ty() {
+		return m_trans[3];
+	}
+
+	/**
+	 * Return the bottom Y coordinate of the raster. For negative resolution, 
+	 * this could be smaller than the top.
+	 */
+	double by() {
+		return m_trans[3] + m_rows * m_trans[5];
 	}
 
 	/**
@@ -1016,15 +1087,21 @@ public:
 		return maxy() - miny();
 	}
 
-	/**
-	 * The nodata value.
-	 */
 	T nodata() const {
 		return m_nodata;
 	}
 
 	void nodata(T nodata) {
-		_runerr("Cannot set nodata on Raster.");
+		try {
+			m_band->SetNoDataValue(nodata);
+			m_nodataSet = true;
+		} catch(...) {
+			_runerr("Cannot set nodata on Raster.");
+		}
+	}
+
+	bool hasNodata() const {
+		return m_nodataSet;
 	}
 
 	/*
@@ -1097,9 +1174,6 @@ public:
 		return (row * m_trans[5]) + m_trans[3];
 	}
 
-	/**
-	 * The number of elements in the grid.
-	 */
 	unsigned long size() const {
 		return (unsigned long) (m_cols * m_rows);
 	}
@@ -1115,9 +1189,6 @@ public:
 		return get(idx) == m_nodata;
 	}
 
-	/**
-	 * Returns true if the pixel is nodata.
-	 */
 	bool isNoData(double x, double y) {
 		return isNoData(toCol(x), toRow(y));
 	}
@@ -1129,9 +1200,6 @@ public:
 		return getOrNodata(c, r) != m_nodata;
 	}
 
-	/**
-	 * Returns true if the pixel exists and is not nodata.
-	 */
 	bool isValid(double x, double y) {
 		return getOrNodata(x, y) != m_nodata;
 	}
@@ -1147,9 +1215,6 @@ public:
 		}
 	}
 
-	/**
-	 * Gets the pixel value or nodata if the pixel doesn't exist.
-	 */
 	T getOrNodata(int col, int row) {
 		if(!has(col, row)) {
 			return m_nodata;
@@ -1162,16 +1227,10 @@ public:
 		_implerr("grid() Not implemented in Raster.");
 	}
 	
-	/**
-	 * Returns pixel value at the given coordinate.
-	 */
 	T &get(double x, double y) const {
 		return get(toCol(x), toRow(y));
 	}
 
-	/**
-	 * Returns the pixel value at the give row/column.
-	 */
 	T &get(int col, int row) {
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
@@ -1180,40 +1239,28 @@ public:
 
 	T &get(unsigned long idx) {
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			_argerr("Index out of bounds: size: " << size() << "; idx: " << idx);
 		return get(idx % m_cols, (int) idx / m_rows);
 	}
 
-	/**
-	 * Return the element at the given index.
-	 */
 	T &operator[](unsigned long idx) {
 		return get(idx);
 	}
 
-	/**
-	 * Sets the pixel value at the given row/column.
-	 */
 	void set(int col, int row, T v) {
-		_log("Raster::set: " << col << ", " << row << ", " << v << "; " << m_writable);
 		if(!m_writable) return;
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
-		_log(" -> idx: " << idx);
 		m_block[idx] = v;
-		_log(" -> val: " << m_block[idx]);
 		m_dirty = true;
 	}
 
 	void set(unsigned long idx, T v) {
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			_argerr("Index out of bounds: size: " << size() << "; idx: " << idx);
 		set(idx % m_cols, (int) idx / m_rows, v);
 	}
 
-	/**
-	 * Sets the pixel value at the given coordinate.
-	 */
 	void set(double x, double y, T v) {
 		set(toCol(x), toRow(y), v);
 	}
@@ -1222,16 +1269,10 @@ public:
 		return cols() == rows();
 	}
 
-	/**
-	 * Returns true if the col/row are represented in the dataset.
-	 */
 	bool has(int col, int row) const {
 		return col >= 0 && col < m_cols && row >= 0 && row < m_rows;
 	}
 
-	/**
-	 * Returns true if the x/y are represented in the dataset.
-	 */
 	bool has(double x, double y) const {
 		return has(toCol(x), toRow(y));
 	}
@@ -1254,13 +1295,10 @@ public:
  */
 template <class T>
 void Grid<T>::voidFillIDW(double radius, int count, double exp) {
-
 	if(radius <= 0.0)
 		throw std::invalid_argument("Radius must be larger than 0.");
-
 	if(count <= 0)
 		throw std::invalid_argument("Count must be larger than 0.");
-
 	if(exp <= 0.0)
 		throw std::invalid_argument("Exponent must be larger than 0.");
 
@@ -1278,23 +1316,15 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 			bool found = false;
 
 			do {
-
 				double d = _sq(rad);
 				double a = 0.0;
 				double b = 0.0;
 				int cnt = 0;
-				//std::list<std::pair<T, double> > values;
-				//_log(rad << ", " << _min(cols(), rows()));
-
 				for(int r0 = _max(0, r - rad); r0 < _min(rows(), r + rad + 1); ++r0) {
 					for(int c0 = _max(0, c - rad); c0 < _min(cols(), c + rad + 1); ++c0) {
-
 						double d0 = _sq((double) c0 - c) + _sq((double) r0 - r);
-						//_log(d0 << ", " << d << ", " << get(c0, r0));
-
 						if(d0 <= d && get(c0, r0) != nodata()) {
 							double dp = 1.0 / std::pow(d0, exp);
-							//values.push_back(std::pair<T, double>(get(c0, r0), d0));
 							a += dp * get(c0, r0);
 							b += dp;
 							++cnt;
@@ -1313,14 +1343,34 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 			} while(rad < _min(cols(), rows()));
 
 			if(!found)
-				std::cerr << "WARNING: Pixel not filled at " << c << "," << r << ". Consider larger radius or smaller count." << std::endl;
+				_warn("Pixel not filled at " << c << "," << r << ". Consider larger radius or smaller count.");
 		}
 	}
 
 	writeBlock(tmp);
 }
 
+/**
+ * Fill the present grid with the fill using the given target.
+ */
+template <class T>
+std::vector<int> Grid<T>::floodFill(int col, int row, T target, T fill) {
+	TargetOperator<T> op(target);
+	MemRaster<T> tmp(*this);
+	return floodFill(col, row, op, tmp, fill);
+}
+
+/**
+ * Fill the present grid with the fill using the given operator.
+ */	
+template <class T>
+std::vector<int> Grid<T>::floodFill(int col, int row, FillOperator<T> &op, T fill) {
+	MemRaster<T> tmp(*this);
+	return floodFill(col, row, op, tmp, fill);
+
+}
 
 
+} // raster
 
 #endif /* INCLUDE_RASTER_HPP_ */

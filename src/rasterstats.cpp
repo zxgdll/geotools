@@ -20,6 +20,8 @@
 #include "Util.hpp"
 #include "Raster.hpp"
 
+using namespace raster;
+
 /**
  * Represents a single class, for a single pair of files.
  */

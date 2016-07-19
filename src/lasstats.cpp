@@ -47,6 +47,8 @@ namespace las = liblas;
 namespace geom = geos::geom;
 namespace alg = boost::algorithm;
 
+using namespace raster;
+
 #define RASTER 1
 #define VECTOR 2
 #define CSV 3

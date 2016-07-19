@@ -114,9 +114,9 @@ public:
 	static void printBounds(std::vector<double> &bounds, int dims) {
 		if(dims == 2 || dims == 3) {
 			if(dims != 3) {
-				_log("Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3]);
+				_debug("Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3]);
 			} else {
-				_log("Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3] << "," << bounds[4] << "," << bounds[5]);
+				_debug("Bounds: " << bounds[0] << "," << bounds[1] << "," << bounds[2] << "," << bounds[3] << "," << bounds[4] << "," << bounds[5]);
 			}
 			std::cerr << std::endl;
 		}

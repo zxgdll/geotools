@@ -32,9 +32,19 @@
 
 static int __loglevel = 0;
 
-#define _loglevel(x) (__loglevel = x);
-#define _log(x) if(__loglevel) { std::cerr << x << std::endl; }
-#define _print(x) std::cerr << x << std::endl;
+#define LOG_TRACE 5
+#define LOG_DEBUG 4
+#define LOG_WARN 3
+#define LOG_ERROR 2
+#define LOG_NONE 0
+
+#define _loglevel(x) {__loglevel = x;}
+#define _log(x, y) if(__loglevel >= y) { std::cerr << x << std::endl; }
+#define _trace(x) _log("TRACE:   " << x, LOG_TRACE)
+#define _debug(x) _log("DEBUG:   " << x, LOG_DEBUG)
+#define _warn(x)  _log("WARNING: " << x, LOG_WARN)
+#define _error(x) _log("ERROR:   " << x, LOG_ERROR)
+
 #define _argerr(x) {std::stringstream _ss; _ss << x; throw std::invalid_argument(_ss.str());}
 #define _implerr(x) {std::stringstream _ss; _ss << x; throw std::runtime_error(_ss.str());}
 #define _runerr(x) {std::stringstream _ss; _ss << x; throw std::runtime_error(_ss.str());}

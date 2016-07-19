@@ -22,6 +22,8 @@ namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
 namespace las = liblas;
 
+using namespace raster;
+
 bool quiet = true;
 
 // Binary interpolation.
