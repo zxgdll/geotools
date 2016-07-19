@@ -155,15 +155,6 @@ public:
 	virtual bool has(int col, int row) const =0;
 	virtual bool has(unsigned long idx) const =0;
 
-	virtual bool isNoData(int col, int row) =0;
-	virtual bool isNoData(unsigned long idx) =0;
-
-	/**
-	 * Returns true if the position is legal for the grid.
-	 */
-	virtual bool has(int col, int row) const =0;
-	virtual bool has(unsigned long idx) const =0;
-
 	/**
 	 * Returns true if the value at the given position is a nodata value.
  	 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
@@ -366,20 +357,6 @@ public:
 			}
 		}
 		return {minc, minr, maxc, maxr, area};
-	}
-
-	std::vector<int> floodFill(int col, int row, T target, T fill) {
-		TargetOperator<T> op(target);
-		return floodFill(col, row, op, fill);
-	}
-	
-	/**
-	 * Fill the grid using a value for the target, rather than a FillOperator.
-	 */
-	template <class U>
-	std::vector<int> floodFill(int col, int row, T target, Grid<U> &other, U otherFill) {
-		TargetOperator<T> op(target);
-		return floodFill(col, row, op, other, otherFill);
 	}
 
 	/**
@@ -1260,13 +1237,10 @@ public:
 	}
 
 	void set(int col, int row, T v) {
-		_log("Raster::set: " << col << ", " << row << ", " << v << "; " << m_writable);
 		if(!m_writable) return;
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
-		_log(" -> idx: " << idx);
 		m_block[idx] = v;
-		_log(" -> val: " << m_block[idx]);
 		m_dirty = true;
 	}
 

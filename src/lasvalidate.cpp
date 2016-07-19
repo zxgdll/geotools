@@ -197,8 +197,8 @@ double interpolateTriangle(const geom::Coordinate *cs, const geom::Geometry *tri
 void interpolateSampleZ(Sample &sample) {
 	using namespace geos::geom;
 	using namespace geos::triangulate;
-	GeometryFactory::unique_ptr gf = GeometryFactory::create();
-	//std::unique_ptr<GeometryFactory> gf(new GeometryFactory());
+	//GeometryFactory::unique_ptr gf = GeometryFactory::create();
+	std::unique_ptr<GeometryFactory> gf(new GeometryFactory());
 	Coordinate sc(sample.x, sample.y, sample.z);
 	// Convert returns to Points.
 	std::vector<Geometry *> points;
@@ -238,18 +238,18 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		_argerr("Output file and LiDAR point file must be different.");
 
 	if(classes.size() == 0)
-		_print("WARNING: No classes given; matching all classes.");
+		_warn("No classes given; matching all classes.");
 
 	std::vector<Sample> samples;
 	loadSamples(datafile, samples);
 
-	_log(samples.size() << " samples found.");
+	_trace(samples.size() << " samples found.");
 
 	las::ReaderFactory rf;
 	//for(auto it = lasfiles.begin(); it != lasfiles.end(); ++it) {
 	for(std::string &lasfile:lasfiles) {
 
-		_log(lasfile);
+		_trace(lasfile);
 
 		std::ifstream in(lasfile.c_str());
 		las::Reader r = rf.CreateWithStream(in);
@@ -260,7 +260,7 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		if(!Util::computeLasBounds(h, bounds0, 2))
 			Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 
-		_print("LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3]);
+		_trace("LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3]);
 
 		std::vector<double> bounds = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
 		bool inBounds = false;
@@ -273,7 +273,7 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		}
 
 		if(!inBounds) {
-			_log("No samples in bounds. Skipping...");
+			_trace("No samples in bounds. Skipping...");
 			continue;
 		}
 
@@ -300,11 +300,11 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		}
 	}
 
-	_log("Interpolating...");
+	_trace("Interpolating...");
 	for(Sample &sample:samples)
 		interpolateSampleZ(sample);
 	
-	_log("Writing...");
+	_trace("Writing...");
 	writeOutput(outfile, pointfile, samples);
 
 }
