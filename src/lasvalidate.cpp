@@ -31,7 +31,7 @@
 
 #include <liblas/liblas.hpp>
 
-#include "geotools.h"
+#include "lasvalidate.hpp"
 #include "Util.hpp"
 
 namespace las = liblas;
@@ -93,20 +93,6 @@ public:
 		return near;
 	}
 };
-
-void usage() {
-	std::cerr << "Usage: lasvalidate [options] <lasfiles>" << std::endl
-			<< "    This program takes a spreadsheed of 3D survey locations and a LiDAR point cloud, in the form " << std::endl
-			<< "    of a list of LAS files, and interpolates the elevation of each survey point from the resulting " << std::endl
-			<< "    TIN. This allows the survey elevation to be compared to the LiDAR surface elevaton." << std::endl
-			<< "    <lasfiles>  Is a list of las files." << std::endl
-			<< "    -s  --  A csv file with x, y and z columns. These are the survey locations." << std::endl
-			<< "    -o  --  The output file for survey points." << std::endl
-			<< "    -p  --  The output file for LiDAR points (optional)." << std::endl
-			<< "    -r  --  The radius to search for lidar returns." << std::endl
-			<< "    -c  --  The classes to include; comma-separated list." << std::endl
-			<< "    -v  --  Verbose mode." << std::endl;
-}
 
 /**
  * Compute a boundary that contains the sample points. Extend it by the
@@ -211,8 +197,8 @@ double interpolateTriangle(const geom::Coordinate *cs, const geom::Geometry *tri
 void interpolateSampleZ(Sample &sample) {
 	using namespace geos::geom;
 	using namespace geos::triangulate;
-	//GeometryFactory::unique_ptr gf = GeometryFactory::create();
-	std::unique_ptr<GeometryFactory> gf(new GeometryFactory());
+	GeometryFactory::unique_ptr gf = GeometryFactory::create();
+	//std::unique_ptr<GeometryFactory> gf(new GeometryFactory());
 	Coordinate sc(sample.x, sample.y, sample.z);
 	// Convert returns to Points.
 	std::vector<Geometry *> points;
@@ -238,34 +224,32 @@ void interpolateSampleZ(Sample &sample) {
  * Validate the LiDAR point cloud using surveys stored in outfile.
  */
 void validate(std::string &outfile, std::string &pointfile, std::string &datafile, std::vector<std::string> &lasfiles, 
-	std::set<int> &classes, double distance, bool quiet) {
+	std::set<int> &classes, double distance) {
 
 	if(outfile.empty())
-		throw "Outfile not given.";
+		_argerr("Outfile not given.");
 	if(datafile.empty())
-		throw "Data file not given.";
+		_argerr("Data file not given.");
 	if(lasfiles.size() == 0)
-		throw "No las files.";
+		_argerr("No LAS files.");
 	if(distance < 0.0)
-		throw "Distance must be greater than zero.";
+		_argerr("Distance must be greater than zero.");
 	if(outfile == pointfile)
-		throw "Output file and LiDAR point file must be different.";
+		_argerr("Output file and LiDAR point file must be different.");
 
-	if(!quiet && classes.size() == 0)
-		std::cerr << "No classes given; matching all classes." << std::endl;
+	if(classes.size() == 0)
+		_print("WARNING: No classes given; matching all classes.");
 
 	std::vector<Sample> samples;
 	loadSamples(datafile, samples);
 
-	if(!quiet)
-		std::cerr << samples.size() << " samples found." << std::endl;
+	_log(samples.size() << " samples found.");
 
 	las::ReaderFactory rf;
 	//for(auto it = lasfiles.begin(); it != lasfiles.end(); ++it) {
 	for(std::string &lasfile:lasfiles) {
 
-		if(!quiet)
-			std::cerr << lasfile << std::endl;
+		_log(lasfile);
 
 		std::ifstream in(lasfile.c_str());
 		las::Reader r = rf.CreateWithStream(in);
@@ -276,8 +260,7 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		if(!Util::computeLasBounds(h, bounds0, 2))
 			Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 
-		if(!quiet)
-			std::cerr << "LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3] << std::endl;
+		_print("LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3]);
 
 		std::vector<double> bounds = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
 		bool inBounds = false;
@@ -290,8 +273,7 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		}
 
 		if(!inBounds) {
-			if(!quiet)
-				std::cerr << "No samples in bounds. Skipping..." << std::endl;
+			_log("No samples in bounds. Skipping...");
 			continue;
 		}
 
@@ -318,56 +300,14 @@ void validate(std::string &outfile, std::string &pointfile, std::string &datafil
 		}
 	}
 
-	std::cerr << "Interpolating..." << std::endl;
+	_log("Interpolating...");
 	for(Sample &sample:samples)
 		interpolateSampleZ(sample);
 	
-	std::cerr << "Writing..." << std::endl;
+	_log("Writing...");
 	writeOutput(outfile, pointfile, samples);
 
 }
-
-int main(int argc, char **argv) {
-
- 	try {
-
- 		std::vector<std::string> lasfiles;
-  		std::string outfile;
-  		std::string pointfile;
-  		std::string datafile;
-  		std::set<int> classes;
- 		double distance = 0.0;
- 		bool quiet = true;
-
- 		for(int i = 1; i < argc; ++i) {
- 			std::string p(argv[i]);
- 			if(p == "-o") {
- 				outfile = argv[++i];
- 			} else if(p == "-s") {
- 				datafile = argv[++i];
- 			} else if(p == "-p") {
- 				pointfile = argv[++i];
- 			} else if(p == "-r") {
- 				distance = atof(argv[++i]);
- 			} else if(p == "-v") {
- 				quiet = false;
- 			} else if(p == "-c") {
-				Util::intSplit(classes, argv[++i]);
- 			} else {
- 				lasfiles.push_back(argv[i]);
- 			}
- 		}
-
-		validate(outfile, pointfile, datafile, lasfiles, classes, distance, quiet);
-
- 	} catch(const char *e) {
- 		std::cerr << e << std::endl;
- 		usage();
- 		return 1;
- 	}
-
- 	return 0;
- }
 
 
 

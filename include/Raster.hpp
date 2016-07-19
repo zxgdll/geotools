@@ -152,6 +152,12 @@ public:
 	virtual void set(int col, int row, const T value) =0;
 	virtual void set(unsigned long idx, const T value) =0;
 
+	virtual bool has(int col, int row) const =0;
+	virtual bool has(unsigned long idx) const =0;
+
+	virtual bool isNoData(int col, int row) =0;
+	virtual bool isNoData(unsigned long idx) =0;
+
 	/**
 	 * Returns true if the position is legal for the grid.
 	 */
@@ -362,6 +368,11 @@ public:
 		return {minc, minr, maxc, maxr, area};
 	}
 
+	std::vector<int> floodFill(int col, int row, T target, T fill) {
+		TargetOperator<T> op(target);
+		return floodFill(col, row, op, fill);
+	}
+	
 	/**
 	 * Fill the grid using a value for the target, rather than a FillOperator.
 	 */
@@ -729,6 +740,7 @@ private:
 	 */
 	void flush() {
 		if(m_writable && m_dirty) {
+			std::cerr << "write " << m_curcol << " " << m_currow << " " << m_block << std::endl;
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
 				_runerr("Flush error.");
 			m_dirty = false;
@@ -1248,10 +1260,13 @@ public:
 	}
 
 	void set(int col, int row, T v) {
+		_log("Raster::set: " << col << ", " << row << ", " << v << "; " << m_writable);
 		if(!m_writable) return;
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
+		_log(" -> idx: " << idx);
 		m_block[idx] = v;
+		_log(" -> val: " << m_block[idx]);
 		m_dirty = true;
 	}
 

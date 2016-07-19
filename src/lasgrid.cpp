@@ -143,36 +143,6 @@ bool inRadius(double px, double py, int col, int row, double radius,
 	return r <= radius;
 }
 
-void void_fill(Grid<float> &rast, double resolution) {
-	int rlimit = _max(rast.rows(), rast.cols());
-	double angle = 0.0;
-	for(int r = 0; r < rast.rows(); ++r) {
-		for(int c = 0; c < rast.cols(); ++c) {
-			if(rast.get(c, r) != rast.nodata())
-				continue;
-			for(int rad = 1; rad < rlimit; ++rad) {
-				// We'll average the values of pixels at this radius?
-				float total = 0.0;
-				int count = 0;
-				for(double ang = 0; ang < 2.0 * PI; ang += std::atan(1.0 / rad)) {
-					int r0 = (int) (r + std::sin(ang) * rad + 0.5);
-					int c0 = (int) (c + std::cos(ang) * rad + 0.5);
-					if(r0 < 0 || c0 < 0 || r0 >= rast.rows() || c0 >= rast.cols())
-						continue;
-					if(rast.get(c0, r0) != rast.nodata()) {
-						total += rast.get(c0, r0);
-						++count;
-					}
-				}
-				if(count > 0) {
-					rast.set(c, r, total / count);
-					break;
-				}
-			}
-		}
-	}
-}
-
 void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
 			int crs, int attribute, int type, double radius,
 			double resolution, std::vector<double> &bounds, unsigned char angleLimit, bool fill) {
@@ -207,7 +177,6 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		Util::snapBounds(bounds, resolution, 2);
 
 	MemRaster<double> grid1;
-	MemRaster<double> grid2;
 	MemRaster<int> counts;
 	MemRaster<std::vector<double>* > qGrid;
 
@@ -262,19 +231,21 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	if(type != TYPE_COUNT) {
 		grid1.init(cols, rows);
 		grid1.fill(-9999.0);
-		// For variance and stddev, we need 2 double grids.
-		if(type == TYPE_VARIANCE || type == TYPE_STDDEV || type == TYPE_PVARIANCE || type == TYPE_PSTDDEV) {
-			grid2.init(cols, rows);
-			grid2.fill(-9999.0);
-		}
 	}
 
 	// For the median grid.
-	if(type == TYPE_MEDIAN) {
+	switch(type) {
+	case TYPE_VARIANCE:
+	case TYPE_STDDEV:
+	case TYPE_PVARIANCE:
+	case TYPE_PSTDDEV:
+	case TYPE_QUANTILE:
+	case TYPE_MEDIAN:
 		qGrid.init(cols, rows);
 		qGrid.setDeallocator(*vector_dealloc);
 		for(int i = 0; i < cols * rows; ++i)
 			qGrid.set(i, new std::vector<double>());
+		break;
 	}
 
 	// Create a grid for maintaining counts.
@@ -319,12 +290,8 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 			int r = (int) ((py - bounds[1]) / resolution);
 			// If the radius is > 0, compute the size of the window.
 			int offset = radius > 0.0 ? (int) radius / resolution : 0;
-			for(int cc = c - offset; cc < c + offset + 1; ++cc) {
-				// Ignore out-of-bounds pixels.
-				if(cc < 0 || cc >= cols) continue;
-				for(int rr = r - offset; rr < r + offset + 1; ++rr) {
-					// Ignore out-of-bounds pixels.
-					if(rr < 0 || rr >= rows) continue;
+			for(int cc = _max(0, c - offset); cc < _min(cols, c + offset + 1); ++cc) {
+				for(int rr = _max(0, r - offset); rr < _min(rows, r + offset + 1); ++rr) {
 					// If the coordinate is out of the cell's radius, continue.
 					if(!inRadius(px, py, cc, rr, radius, resolution, bounds)) continue;
 					// Compute the grid index. The rows are assigned from the bottom.
@@ -340,15 +307,6 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 						if(counts[idx] == 1 || pz > grid1[idx])
 							grid1.set(idx, pz);
 						break;
-					case TYPE_VARIANCE:
-					case TYPE_STDDEV:
-					case TYPE_PVARIANCE:
-					case TYPE_PSTDDEV:
-						if(counts[idx] == 1) {
-							grid2.set(idx, _sq(pz));
-						} else {
-							grid2.set(idx, grid2.get(idx) + _sq(pz));
-						}
 					case TYPE_MEAN:
 						if(counts[idx] == 1) {
 							grid1.set(idx, pz);
@@ -356,6 +314,10 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 							grid1.set(idx, grid1.get(idx) + pz);
 						}
 						break;
+					case TYPE_VARIANCE:
+					case TYPE_STDDEV:
+					case TYPE_PVARIANCE:
+					case TYPE_PSTDDEV:
 					case TYPE_QUANTILE:
 					case TYPE_MEDIAN:
 						qGrid[idx]->push_back(pz);
@@ -367,6 +329,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	}
 
 	// Calculate cells or set nodata.
+	// Welford's method for variance.
 	switch(type) {
 	case TYPE_MEAN:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
@@ -377,36 +340,76 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	case TYPE_PVARIANCE:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 			if(counts[i] > 1) {
-				grid1.set(i, (grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / counts.get(i));
+				double m = 0;
+				double s = 0;
+				int k = 1;
+				for(int j = 0; j < qGrid[i]->size(); ++j) {
+					double v = (*qGrid[i])[j];
+					double oldm = m;
+					m = m + (v - m) / k;
+					s = s + (v - m) * (v - oldm);
+					++k;
+				}
+				grid1.set(i, s / qGrid[i]->size());
 			} else {
-				grid1.set(i, grid1.nodata());
+				grid1.set(i, 0);
 			}
 		}
 		break;
 	case TYPE_VARIANCE:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 			if(counts[i] > 1) {
-				grid1.set(i, (grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / (counts.get(i) - 1));
+				double m = 0;
+				double s = 0;
+				int k = 1;
+				for(int j = 0; j < qGrid[i]->size(); ++j) {
+					double v = (*qGrid[i])[j];
+					double oldm = m;
+					m = m + (v - m) / k;
+					s = s + (v - m) * (v - oldm);
+					++k;
+				}
+				grid1.set(i, s / (qGrid[i]->size() - 1));
 			} else {
-				grid1.set(i, grid1.nodata());
+				grid1.set(i, 0);
 			}
 		}
 		break;
 	case TYPE_PSTDDEV:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 			if(counts[i] > 1) {
-				grid1.set(i, sqrt((grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / counts.get(i)));
+				double m = 0;
+				double s = 0;
+				int k = 1;
+				for(int j = 0; j < qGrid[i]->size(); ++j) {
+					double v = (*qGrid[i])[j];
+					double oldm = m;
+					m = m + (v - m) / k;
+					s = s + (v - m) * (v - oldm);
+					++k;
+				}
+				grid1.set(i, std::sqrt(s / qGrid[i]->size()));
 			} else {
-				grid1.set(i, grid1.nodata());
+				grid1.set(i, 0);
 			}
 		}
 		break;
 	case TYPE_STDDEV:
 		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
 			if(counts[i] > 1) {
-				grid1.set(i, sqrt((grid2.get(i) - (_sq(grid1.get(i)) / counts.get(i))) / (counts.get(i) - 1)));
+				double m = 0;
+				double s = 0;
+				int k = 1;
+				for(int j = 0; j < qGrid[i]->size(); ++j) {
+					double v = (*qGrid[i])[j];
+					double oldm = m;
+					m = m + (v - m) / k;
+					s = s + (v - m) * (v - oldm);
+					++k;
+				}
+				grid1.set(i, std::sqrt(s / (qGrid[i]->size() - 1)));
 			} else {
-				grid1.set(i, grid1.nodata());
+				grid1.set(i, 0);
 			}
 		}
 		break;
@@ -450,7 +453,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		MemRaster<float> tmp = (MemRaster<float>) grid1;
 		tmp.nodata(rast.nodata());
 		if(fill)
-			void_fill(tmp, resolution);
+			tmp.voidFillIDW(resolution);
 		rast.writeBlock(tmp);
 	}
 
