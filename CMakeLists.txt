@@ -1,5 +1,6 @@
 cmake_minimum_required (VERSION 3.1.0)
 set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_FLAGS_DEBUG "-g3")
 
 project (geotools)
 
@@ -9,13 +10,17 @@ add_executable (rasterstats src/rasterstats.cpp)
 target_include_directories (rasterstats PUBLIC include /usr/local/include /usr/include/gdal)
 target_link_libraries (rasterstats gdal)
 
+add_executable (rasterfilter src/rasterfilter.cpp)
+target_include_directories (rasterfilter PUBLIC include /usr/local/include /usr/include/gdal)
+target_link_libraries (rasterfilter gdal)
+
 add_executable (lasgrid src/lasgrid.cpp)
 target_include_directories (lasgrid PUBLIC include /usr/local/include /usr/include/gdal)
 target_link_libraries (lasgrid gdal las laszip boost_system boost_filesystem)
 
-add_library(lasvalidate SHARED src/lasvalidate.cpp)
-target_include_directories (lasvalidate PUBLIC include /usr/local/include)
-target_link_libraries (lasvalidate las laszip geos)
+#add_library(lasvalidate SHARED src/lasvalidate.cpp)
+#target_include_directories (lasvalidate PUBLIC include /usr/local/include)
+#target_link_libraries (lasvalidate las laszip geos)
 
 #add_executable (lasvalidate-app src/apps/lasvalidate.cpp)
 #target_include_directories (lasvalidate-app PUBLIC include /usr/local/include)
@@ -51,9 +56,9 @@ target_link_libraries (mosaic gdal boost_system boost_filesystem)
 
 
 install (TARGETS lasgrid DESTINATION bin)
-install (TARGETS lasvalidate DESTINATION lib)
+#install (TARGETS lasvalidate DESTINATION lib)
 #install (TARGETS lasvalidate-app DESTINATION bin)
-install (FILES include/lasvalidate.hpp DESTINATION include)
+#install (FILES include/lasvalidate.hpp DESTINATION include)
 install (TARGETS las2csrs DESTINATION bin)
 install (DIRECTORY share/ DESTINATION share PATTERN "share/*")
 install (TARGETS lasstats DESTINATION bin)
@@ -62,4 +67,5 @@ install (TARGETS lasreclass DESTINATION bin)
 install (TARGETS lasclip DESTINATION bin)
 install (TARGETS mosaic DESTINATION bin)
 install (TARGETS rasterstats DESTINATION bin)
+install (TARGETS rasterfilter DESTINATION bin)
 

@@ -717,7 +717,6 @@ private:
 	 */
 	void flush() {
 		if(m_writable && m_dirty) {
-			std::cerr << "write " << m_curcol << " " << m_currow << " " << m_block << std::endl;
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
 				_runerr("Flush error.");
 			m_dirty = false;
@@ -748,6 +747,7 @@ public:
 	 */
 	template <class D>
 	Raster(const std::string &filename, Raster<D> &tpl) : Raster() {
+		_trace("Raster: " << filename);
 		std::string proj;
 		tpl.projection(proj);
 		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
@@ -776,6 +776,7 @@ public:
 	 * to enable writing.
 	 */
 	Raster(const std::string &filename, int band = 1, bool writable = false) : Raster() {
+		_trace("Raster: " << filename);
 		init(filename, band, writable);
 	}
 
@@ -797,6 +798,9 @@ public:
 	void init(const std::string &filename, double minx, double miny, double maxx, double maxy,
 			double resolutionX, double resolutionY, double nodata, std::string proj) {
 		
+		_trace("Filename: " << filename << "; dims: " << minx << "," << miny << "," << maxx << "," << maxy << "; res: " << resolutionX << "," << resolutionY << "; nodata: " << nodata);
+		_trace("Proj: " << proj);
+
 		if(resolutionX == 0 || resolutionY == 0)
 			_argerr("Resolution must be larger or smaller than 0.");
 		if(maxx < minx)
@@ -1059,7 +1063,7 @@ public:
 	 * The maximum bounding y.
 	 */
 	double maxy() const {
-		return m_trans[5] > 0 ? m_trans[3] : m_trans[3] + m_cols * m_trans[5];
+		return m_trans[5] < 0 ? m_trans[3] : m_trans[3] + m_cols * m_trans[5];
 	}
 
 	/**

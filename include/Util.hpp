@@ -7,6 +7,7 @@ namespace las = liblas;
 #include <sstream>
 #include <algorithm>
 #include <fstream>
+#include <cmath>
 
 #include "csv.h"
 
@@ -94,16 +95,14 @@ public:
 	 */
 	static void snapBounds(std::vector<double> &bounds, double res, int dims) {
 		if(dims == 2 || dims == 3) {
-			bounds[0] = floor(bounds[0] / res) * res;
-			bounds[1] = floor(bounds[1] / res) * res;
-			bounds[2] = (floor(bounds[2] / res) + 1.0) * res;
-			bounds[3] = (floor(bounds[3] / res) + 1.0) * res;
-			//if(bounds[0] == bounds[2]) bounds[2] += res;
-			//if(bounds[1] == bounds[3]) bounds[3] += res;
+			bounds[0] = std::floor(bounds[0] / res) * res;
+			bounds[1] = std::floor(bounds[1] / res) * res;
+			bounds[2] = (std::floor(bounds[2] / res) + 1.0) * res;
+			bounds[3] = (std::floor(bounds[3] / res) + 1.0) * res;
 		}
 		if(dims == 3) {
-			bounds[4] = floor(bounds[4] / res) * res;
-			bounds[5] = ceil(bounds[5] / res) * res;
+			bounds[4] = std::floor(bounds[4] / res) * res;
+			bounds[5] = std::ceil(bounds[5] / res) * res;
 		}
 	}
 

@@ -145,36 +145,43 @@ void mosaic(std::vector<std::string> &files, std::string &outfile, float distanc
 			alphaGrid.fill(1.0);
 
 			int blkRow0 = blkRow - blkBuffer;
-			int blkHeight0 = _min(input.rows() - blkRow0 - 1, blkHeight + blkBuffer * 2);
+			int blkHeight0 = blkHeight + blkBuffer * 2;
 
 			_trace("Reading source block...")
 			// Load the overlay.
 			#pragma omp critical
 			{
-				input.readBlock(0, blkRow0, cols, blkHeight0, imGrid);
+				input.readBlock(0, blkRow0, cols, _min(input.rows() - blkRow0, blkHeight0), imGrid);
 			}
 
 			_trace("Feathering...")
 			// Feather the overlay
 			feather(imGrid, alphaGrid, cols, blkHeight0, distance, imNodata, input.resolutionX());
 
+			_trace("Reading background...")
 			// Read background data.
 			#pragma omp critical 
 			{
-				output.readBlock(col, row + blkRow0, cols, blkHeight0, outGrid);
+				output.readBlock(col, row + blkRow0, cols, _min(output.rows() - (row + blkRow0), blkHeight0), outGrid);
 			}
 
 			_trace("Blending...")
 			// Blend the overlay into the output.
 			blend(imGrid, outGrid, alphaGrid, cols, blkHeight0, imNodata, outNodata);
 
-			_trace("Writing to output...")
+			_trace("Writing to output... " << blkRow << " - " << blkBuffer)
 			// Write back to the output.
 			// We are extracting a slice out of the buffer, not writing the whole thing.
 			#pragma omp critical 
 			{
-				std::unique_ptr<Grid<float> > slice = outGrid.slice(0, blkBuffer, cols, blkHeight);
-				output.writeBlock(col, row + blkRow, cols, blkHeight, *slice);
+				if(blkRow == blkBuffer) {
+					// If this is the first row, include the top feathered buffer.
+					output.writeBlock(col, row, outGrid.cols(), _min(output.rows() - row, outGrid.rows()), outGrid);
+				} else {
+					// Otherwise, slice off the top and copy in the rest.
+					std::unique_ptr<Grid<float> > slice = outGrid.slice(0, blkBuffer, outGrid.cols(), outGrid.rows() - blkBuffer);
+					output.writeBlock(col, row + blkRow, slice->cols(), _min(output.rows() - (row + blkRow), slice->rows()), *slice);
+				}
 			}
 
 		}

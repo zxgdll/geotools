@@ -4,6 +4,8 @@
 #include <limits>
 #include <exception>
 #include <iostream>
+#include <sstream>
+#include <iomanip>
 
 #ifdef __GNUC__
 #define DEPRECATED __attribute__((deprecated))
@@ -49,4 +51,16 @@ static int __loglevel = 0;
 #define _implerr(x) {std::stringstream _ss; _ss << x; throw std::runtime_error(_ss.str());}
 #define _runerr(x) {std::stringstream _ss; _ss << x; throw std::runtime_error(_ss.str());}
 
+static std::string __status_buf;
+
+void _status(int step, int of) {
+	if(step > of)
+		of = step;
+	for(int i = 0; i < __status_buf.size(); ++i)
+		std::cerr << '\b';
+	std::stringstream buf;
+	buf << "Status: " << std::setprecision(2) << (of <= 0 ? 0 : (float) step / of) << "%%" << std::endl;
+	__status_buf.assign(buf.str());
+	std::cerr << __status_buf;
+}
 #endif
