@@ -193,6 +193,7 @@ public:
 		return m_variance;
 	}
 
+	/*
 	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill) {
 
 		// If other is provided, fill pixels in it too, rather than just the current raster.
@@ -267,9 +268,10 @@ public:
 		return {minc, minr, maxc, maxr, area};
 
 	}
+	*/
 
 	template <class U>
-	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill, Grid<U> other, U otherFill) {
+	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U otherFill) {
 
 		// If other is provided, fill pixels in it too, rather than just the current raster.
 		// Other fill is the value to fill the other raster with.
@@ -283,36 +285,37 @@ public:
 		if(!op.fill(get(col, row)))
 			return {minc, minr, maxc, maxr, area};
 
-		std::queue<Cell> q;
-		q.push(Cell(col, row));
+		std::queue<Cell*> q;
+		q.push(new Cell(col, row));
 
 		while(q.size()) {
-			Cell cel = q.front();
+			
+			Cell *cel = q.front();
 			q.pop();
 
+			int crow = cel->row;
+			int ccol = cel->col;
+			delete cel;
+
 			// Scan out to the left, starting with current.
-			for(int c = cel.col; c >= 0; --c) {
-				if(op.fill(get(c, cel.row))) {
+			for(int c = ccol - 1; c >= 0; --c) {
+				if(op.fill(get(c, crow)) && otherFill != other.get(c, crow)) {
 
 					minc = _min(c, minc);
 					maxc = _max(c, maxc);
-					minr = _min(cel.row, minr);
-					maxr = _max(cel.row, maxr);
+					minr = _min(crow, minr);
+					maxr = _max(crow, maxr);
 					++area;
 
-					if(other) {
-						other->set(c, cel.row, otherFill);
-					} else {
-						set(c, cel.row, fill);
-					}
+					other.set(c, crow, otherFill);
 
-					if(cel.row > 0) {
-						if(op.fill(get(c, cel.row - 1)))
-							q.push(Cell(c, cel.row - 1));
+					if(crow > 0) {
+						if(op.fill(get(c, crow - 1)))
+							q.push(new Cell(c, crow - 1));
 					}
-					if(cel.row < rows() - 1) {
-						if(op.fill(get(c, cel.row + 1)))
-							q.push(Cell(c, cel.row + 1));
+					if(crow < rows() - 1) {
+						if(op.fill(get(c, crow + 1)))
+							q.push(new Cell(c, crow + 1));
 					}
 				} else {
 					break;
@@ -320,28 +323,24 @@ public:
 			}
 
 			// Scan out to the right.
-			for(int c = cel.col + 1; c < cols(); ++c) {
-				if(op.fill(get(c, cel.row))) {
+			for(int c = ccol + 1; c < cols(); ++c) {
+				if(op.fill(get(c, crow)) && otherFill != other.get(c, crow)) {
 
 					minc = _min(c, minc);
 					maxc = _max(c, maxc);
-					minr = _min(cel.row, minr);
-					maxr = _max(cel.row, maxr);
+					minr = _min(crow, minr);
+					maxr = _max(crow, maxr);
 					++area;
 
-					if(other) {
-						other->set(c, cel.row, otherFill);
-					} else {
-						set(c, cel.row, fill);
-					}
+					other.set(c, crow, otherFill);
 
-					if(cel.row > 0) {
-						if(op.fill(get(c, cel.row - 1)))
-							q.push(Cell(c, cel.row - 1));
+					if(crow > 0) {
+						if(op.fill(get(c, crow - 1)))
+							q.push(new Cell(c, crow - 1));
 					}
-					if(cel.row < rows() - 1) {
-						if(op.fill(get(c, cel.row + 1)))
-							q.push(Cell(c, cel.row + 1));
+					if(crow < rows() - 1) {
+						if(op.fill(get(c, crow + 1)))
+							q.push(new Cell(c, crow + 1));
 					}
 				} else {
 					break;
@@ -351,15 +350,13 @@ public:
 		return {minc, minr, maxc, maxr, area};
 	}
 
-	template <class U>
-	std::vector<int> floodFill(int col, int row, T target, T fill, Grid<U> &other, U otherFill) {
-		TargetOperator<T> op(target);
-		return floodFill(col, row, op, fill, other, otherFill);
-	}
-
 	std::vector<int> floodFill(int col, int row, T target, T fill) {
 		TargetOperator<T> op(target);
-		return floodFill(col, row, op, fill);
+		return floodFill(col, row, op, *this, fill);
+	}
+
+	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill) {
+		return floodFill(col, row, op, *this, fill);
 	}
 	
 	/**
@@ -629,7 +626,7 @@ public:
 		m_bh = blockHeight;
 		m_tc = totalCols;
 		m_tr = totalRows;
-		m_col = -1;
+		m_col = 0;
 		m_row = 0;
 	}
 
@@ -898,8 +895,9 @@ public:
 		Block<T> blk = block();
 		MemRaster<T> grd(blk.cols(), blk.rows());
 		grd.fill(value);
-		while(blk.next())
+		do {
 			writeBlock(blk.startCol(), blk.startRow(), grd);
+		} while(blk.next());
 	}
 
 	/**
@@ -922,15 +920,16 @@ public:
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
-		// TODO: Use readblock/writeblock
-		if(col % m_bw == 0 && row % m_bh == 0 && block.cols() == m_bw && block.rows() == m_bh) {
-			if(m_band->ReadBlock(col / m_bw, row / m_bh, block.grid()) != CE_None)
+	void readBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
+		if(&grd == this)
+			_runerr("Recursive call to readBlock.");
+		Block<T> blk = block();
+		MemRaster<T> mr(blk.cols(), blk.rows());
+		do {
+			if(m_band->ReadBlock(blk.startCol() / m_bw, blk.startRow() / m_bh, mr.grid()) != CE_None)
 				_runerr("Error reading block (1).");
-		} else {
-			if(m_band->RasterIO(GF_Read, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
-				_runerr("Error reading block (2).");
-		}	
+			grd.writeBlock(blk.startCol(), blk.startRow(), blk.cols(), blk.rows(), mr);
+		} while(blk.next());
 	}
 
 	void readBlock(int col, int row, Grid<T> &block) {
@@ -940,16 +939,16 @@ public:
 	/**
 	 * Write a part of the given block to the raster.
 	 */
-	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
-		if(col % m_bw == 0 && row % m_bh == 0 && block.cols() == m_bw && block.rows() == m_bh) {
-			//_log("write block " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh);
-			if(m_band->WriteBlock(col / m_bw, row / m_bh, block.grid()) != CE_None)
+	void writeBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
+		if(&grd == this)
+			_runerr("Recursive call to writeBlock.");
+		Block<T> blk = block();
+		MemRaster<T> mr(blk.cols(), blk.rows());
+		do {
+			grd.readBlock(col, row, cols, rows, mr);
+			if(m_band->WriteBlock(blk.startCol() / m_bw, blk.startRow() / m_bh, mr.grid()) != CE_None)
 				_runerr("Error writing block (1).");
-		} else {
-			//_log("rasterio " << col << "," << row << "," << cols << "," << rows << "," << m_bw << "," << m_bh << "," << block.cols() << "," << block.rows());
-			if(m_band->RasterIO(GF_Write, col, row, cols, rows, block.grid(), cols, rows, m_type, 0, 0) != CE_None)
-				_runerr("Error writing block (2).");
-		}
+		} while(blk.next());
 	}
 
 	void writeBlock(int col, int row, Grid<T> &block) {

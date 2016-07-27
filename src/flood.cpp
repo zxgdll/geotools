@@ -319,7 +319,7 @@ namespace flood {
 				}
 
 				// Fill the basin based on the elevations in dem.
-				std::vector<int> result; //m_dem.floodFill(seed.col(), seed.row(), op, 0, m_basins, seed.id())
+				std::vector<int> result = m_dem.floodFill(seed.col(), seed.row(), op, m_basins, seed.id());
 				int area = result[4];
 
 				if(area >= minBasinArea()) {
@@ -334,19 +334,19 @@ namespace flood {
 			return m_basinList.size();
 		}
 
-		void saveBasinRaster() {
-
+		void saveBasinRaster(double elevation) {
+			std::stringstream ss;
+			ss << m_rdir << "/" << ((int) elevation / m_step) << ".tif";
+			Raster<unsigned int> r(ss.str(), m_basins);
+			r.writeBlock(m_basins);
 		}
 
 		void saveBasinVector() {
 
 		}
 
-		void findSpillPoints() {
+		bool findSpillPoints() {
 			_log("Finding spill points.");
-
-			if(m_basinList.size() == 0)
-				_runerr("No basins defined.");
 
 			m_spillPoints.clear();
 
@@ -368,6 +368,8 @@ namespace flood {
 					}
 				}
 			}
+
+			return m_spillPoints.size();
 		}
 
 		// Output the spill points to a stream, with comma delimiters.
@@ -444,9 +446,14 @@ namespace flood {
 		double elevation = start;
 		while(elevation <= end) {
 			_log("Filling to " << elevation);
-			config.fillBasins(elevation);
-			config.findSpillPoints();
-			config.saveSpillPoints(std::cout);
+			if(config.fillBasins(elevation) > 0) {
+				if(!rdir.empty())
+					config.saveBasinRaster(elevation);
+				if(!vdir.empty())
+					config.saveBasinVector();
+				if(config.findSpillPoints() > 0)
+					config.saveSpillPoints(std::cout);
+			}
 			elevation += step;
 		}
 

@@ -5,6 +5,10 @@ project (geotools)
 
 link_directories(/usr/local/lib)
 
+add_executable (flood src/flood.cpp)
+target_include_directories (flood PUBLIC include /usr/local/include /usr/include/gdal)
+target_link_libraries (flood gdal)
+
 add_executable (rasterstats src/rasterstats.cpp)
 target_include_directories (rasterstats PUBLIC include /usr/local/include /usr/include/gdal)
 target_link_libraries (rasterstats gdal)
@@ -56,4 +60,5 @@ install (TARGETS lasreclass DESTINATION bin)
 install (TARGETS lasclip DESTINATION bin)
 install (TARGETS mosaic DESTINATION bin)
 install (TARGETS rasterstats DESTINATION bin)
+install (TARGETS flood DESTINATION bin)
 
