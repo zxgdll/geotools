@@ -170,7 +170,7 @@ public:
 		m_variance = s / m_count;
 		m_stddev = std::sqrt(m_variance);
 		m_stats = true;
-		_log("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min 
+		_trace("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min 
 			<< "; Max: " << m_max << "; Mean: " << m_mean 
 			<< "; Variance: " << m_variance << "; Std Dev: " << m_stddev << std::endl);
 	}
@@ -669,7 +669,6 @@ private:
 	 */
 	void flush() {
 		if(m_writable && m_dirty) {
-			std::cerr << "write " << m_curcol << " " << m_currow << " " << m_block << std::endl;
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
 				_runerr("Flush error.");
 			m_dirty = false;
@@ -892,7 +891,7 @@ public:
 		grd.fill(value);
 		do {
 			writeBlock(blk.pixelCol(), blk.pixelRow(), blk.pixelCols(), blk.pixelRows(), grd);
-		} while(blk.next());
+		} while(blk.next());		
 	}
 
 	/**
@@ -918,14 +917,15 @@ public:
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
 		if(&grd == this)
 			_runerr("Recursive call to readBlock.");
-		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && rows == m_bh) {
-			Block<T> blk = block();
-			MemRaster<T> mr(blk.pixelCols(), blk.pixelRows());
-			do {
-				if(m_band->ReadBlock(blk.blockCol(), blk.blockRow(), mr.grid()) != CE_None)
-					_runerr("Error reading block (1).");
-				grd.writeBlock(blk.pixelCol(), blk.pixelRow(), blk.pixelCols(), blk.pixelRows(), mr);
-			} while(blk.next());
+		if(col % m_bw == 0 && row % m_bh == 0 && cols % m_bw == 0 && rows % m_bh == 0) {
+			MemRaster<T> mr(m_bw, m_bh);
+			for(int brow = row / m_bh; brow < rows / m_bh; ++brow) {
+				for(int bcol = col / m_bw; bcol < cols / m_bw; ++bcol) {
+					grd.readBlock(bcol * m_bw, brow * m_bh, m_bw, m_bh, mr);
+					if(m_band->WriteBlock(bcol, brow, mr.grid()) != CE_None)
+						_runerr("Error writing block (1).");
+				}
+			}
 		} else {
 			MemRaster<T> mr(cols, rows);
 			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0	) != CE_None)
@@ -944,14 +944,15 @@ public:
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
 		if(&grd == this)
 			_runerr("Recursive call to writeBlock.");
-		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && rows == m_bh) {
-			Block<T> blk = block();
-			MemRaster<T> mr(blk.pixelCols(), blk.pixelRows());
-			do {
-				grd.readBlock(blk.pixelCol(), blk.pixelRow(), blk.pixelCols(), blk.pixelRows(), mr);
-				if(m_band->WriteBlock(blk.blockCol(), blk.blockRow(), mr.grid()) != CE_None)
-					_runerr("Error writing block (1).");
-			} while(blk.next());
+		if(col % m_bw == 0 && row % m_bh == 0 && cols % m_bw == 0 && rows % m_bh == 0) {
+			MemRaster<T> mr(m_bw, m_bh);
+			for(int brow = row / m_bh; brow < rows / m_bh; ++brow) {
+				for(int bcol = col / m_bw; bcol < cols / m_bw; ++bcol) {
+					grd.readBlock(bcol * m_bw, brow * m_bh, m_bw, m_bh, mr);
+					if(m_band->WriteBlock(bcol, brow, mr.grid()) != CE_None)
+						_runerr("Error writing block (1).");
+				}
+			}
 		} else {
 			MemRaster<T> mr(cols, rows);
 			grd.readBlock(col, row, cols, rows, mr);
@@ -1221,7 +1222,7 @@ public:
 	T &get(unsigned long idx) {
 		if(idx >= size())
 			_argerr("Index out of bounds.");
-		return get(idx % m_cols, (int) idx / m_rows);
+		return get(idx % m_cols, (int) idx / m_cols);
 	}
 
 	/**
@@ -1235,13 +1236,10 @@ public:
 	 * Sets the pixel value at the given row/column.
 	 */
 	void set(int col, int row, T v) {
-		_log("Raster::set: " << col << ", " << row << ", " << v << "; " << m_writable);
 		if(!m_writable) return;
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
-		_log(" -> idx: " << idx);
 		m_block[idx] = v;
-		_log(" -> val: " << m_block[idx]);
 		m_dirty = true;
 	}
 

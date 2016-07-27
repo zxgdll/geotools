@@ -244,7 +244,7 @@ namespace flood {
 				double y = atof(row[2].c_str());
 				m_seeds.push_back(Cell(id, m_dem.toCol(x), m_dem.toRow(y)));
 			}
-			_log("Seeds loaded from file: " << m_seeds.size());
+			_trace("Seeds loaded from file: " << m_seeds.size());
 		}
 
 		std::vector<Cell>& seeds() {
@@ -260,31 +260,31 @@ namespace flood {
 		}
 
 		void init() {
-			_log("Checking...");
+			_trace("Checking...");
 			if(m_input.empty())
 				_argerr("Input DEM must be provided.");
 			if(m_vdir.empty() && m_rdir.empty() && m_spill.empty())
 				_argerr("At least one of vector directory, raster directory, or spill point file must be given.");
 			if(m_vdir.empty())
-				_log("WARNING: No vector directory; not producing flood polygons.");
+				_trace("WARNING: No vector directory; not producing flood polygons.");
 			if(m_rdir.empty())
-				_log("WARNING: No raster directory; not producing flood rasters.");
+				_trace("WARNING: No raster directory; not producing flood rasters.");
 			if(m_spill.empty())
-				_log("WARNING: No raster directory; not producing spill points.");
+				_trace("WARNING: No raster directory; not producing spill points.");
 			if(std::isnan(m_start))
-				_log("WARNING: Start value not given; using raster minimum.");
+				_trace("WARNING: Start value not given; using raster minimum.");
 			if(std::isnan(m_end))
-				_log("WARNING: End value not given; using raster maximum.");
+				_trace("WARNING: End value not given; using raster maximum.");
 			if(m_step <= 0.0)
 				_argerr("The step elevation must be greater than zero.");
 			if(m_t < 1)
-				_log("WARNING: Invalid number of threads. Using 1.");
+				_trace("WARNING: Invalid number of threads. Using 1.");
 			if(m_minBasinArea <= 0.0)
 				_argerr("Min basin area must be greater than zero.");
 			if(m_maxSpillDist <= 0.0)
 				_argerr("Max spill distance must be greater than zero.");
 
-			_log("Initing...");
+			_trace("Initing...");
 			m_dem.init(m_input);
 			m_basins.init("basins.tif", m_dem);
 
@@ -306,7 +306,7 @@ namespace flood {
 		 * Perform flood filling and identify basins.
 		 */
 		int fillBasins(float elevation) {
-			_log("Filling basins.");
+			_trace("Filling basins.");
 
 			std::string filename;
 			if(!m_rdir.empty()) {
@@ -328,10 +328,10 @@ namespace flood {
 
 			for(Cell seed : seeds()) {
 
-				_log("Seed: " << seed.id() << ": " << seed.col() << ", " << seed.row());
+				_trace("Seed: " << seed.id() << ": " << seed.col() << ", " << seed.row());
 
 				if(!m_dem.has(seed.col(), seed.row())) {
-					_log("WARNING: Found a seed out of bounds.");
+					_trace("WARNING: Found a seed out of bounds.");
 					continue;
 				}
 
@@ -339,7 +339,7 @@ namespace flood {
 				std::vector<int> result = m_dem.floodFill(seed.col(), seed.row(), op, m_basins, seed.id());
 				int area = result[4];
 
-				_log("Basin: area: " << area);
+				_trace("Basin: area: " << area);
 
 				if(area >= minBasinArea()) {
 					// If it's large enough, save the basin.
@@ -366,7 +366,7 @@ namespace flood {
 		}
 
 		bool findSpillPoints() {
-			_log("Finding spill points.");
+			_trace("Finding spill points.");
 
 			m_spillPoints.clear();
 
@@ -395,7 +395,7 @@ namespace flood {
 		// Output the spill points to a stream, with comma delimiters.
 		// The fields are: ID1, x1, y1, ID2, x2, y2, midpoint x, midpoint y, distance
 		void saveSpillPoints(std::ostream &out) {
-			_log("Outputting spill points.");
+			_trace("Outputting spill points.");
 
 			for(SpillPoint sp : m_spillPoints) {
 				const flood::Cell &c1 = sp.cell1();
@@ -416,7 +416,7 @@ namespace flood {
 		 * Find the cells at the bottoms of depressions.
 		 */
 		void findMinima() {
-			_log("Finding minima.");
+			_trace("Finding minima.");
 
 			m_seeds.clear();
 			for(int r = 0; r < m_dem.rows(); ++r) {
@@ -436,7 +436,7 @@ namespace flood {
 						m_seeds.push_back(flood::Cell(c, r, m_dem.get(c, r)));
 				}
 			}
-			_log("Seeds found from minima: " << m_seeds.size());
+			_trace("Seeds found from minima: " << m_seeds.size());
 		}
 	};
 
@@ -447,14 +447,14 @@ namespace flood {
 		std::string &rdir, std::string &spill, double start, double end, double step, 
 		double minBasinArea, double maxSpillDist, int t) {
 
-		_log("Flooding...");
+		_trace("Flooding...");
 
 		// Build the config object.
 		flood::Config config(input, vdir, rdir, spill, start, end, step, minBasinArea, maxSpillDist);
 
 		config.init();
 
-		_log("Building seed list...");
+		_trace("Building seed list...");
 		if(!seeds.empty()) {
 			// Load the seeds if given.
 			config.loadSeeds(seeds);
@@ -465,7 +465,7 @@ namespace flood {
 
 		double elevation = start;
 		while(elevation <= end) {
-			_log("Filling to " << elevation);
+			_trace("Filling to " << elevation);
 			if(config.fillBasins(elevation) > 0) {
 				if(!rdir.empty())
 					config.saveBasinRaster(elevation);
@@ -499,7 +499,7 @@ void usage() {
 
 int main(int argc, char **argv) {
 
-	_loglevel(1);
+	_loglevel(LOG_TRACE);
 
 	std::string input;
 	std::string seeds;
