@@ -17,6 +17,8 @@
 #include <fstream>
 #include <cstdlib>
 #include <string>
+#include <iomanip>
+#include <sstream>
 
 #include "Raster.hpp"
 
@@ -306,12 +308,27 @@ namespace flood {
 		int fillBasins(float elevation) {
 			_log("Filling basins.");
 
-			m_basins.fill(0);
-			m_basinList.clear();
+			std::string filename;
+			if(!m_rdir.empty()) {
+				std::stringstream fn;
+				fn << m_rdir << "/" << "basin_" << std::setfill('0') 
+					<< std::setw(3) << elevation << ".tif";
+				filename.assign(fn.str());
+			} else {
+				filename.assign("/tmp/basin.tif");
+			}
 
+			Raster<float> bas(filename, m_dem);
+			bas.fill(20);
+			m_basinList.clear();
+			bas.set(760, 660, 100);
+			return 0;
+			/*
 			LEFillOperator<float> op(elevation);
 
 			for(Cell seed : seeds()) {
+
+				_log("Seed: " << seed.id() << ": " << seed.col() << ", " << seed.row());
 
 				if(!m_dem.has(seed.col(), seed.row())) {
 					_log("WARNING: Found a seed out of bounds.");
@@ -322,15 +339,18 @@ namespace flood {
 				std::vector<int> result = m_dem.floodFill(seed.col(), seed.row(), op, m_basins, seed.id());
 				int area = result[4];
 
+				_log("Basin: area: " << area);
+
 				if(area >= minBasinArea()) {
 					// If it's large enough, save the basin.
 					m_basinList.push_back(Basin(seed.id(), result[0], result[1], result[2], result[3], area));
 				} else {
 					// If the basin is too small, fill it with nodata. Do not collect more spill points.
-					m_basins.floodFill(seed.col(), seed.row(), seed.id(), 0);
+					bas.floodFill(seed.col(), seed.row(), seed.id(), 0);
 				}
 
 			}
+			*/
 			return m_basinList.size();
 		}
 
@@ -404,11 +424,11 @@ namespace flood {
 					bool skip = false;
 					if(m_dem.isNoData(c, r)) 
 						continue;
-					for(int rr = r - 1; !skip && rr < r + 2; ++rr) {
-						for(int cc = c - 1; !skip && cc < c + 2; ++cc) {
-							if((cc == c && rr == r) || cc < 0 || rr < 0 || cc >= m_dem.cols() - 1 || rr >= m_dem.rows() - 1)
+					for(int rr = _max(0, r - 1); !skip && rr < _min(r + 2, m_dem.rows()); ++rr) {
+						for(int cc = _max(0, c - 1); !skip && cc < _min(c + 2, m_dem.cols()); ++cc) {
+							if((cc == c && rr == r) || m_dem.isNoData(cc, rr)) 
 								continue;
-							if(m_dem.isNoData(cc, rr) && m_dem.get(cc, rr) < m_dem.get(c, r))
+							if(m_dem.get(cc, rr) < m_dem.get(c, r))
 								skip = true;
 						}
 					}

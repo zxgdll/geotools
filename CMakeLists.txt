@@ -17,9 +17,13 @@ add_executable (lasgrid src/lasgrid.cpp)
 target_include_directories (lasgrid PUBLIC include /usr/local/include /usr/include/gdal)
 target_link_libraries (lasgrid gdal las laszip boost_system boost_filesystem)
 
-add_executable (lasvalidate src/lasvalidate.cpp)
+add_library(lasvalidate SHARED src/lasvalidate.cpp)
 target_include_directories (lasvalidate PUBLIC include /usr/local/include)
 target_link_libraries (lasvalidate las laszip geos)
+
+add_executable (lasvalidate-app src/apps/lasvalidate.cpp)
+target_include_directories (lasvalidate-app PUBLIC include /usr/local/include)
+target_link_libraries (lasvalidate-app lasvalidate las geos)
 
 add_executable (las2csrs src/las2csrs.cpp)
 target_include_directories (las2csrs PUBLIC include /usr/include/gdal /usr/local/include)
@@ -51,7 +55,9 @@ target_link_libraries (mosaic gdal boost_system boost_filesystem)
 
 
 install (TARGETS lasgrid DESTINATION bin)
-install (TARGETS lasvalidate DESTINATION bin)
+install (TARGETS lasvalidate DESTINATION lib)
+install (TARGETS lasvalidate-app DESTINATION bin)
+install (FILES include/lasvalidate.hpp DESTINATION include)
 install (TARGETS las2csrs DESTINATION bin)
 install (DIRECTORY share/ DESTINATION share PATTERN "share/*")
 install (TARGETS lasstats DESTINATION bin)
