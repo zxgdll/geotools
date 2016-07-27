@@ -918,7 +918,7 @@ public:
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
 		if(&grd == this)
 			_runerr("Recursive call to readBlock.");
-		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && row == m_bh) {
+		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && rows == m_bh) {
 			Block<T> blk = block();
 			MemRaster<T> mr(blk.pixelCols(), blk.pixelRows());
 			do {
@@ -928,7 +928,7 @@ public:
 			} while(blk.next());
 		} else {
 			MemRaster<T> mr(cols, rows);
-			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0	) != CE_None)
 				_runerr("Error reading block (2).");
 			grd.writeBlock(col, row, cols, rows, mr);
 		}
@@ -944,7 +944,7 @@ public:
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
 		if(&grd == this)
 			_runerr("Recursive call to writeBlock.");
-		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && row == m_bh) {
+		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && rows == m_bh) {
 			Block<T> blk = block();
 			MemRaster<T> mr(blk.pixelCols(), blk.pixelRows());
 			do {
