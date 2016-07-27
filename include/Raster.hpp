@@ -555,15 +555,24 @@ public:
 
 };
 
+/**
+ * This class represents a block of pixels that should correspond
+ * to the size of a block used by the underlying library.
+ * It can be used to iterate through the blocks in a deterministic
+ * way and gives the pixel coordinates of the current block.
+ */
 template <class T>
 class Block {
 private:
-	int m_bc, m_br;
-	int m_bw, m_bh;
-	int m_col, m_row;
-	int m_tc, m_tr;
+	int m_bc, m_br;   // Number of blocks across and down.
+	int m_bw, m_bh;   // The width and height of a block in pixels.
+	int m_col, m_row; // The current block col and row.
+	int m_tc, m_tr;   // The total number of pixels across and down.
 
 public:
+	/**
+	 * Initialize a block with the coordinates for the first valid block.
+	 */
 	Block(int blockCols, int blockRows, int blockWidth, int blockHeight, int totalCols, int totalRows) {
 		m_bc = blockCols;
 		m_br = blockRows;
@@ -575,6 +584,10 @@ public:
 		m_row = 0;
 	}
 
+	/**
+	 * Move the block to the next position.
+	 * Returns true if the next position was valid, false otherwise.
+	 */
 	bool next() {
 		if(++m_col == m_bc) {
 			m_col = 0;
@@ -582,26 +595,31 @@ public:
 		}
 		return m_col < m_bc && m_row < m_br;
 	}
+	/** Reset to the first position. */
 	void reset() {
 		m_col = m_row = 0;
 	}
-	int rows() {
-		return endRow() - startRow();
+	int blockCol() {
+		return m_col;
 	}
-	int cols() {
-		return endCol() - startCol();
+	int blockRow() {
+		return m_row;
 	}
-	int startCol() {
+	/** The number of pixels down the block. */
+	int pixelRows() {
+		return m_bh;
+	}
+	/** The number of pixels across the block. */
+	int pixelCols() {
+		return m_bw;
+	}
+	/** The index of the current pixel column. */
+	int pixelCol() {
 		return m_col * m_bw;
 	}
-	int endCol() {
-		return _min(startCol() + m_bw, m_tc);
-	}
-	int startRow() {
+	/** The index of the current pixel row. */
+	int pixelRow() {
 		return m_row * m_bh;
-	}
-	int endRow() {
-		return _min(startRow() + m_bh, m_tr);
 	}
 	~Block() {}
 };
@@ -693,6 +711,10 @@ private:
 		return GDT_Byte;
 	}
 
+	GDALDataType getType() {
+		return getType((T) 0);
+	}
+
 public:
 
 	/**
@@ -708,7 +730,7 @@ public:
 		m_ds = nullptr;
 		m_band = nullptr;
 		m_block = nullptr;
-		m_type = getType((T) 0);
+		m_type = getType();
 	}
 
 	/**
@@ -866,10 +888,10 @@ public:
 
 	void fill(T value) {
 		Block<T> blk = block();
-		MemRaster<T> grd(blk.cols(), blk.rows());
+		MemRaster<T> grd(blk.pixelCols(), blk.pixelRows());
 		grd.fill(value);
 		do {
-			writeBlock(blk.startCol(), blk.startRow(), grd);
+			writeBlock(blk.pixelCol(), blk.pixelRow(), blk.pixelCols(), blk.pixelRows(), grd);
 		} while(blk.next());
 	}
 
@@ -896,13 +918,20 @@ public:
 	void readBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
 		if(&grd == this)
 			_runerr("Recursive call to readBlock.");
-		Block<T> blk = block();
-		MemRaster<T> mr(blk.cols(), blk.rows());
-		do {
-			if(m_band->ReadBlock(blk.startCol() / m_bw, blk.startRow() / m_bh, mr.grid()) != CE_None)
-				_runerr("Error reading block (1).");
-			grd.writeBlock(blk.startCol(), blk.startRow(), blk.cols(), blk.rows(), mr);
-		} while(blk.next());
+		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && row == m_bh) {
+			Block<T> blk = block();
+			MemRaster<T> mr(blk.pixelCols(), blk.pixelRows());
+			do {
+				if(m_band->ReadBlock(blk.blockCol(), blk.blockRow(), mr.grid()) != CE_None)
+					_runerr("Error reading block (1).");
+				grd.writeBlock(blk.pixelCol(), blk.pixelRow(), blk.pixelCols(), blk.pixelRows(), mr);
+			} while(blk.next());
+		} else {
+			MemRaster<T> mr(cols, rows);
+			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				_runerr("Error reading block (2).");
+			grd.writeBlock(col, row, cols, rows, mr);
+		}
 	}
 
 	void readBlock(int col, int row, Grid<T> &block) {
@@ -915,13 +944,20 @@ public:
 	void writeBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
 		if(&grd == this)
 			_runerr("Recursive call to writeBlock.");
-		Block<T> blk = block();
-		MemRaster<T> mr(blk.cols(), blk.rows());
-		do {
+		if(col % m_bw == 0 && row % m_bh == 0 && cols == m_bw && row == m_bh) {
+			Block<T> blk = block();
+			MemRaster<T> mr(blk.pixelCols(), blk.pixelRows());
+			do {
+				grd.readBlock(blk.pixelCol(), blk.pixelRow(), blk.pixelCols(), blk.pixelRows(), mr);
+				if(m_band->WriteBlock(blk.blockCol(), blk.blockRow(), mr.grid()) != CE_None)
+					_runerr("Error writing block (1).");
+			} while(blk.next());
+		} else {
+			MemRaster<T> mr(cols, rows);
 			grd.readBlock(col, row, cols, rows, mr);
-			if(m_band->WriteBlock(blk.startCol() / m_bw, blk.startRow() / m_bh, mr.grid()) != CE_None)
-				_runerr("Error writing block (1).");
-		} while(blk.next());
+			if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				_runerr("Error reading block (2).");
+		}
 	}
 
 	void writeBlock(int col, int row, Grid<T> &block) {

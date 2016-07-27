@@ -286,7 +286,7 @@ namespace flood {
 
 			_log("Initing...");
 			m_dem.init(m_input);
-			m_basins.init("/tmp/basins.tif", m_dem);
+			m_basins.init("basins.tif", m_dem);
 
 			if(std::isnan(m_start)) {
 				m_start = m_dem.min();
