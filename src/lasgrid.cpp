@@ -441,11 +441,11 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 
 	if(type == TYPE_COUNT) {
 		Raster<int> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
-					resolution, -1, crs);
+					resolution, -resolution, -1, crs);
 		rast.writeBlock(counts);
 	} else {
 		Raster<float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
-					resolution, -9999.0, crs);
+					resolution, -resolution, -9999.0, crs);
 		// Cast the double grid to float for writing.
 		MemRaster<float> tmp = (MemRaster<float>) grid1;
 		tmp.nodata(rast.nodata());
