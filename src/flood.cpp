@@ -201,7 +201,6 @@ namespace flood {
 		std::string m_spill;
 		std::string m_input;
 		Raster<float> m_dem;
-		Raster<unsigned int> m_basins;
 		std::vector<Cell> m_seeds;
 		std::vector<Basin> m_basinList;
 		std::vector<SpillPoint> m_spillPoints;
@@ -249,22 +248,16 @@ namespace flood {
 			return m_dem;
 		}
 
-		Grid<unsigned int>& basins() {
-			return m_basins;
-		}
-
 		void init() {
 			_trace("Checking...");
 			if(m_input.empty())
 				_argerr("Input DEM must be provided.");
-			if(m_vdir.empty() && m_rdir.empty() && m_spill.empty())
-				_argerr("At least one of vector directory, raster directory, or spill point file must be given.");
-			if(m_vdir.empty())
-				_trace("WARNING: No vector directory; not producing flood polygons.");
 			if(m_rdir.empty())
-				_trace("WARNING: No raster directory; not producing flood rasters.");
+				_argerr("No raster directory. It is required.");
+			if(m_vdir.empty())
+				_trace("WARNING: No vector directory; not producing flood vectors.");
 			if(m_spill.empty())
-				_trace("WARNING: No raster directory; not producing spill points.");
+				_trace("WARNING: No spill file; not producing spill points.");
 			if(std::isnan(m_start))
 				_trace("WARNING: Start value not given; using raster minimum.");
 			if(std::isnan(m_end))
@@ -280,8 +273,6 @@ namespace flood {
 
 			_trace("Initing...");
 			m_dem.init(m_input);
-			m_basins.init("basins.tif", m_dem);
-			m_basins.nodata(0);
 
 			if(std::isnan(m_start)) {
 				m_start = m_dem.min();
@@ -300,20 +291,11 @@ namespace flood {
 		/**
 		 * Perform flood filling and identify basins.
 		 */
-		int fillBasins(float elevation) {
-			_trace("Filling basins.");
+		int fillBasins(std::string &filename, float elevation) {
+			_trace("Filling basins: " << filename << "; " << elevation);
 
-			std::string filename;
-			if(!m_rdir.empty()) {
-				std::stringstream fn;
-				fn << m_rdir << "/" << "basin_" << std::setfill('0') 
-					<< std::setw(3) << elevation << ".tif";
-				filename.assign(fn.str());
-			} else {
-				filename.assign("/tmp/basin.tif");
-			}
-
-			m_basins.fill(0);
+			Raster<unsigned int> basins(filename, m_dem);
+			basins.fill(0);
 			m_basinList.clear();
 			
 			LEFillOperator<float> op(elevation);
@@ -328,7 +310,7 @@ namespace flood {
 				}
 
 				// Fill the basin based on the elevations in dem.
-				std::vector<int> result = m_dem.floodFill(seed.col(), seed.row(), op, m_basins, seed.id());
+				std::vector<int> result = m_dem.floodFill(seed.col(), seed.row(), op, basins, seed.id());
 				int area = result[4];
 
 				_trace("Basin: area: " << area);
@@ -338,7 +320,7 @@ namespace flood {
 					m_basinList.push_back(Basin(seed.id(), result[0], result[1], result[2], result[3], area));
 				} else {
 					// If the basin is too small, fill it with nodata. Do not collect more spill points.
-					m_basins.floodFill(seed.col(), seed.row(), seed.id(), m_basins.nodata());
+					basins.floodFill(seed.col(), seed.row(), seed.id(), basins.nodata());
 				}
 
 			}
@@ -346,22 +328,16 @@ namespace flood {
 			return m_basinList.size();
 		}
 
-		void saveBasinRaster(double elevation) {
-			std::stringstream ss;
-			ss << m_rdir << "/" << (int) (elevation / m_step) << ".tif";
-			_trace("Saving: " << ss.str());
-			Raster<unsigned int> r(ss.str(), m_basins);
-			r.writeBlock(m_basins);
+		void saveBasinVector(std::string &rfile, std::string &vfile) {
+			_runerr("Saving vectors is not yet implemented.");
 		}
 
-		void saveBasinVector() {
-
-		}
-
-		bool findSpillPoints() {
+		bool findSpillPoints(std::string &rfile) {
 			_trace("Finding spill points.");
 
 			m_spillPoints.clear();
+
+			Raster<unsigned int> basins(rfile);
 
 			// Compare each basin to each other basin.
 			for(int i = 0; i < m_basinList.size(); ++i) {
@@ -369,13 +345,14 @@ namespace flood {
 
 					Basin b0 = m_basinList[i];
 					Basin b1 = m_basinList[j];
-					std::vector<flood::Cell> cells0 = b0.computeEdges(m_basins);
-					std::vector<flood::Cell> cells1 = b1.computeEdges(m_basins);
+					std::vector<flood::Cell> cells0 = b0.computeEdges(basins);
+					std::vector<flood::Cell> cells1 = b1.computeEdges(basins);
 
 					// Compare the distances; save the ones that are near enough.
 					for(int k = 0; k < cells0.size(); ++k) {
 						for(int l = 0; l < cells1.size(); ++l) {
-							if(cells0[k].distance(cells1[l], m_dem.resolutionX(), m_dem.resolutionY()) <= m_maxSpillDist)
+							double dist = cells0[k].distance(cells1[l], m_dem.resolutionX(), m_dem.resolutionY());
+							if(dist <= m_maxSpillDist)
 								m_spillPoints.push_back(SpillPoint(cells0[k], cells1[l]));
 						}
 					}
@@ -459,13 +436,17 @@ namespace flood {
 		double elevation = start;
 		while(elevation <= end) {
 			_trace("Filling to " << elevation);
-			if(config.fillBasins(elevation) > 0) {
-				if(!rdir.empty())
-					config.saveBasinRaster(elevation);
-				if(!vdir.empty())
-					config.saveBasinVector();
-				if(config.findSpillPoints() > 0)
-					config.saveSpillPoints(std::cout);
+			std::stringstream ss;
+			ss << rdir << "/" << (int) (elevation / step) << ".tif";
+			std::string rfile = ss.str();
+			int basins = config.fillBasins(rfile, elevation);
+			if(basins > 0 && !vdir.empty()) {
+				ss << vdir << "/" << (int) (elevation / step) << ".shp";
+				std::string vfile = ss.str();
+				config.saveBasinVector(vfile, vfile);
+			}
+			if(basins > 1 && !spill.empty() && config.findSpillPoints(rfile) > 0) {
+				config.saveSpillPoints(std::cout);
 			}
 			elevation += step;
 		}
@@ -502,7 +483,7 @@ int main(int argc, char **argv) {
 	double start = 0.0;
 	double end = 0.0;
 	double step = 0.0;
-	double maxSpillDist = 1.0;
+	double maxSpillDist = 100.0;
 	double minBasinArea = 100.0;
 	int t = 1;
 
