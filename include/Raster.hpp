@@ -407,7 +407,8 @@ public:
 	 */
 	void fill(const T value) {
 		checkInit();
-		std::fill_n(m_grid, size(), value);
+		for(unsigned long i = 0; i < size(); ++i)
+			m_grid[i] = value;	
 	}
 
 	/**
@@ -422,7 +423,7 @@ public:
 	}
 
 	T &get(int col, int row) {
-		unsigned long idx = (unsigned long) (row * m_cols + col);	
+		unsigned long idx = (unsigned long) row * m_cols + col;
 		return get(idx);
 	}
 
@@ -435,14 +436,14 @@ public:
 	}
 
 	void set(int col, int row, const T value) {
-		unsigned long idx = (unsigned long) (row * m_cols + col);
+		unsigned long idx = (unsigned long) row * m_cols + col;
 		set(idx, value);
 	}
 
 	void set(unsigned long idx, const T value) {
+		checkInit();
 		if(idx >= size())
 			_argerr("Index out of bounds.");
-		checkInit();
 		m_grid[idx] = value;
 	}
 
@@ -451,7 +452,7 @@ public:
 	}
 
 	bool has(unsigned long idx) const {
-		return idx < (unsigned long) (m_cols * m_rows);
+		return idx < (unsigned long) m_cols * m_rows;
 	}
 
 	/**
@@ -899,18 +900,18 @@ public:
 			_runerr("Recursive call to readBlock.");
 		if(col % m_bw == 0 && row % m_bh == 0 && cols % m_bw == 0 && rows % m_bh == 0) {
 			MemRaster<T> mr(m_bw, m_bh);
-			for(int brow = row / m_bh; brow < rows / m_bh; ++brow) {
-				for(int bcol = col / m_bw; bcol < cols / m_bw; ++bcol) {
-					grd.readBlock(bcol * m_bw, brow * m_bh, m_bw, m_bh, mr);
-					if(m_band->WriteBlock(bcol, brow, mr.grid()) != CE_None)
+			for(int r = row / m_bh; r < (row + rows) / m_bh; ++r) {
+				for(int c = col / m_bw; c < (col + cols) / m_bw; ++c) {
+					if(m_band->ReadBlock(c, r, mr.grid()) != CE_None)
 						_runerr("Error writing block (1).");
+					grd.writeBlock(0, 0, m_bw, m_bh, mr);
 				}
 			}
 		} else {
 			MemRaster<T> mr(cols, rows);
 			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
 				_runerr("Error reading block (2).");
-			grd.writeBlock(col, row, cols, rows, mr);
+			grd.writeBlock(0, 0, cols, rows, mr);
 		}
 	}
 
@@ -926,10 +927,10 @@ public:
 			_runerr("Recursive call to writeBlock.");
 		if(col % m_bw == 0 && row % m_bh == 0 && cols % m_bw == 0 && rows % m_bh == 0) {
 			MemRaster<T> mr(m_bw, m_bh);
-			for(int brow = row / m_bh; brow < rows / m_bh; ++brow) {
-				for(int bcol = col / m_bw; bcol < cols / m_bw; ++bcol) {
-					grd.readBlock(bcol * m_bw, brow * m_bh, m_bw, m_bh, mr);
-					if(m_band->WriteBlock(bcol, brow, mr.grid()) != CE_None)
+			for(int r = row / m_bh; r < (row + rows) / m_bh; ++r) {
+				for(int c = col / m_bw; c < (col + cols) / m_bw; ++c) {
+					grd.readBlock(c * m_bw, r * m_bh, m_bw, m_bh, mr);
+					if(m_band->WriteBlock(c, r, mr.grid()) != CE_None)
 						_runerr("Error writing block (1).");
 				}
 			}
