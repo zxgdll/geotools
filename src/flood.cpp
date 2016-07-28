@@ -212,12 +212,6 @@ namespace flood {
 			m_vdir(vdir), m_rdir(rdir), m_spill(spill),
 			m_start(start), m_end(end), m_step(step),
 			m_minBasinArea(minBasinArea), m_maxSpillDist(maxSpillDist) {
-
-			//ctx->poly_tpl = "basin_%d.shp";
-			//ctx->rast_tpl = "basin_%d.tif";
-			//ctx->point_tpl = "spill_%d.shp";
-			//ctx->point_final_tpl = "spill_points.shp";
-
 		}
 
 		~Config() {
@@ -287,6 +281,7 @@ namespace flood {
 			_trace("Initing...");
 			m_dem.init(m_input);
 			m_basins.init("basins.tif", m_dem);
+			m_basins.nodata(0);
 
 			if(std::isnan(m_start)) {
 				m_start = m_dem.min();
@@ -318,12 +313,9 @@ namespace flood {
 				filename.assign("/tmp/basin.tif");
 			}
 
-			Raster<float> bas(filename, m_dem);
-			bas.fill(20);
+			m_basins.fill(0);
 			m_basinList.clear();
-			bas.set(760, 660, 100);
-			return 0;
-			/*
+			
 			LEFillOperator<float> op(elevation);
 
 			for(Cell seed : seeds()) {
@@ -346,17 +338,18 @@ namespace flood {
 					m_basinList.push_back(Basin(seed.id(), result[0], result[1], result[2], result[3], area));
 				} else {
 					// If the basin is too small, fill it with nodata. Do not collect more spill points.
-					bas.floodFill(seed.col(), seed.row(), seed.id(), 0);
+					m_basins.floodFill(seed.col(), seed.row(), seed.id(), m_basins.nodata());
 				}
 
 			}
-			*/
+			
 			return m_basinList.size();
 		}
 
 		void saveBasinRaster(double elevation) {
 			std::stringstream ss;
-			ss << m_rdir << "/" << ((int) elevation / m_step) << ".tif";
+			ss << m_rdir << "/" << (int) (elevation / m_step) << ".tif";
+			_trace("Saving: " << ss.str());
 			Raster<unsigned int> r(ss.str(), m_basins);
 			r.writeBlock(m_basins);
 		}
