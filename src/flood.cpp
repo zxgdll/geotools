@@ -143,7 +143,9 @@ namespace flood {
 					bool edge = false;
 					for(int rr = r - 1; !edge && rr < r + 2; ++rr) {
 						for(int cc = c - 1; !edge && cc < c + 2; ++cc) {
-							if(grd.has(cc, rr) && grd.get(cc, rr) != m_id) {
+							if(cc == c && rr == r) continue;
+							if((cc < 0 || rr < 0 || rr >= grd.rows() || cc >= grd.cols())
+								|| grd.get(cc, rr) != m_id) {
 								edgeCells.push_back(Cell(c, r));
 								edge = true;
 							}
@@ -151,6 +153,7 @@ namespace flood {
 					}
 				}
 			}
+			_trace("Cells: " << (m_maxc - m_minc) * (m_maxr - m_minr) << "; " << edgeCells.size());
 			return edgeCells;
 		}
 
