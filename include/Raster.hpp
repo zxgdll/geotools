@@ -205,22 +205,8 @@ public:
 		return m_variance;
 	}
 
-	/*
-	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill) {
-
-		// If other is provided, fill pixels in it too, rather than just the current raster.
-		// Other fill is the value to fill the other raster with.
-
-		return floodFill(col, row, op, *this, fill);
-
-	}
-	*/
-
 	template <class U>
-	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U otherFill) {
-
-		// If other is provided, fill pixels in it too, rather than just the current raster.
-		// Other fill is the value to fill the other raster with.
+	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U fill) {
 
 		int minc = cols() + 1;
 		int minr = rows() + 1;
@@ -228,70 +214,64 @@ public:
 		int maxr = -1;
 		int area = 0;
 
-		if(other.get(col, row) == otherFill || !op.fill(get(col, row)))
-			return {minc, minr, maxc, maxr, area};
-
 		std::queue<Cell*> q;
 		q.push(new Cell(col, row));
+		std::vector<bool> visited(size(), false);
 
 		while(q.size()) {
 			
 			Cell *cel = q.front();
 			q.pop();
 
-			int crow = cel->row;
-			int ccol = cel->col;
+			row = cel->row;
+			col = cel->col;
 			delete cel;
 
-			// Scan out to the left, starting with current.
-			for(int c = ccol - 1; c >= 0; --c) {
-				if(op.fill(get(c, crow)) && otherFill != other.get(c, crow)) {
+			unsigned long idx = (unsigned long) row * cols() + col;
+			
+			if(!visited[idx] && op.fill(get(col, row))) {
 
-					minc = _min(c, minc);
-					maxc = _max(c, maxc);
-					minr = _min(crow, minr);
-					maxr = _max(crow, maxr);
-					++area;
+				minc = _min(col, minc);
+				maxc = _max(col, maxc);
+				minr = _min(row, minr);
+				maxr = _max(row, maxr);
+				++area;
+				other.set(col, row, fill);
+				visited[idx] = true;
 
-					other.set(c, crow, otherFill);
-
-					if(crow > 0) {
-						if(op.fill(get(c, crow - 1)))
-							q.push(new Cell(c, crow - 1));
+				for(int c = col - 1; c >= 0; --c) {
+					idx = (unsigned long) row * cols() + c;
+					if(!visited[idx] && op.fill(get(c, row))) {
+						minc = _min(c, minc);
+						++area;
+						other.set(c, row, fill);
+						visited[idx] = true;
+						if(row > 0)
+							q.push(new Cell(c, row - 1));
+						if(row < rows() - 1)
+							q.push(new Cell(c, row + 1));
+					} else {
+						break;
 					}
-					if(crow < rows() - 1) {
-						if(op.fill(get(c, crow + 1)))
-							q.push(new Cell(c, crow + 1));
+				}	
+				for(int c = col + 1; c < cols(); ++c) {
+					idx = (unsigned long) row * cols() + c;
+					if(!visited[idx] && op.fill(get(c, row))) {
+						maxc = _max(c, maxc);
+						++area;
+						other.set(c, row, fill);
+						visited[idx] = true;
+						if(row > 0)
+							q.push(new Cell(c, row - 1));
+						if(row < rows() - 1) 
+							q.push(new Cell(c, row + 1));
+					} else {
+						break;
 					}
-				} else {
-					break;
-				}
-			}
-
-			// Scan out to the right.
-			for(int c = ccol + 1; c < cols(); ++c) {
-				if(op.fill(get(c, crow)) && otherFill != other.get(c, crow)) {
-
-					maxc = _max(c, maxc);
-					minr = _min(crow, minr);
-					maxr = _max(crow, maxr);
-					++area;
-
-					other.set(c, crow, otherFill);
-
-					if(crow > 0) {
-						if(op.fill(get(c, crow - 1)))
-							q.push(new Cell(c, crow - 1));
-					}
-					if(crow < rows() - 1) {
-						if(op.fill(get(c, crow + 1)))
-							q.push(new Cell(c, crow + 1));
-					}
-				} else {
-					break;
-				}
+				}	
 			}
 		}
+
 		return {minc, minr, maxc, maxr, area};
 	}
 
@@ -656,7 +636,6 @@ private:
 			_argerr("Illegal block column or row.");
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
-			//std::cerr << "read " << bcol << " " << brow << " " << m_bcols << " " << m_brows << " " << m_block << std::endl;
 			if(m_band->ReadBlock(bcol, brow, m_block) != CE_None)
 				_runerr("Failed to read block.");
 			m_currow = brow;
@@ -890,7 +869,8 @@ public:
 		MemRaster<T> grd(blk.pixelCols(), blk.pixelRows());
 		grd.fill(value);
 		do {
-			writeBlock(blk.pixelCol(), blk.pixelRow(), blk.pixelCols(), blk.pixelRows(), grd);
+			if(m_band->WriteBlock(blk.blockCol(), blk.blockRow(), grd.grid()) != CE_None)
+				_runerr("Flush error.");
 		} while(blk.next());		
 	}
 
@@ -928,7 +908,7 @@ public:
 			}
 		} else {
 			MemRaster<T> mr(cols, rows);
-			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0	) != CE_None)
+			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
 				_runerr("Error reading block (2).");
 			grd.writeBlock(col, row, cols, rows, mr);
 		}
@@ -979,14 +959,6 @@ public:
 		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
 	}
 	
-	/**
-	 * Return the resolution. If the x and y resolution are different,
-	 * use resolutionX and resolutionY.
-	 */
-	double resolution() const {
-		return m_trans[1];
-	}
-
 	/**
 	 * Get the x resolution.
 	 */
@@ -1065,7 +1037,8 @@ public:
 	}
 
 	void nodata(T nodata) {
-		_runerr("Cannot set nodata on Raster.");
+		m_band->SetNoDataValue(nodata);
+		m_nodata = nodata;
 	}
 
 	/*
@@ -1206,7 +1179,7 @@ public:
 	/**
 	 * Returns pixel value at the given coordinate.
 	 */
-	T &get(double x, double y) const {
+	T &get(double x, double y) {
 		return get(toCol(x), toRow(y));
 	}
 
@@ -1236,7 +1209,8 @@ public:
 	 * Sets the pixel value at the given row/column.
 	 */
 	void set(int col, int row, T v) {
-		if(!m_writable) return;
+		if(!m_writable)
+			_runerr("This raster is not writable.");
 		loadBlock(col, row);
 		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
 		m_block[idx] = v;
