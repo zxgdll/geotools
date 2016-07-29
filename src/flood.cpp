@@ -141,12 +141,16 @@ namespace flood {
 			for(int r = m_minr; r < m_maxr; ++r) {
 				for(int c = m_minc; c < m_maxc; ++c) {
 					bool edge = false;
+					if(grd.get(c, r) != m_id)
+						continue;
 					for(int rr = r - 1; !edge && rr < r + 2; ++rr) {
 						for(int cc = c - 1; !edge && cc < c + 2; ++cc) {
-							if(cc == c && rr == r) continue;
-							if((cc < 0 || rr < 0 || rr >= grd.rows() || cc >= grd.cols())
-								|| grd.get(cc, rr) != m_id) {
-								edgeCells.push_back(Cell(c, r));
+							if(cc == c && rr == r) 
+								continue;
+							if(cc < 0 || rr < 0 || rr >= grd.rows() || cc >= grd.cols())
+								continue;
+							if(grd.get(cc, rr) != m_id) {
+								edgeCells.push_back(Cell(m_id, c, r));
 								edge = true;
 							}
 						}
@@ -179,15 +183,19 @@ namespace flood {
 	private:
 		Cell m_c1;
 		Cell m_c2;
+		double m_elevation;
 	public:
-		SpillPoint(Cell &c1, Cell &c2) :
-			m_c1(c1), m_c2(c2) {
+		SpillPoint(Cell &c1, Cell &c2, double elevation) :
+			m_c1(c1), m_c2(c2), m_elevation(elevation) {
 		}
 		const Cell& cell1() const {
 			return m_c1;
 		}
 		const Cell& cell2() const {
 			return m_c2;
+		}
+		const double elevation() const {
+			return m_elevation;
 		}
 	};
 
@@ -298,6 +306,7 @@ namespace flood {
 			_trace("Filling basins: " << filename << "; " << elevation);
 
 			Raster<unsigned int> basins(filename, m_dem);
+			basins.nodata(0);
 			basins.fill(0);
 			m_basinList.clear();
 			
@@ -327,6 +336,7 @@ namespace flood {
 				}
 
 			}
+			basins.flush();
 			
 			return m_basinList.size();
 		}
@@ -335,12 +345,14 @@ namespace flood {
 			_runerr("Saving vectors is not yet implemented.");
 		}
 
-		bool findSpillPoints(std::string &rfile) {
+		bool findSpillPoints(std::string &rfile, double elevation) {
 			_trace("Finding spill points.");
 
 			m_spillPoints.clear();
 
 			Raster<unsigned int> basins(rfile);
+
+			double minDist = DBL_MAX_POS;
 
 			// Compare each basin to each other basin.
 			for(int i = 0; i < m_basinList.size(); ++i) {
@@ -355,13 +367,15 @@ namespace flood {
 					for(int k = 0; k < cells0.size(); ++k) {
 						for(int l = 0; l < cells1.size(); ++l) {
 							double dist = cells0[k].distance(cells1[l], m_dem.resolutionX(), m_dem.resolutionY());
+							minDist = dist < minDist ? dist : minDist;
 							if(dist <= m_maxSpillDist)
-								m_spillPoints.push_back(SpillPoint(cells0[k], cells1[l]));
+								m_spillPoints.push_back(SpillPoint(cells0[k], cells1[l], elevation));
 						}
 					}
 				}
 			}
 
+			_trace("Minimum distance: " << minDist);
 			return m_spillPoints.size();
 		}
 
@@ -369,7 +383,7 @@ namespace flood {
 		// The fields are: ID1, x1, y1, ID2, x2, y2, midpoint x, midpoint y, distance
 		void saveSpillPoints(std::ostream &out) {
 			_trace("Outputting spill points.");
-
+			out << std::setprecision(12);
 			for(SpillPoint sp : m_spillPoints) {
 				const flood::Cell &c1 = sp.cell1();
 				const flood::Cell &c2 = sp.cell2();
@@ -380,7 +394,10 @@ namespace flood {
 				double x3 = (x1 + x2) / 2.0;
 				double y3 = (y1 + y2) / 2.0;
 				double dist = std::sqrt(_sq(x1 - x2) + _sq(y1 - y2));
-				out << c1.id() << "," << x1 << "," << y1 << "," << c2.id() << "," << x2 << "," << y2 << "," << x2 << "," << y3 << "," << dist << std::endl;
+				out << c1.id() << "," << x1 << "," << y1 << "," 
+					<< c2.id() << "," << x2 << "," << y2 << "," 
+					<< x3 << "," << y3 << "," 
+					<< sp.elevation() << "," << dist << std::endl;
 			}
 
 		}
@@ -448,9 +465,8 @@ namespace flood {
 				std::string vfile = ss.str();
 				config.saveBasinVector(vfile, vfile);
 			}
-			if(basins > 1 && !spill.empty() && config.findSpillPoints(rfile) > 0) {
+			if(basins > 1 && !spill.empty() && config.findSpillPoints(rfile, elevation) > 0) 
 				config.saveSpillPoints(std::cout);
-			}
 			elevation += step;
 		}
 
