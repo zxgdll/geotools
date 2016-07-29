@@ -10,6 +10,8 @@
 
 #include <queue>
 #include <stdexcept>
+#include <map>
+#include <vector>
 
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
@@ -17,6 +19,9 @@
 
 #include "geotools.h"
 
+/**
+ * Simple class to represent a single grid cell.
+*/
 class Cell {
 public:
 	int col;
@@ -205,6 +210,12 @@ public:
 		return m_variance;
 	}
 
+	/**
+	 * Fill the grid, beginning with the target cell, where any contiguous cell
+	 * satisfies the given FillOperator. The other grid is actually filled,
+	 * and the present grid is unchanged *unless* the present grid is passed
+	 * as other.
+	 */
 	template <class U>
 	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U fill) {
 
@@ -216,15 +227,15 @@ public:
 
 		std::queue<Cell*> q;
 		q.push(new Cell(col, row));
-		std::vector<bool> visited(size(), false);
+
+		std::vector<bool> visited(size(), false); // Tracks visited pixels.
 
 		while(q.size()) {
 			
 			Cell *cel = q.front();
-			q.pop();
-
 			row = cel->row;
 			col = cel->col;
+			q.pop();
 			delete cel;
 
 			unsigned long idx = (unsigned long) row * cols() + col;
@@ -611,11 +622,88 @@ public:
 };
 
 template <class T>
+class BlockCache {
+private: 
+	int m_size;
+	int m_bw;
+	int m_bh;
+	GDALRasterBand *m_band;
+	std::map<unsigned long, T*> m_blocks;
+	std::map<unsigned long, unsigned long> m_times; // idx, time
+	unsigned long m_time;
+
+public:
+	BlockCache(GDALRasterBand *band, int size = 5) :
+		m_band(band), 
+		m_size(size),
+		m_time(0) {
+		band->GetBlockSize(&m_bw, &m_bh);
+	}
+	unsigned long toIdx(int col, int row) {
+		return ((unsigned long) (col / m_bw) << 32) | (row / m_bh);
+	}
+	bool hasBlock(int col, int row) {
+		return m_blocks.find(toIdx(col, row)) != m_blocks.end();
+	}
+	void setSize(int size) {
+		while(m_blocks.size() > size)
+			freeOne();
+		m_size = size;
+	}
+ 	T* freeOldest() {
+		unsigned long t = ULONG_MAX;
+		unsigned long i = 0;
+		for(auto it = m_times.begin(); it != m_times.end(); ++it) {
+			if(it->second < t) { 
+				t = it->second;
+				i = it->first;
+			}
+		}
+		T *blk = m_blocks[i];
+		m_blocks.erase(i);
+		m_times.erase(i);
+		return blk;
+	}
+	T* freeOne() {
+		T *blk = nullptr;
+		while(m_blocks.size() >= m_size) {
+			if(blk)
+				free(blk);
+			blk = freeOldest();
+		}
+		return blk;
+	}
+	T* getBlock(int col, int row) {
+		unsigned long t = ++m_time; // TODO: No provision for rollover
+		unsigned long i = toIdx(col, row);
+		if(!hasBlock(col, row)) {
+			T *blk = freeOne();
+			if(!blk)
+				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
+			int bcol = (col / m_bw) * m_bw;
+			int brow = (row / m_bh) * m_bh;
+			if(m_band->ReadBlock(bcol, brow, blk) != CE_None)
+				_runerr("Failed to read block.");
+			m_blocks[i] = blk;
+		}
+		m_times[i] = t;
+		return m_blocks[i];
+	}
+	~BlockCache() {
+		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
+			if(it->second)
+				free(it->second);
+		}
+	}
+
+};
+
+template <class T>
 class Raster : public Grid<T> {
 private:
 	int m_cols, m_rows;		// Raster cols/rows
-	int m_bcols, m_brows;	// Block cols/rows -- not the number of cols/rows in a block
-	int m_curcol, m_currow;	// The current block column
+	int m_bcols, m_brows;		// Block cols/rows -- not the number of cols/rows in a block
+	int m_curcol, m_currow;		// The current block column
 	int m_bandn;			// The band number
 	int m_bw, m_bh;			// Block width/height in pixels
 	bool m_writable;		// True if the raster is writable
@@ -623,11 +711,12 @@ private:
 	T m_nodata;				// Nodata value.
 	T *m_block;				// Block storage
 	GDALDataset *m_ds;		// GDAL dataset
-	GDALRasterBand *m_band;	// GDAL band
+	GDALRasterBand *m_band;		// GDAL band
 	double m_trans[6];		// Raster transform
-	bool m_inited = false;	// True if the instance is initialized.
-	GDALDataType m_type;	// GDALDataType -- limits the possible template types.
-	std::string m_filename;
+	bool m_inited = false;		// True if the instance is initialized.
+	GDALDataType m_type;		// GDALDataType -- limits the possible template types.
+	std::string m_filename;		// Raster filename
+	BlockCache<T> *m_cache;		// Block cache.
 
 	/**
 	 * Loads the block that contains the given row and column.
@@ -643,8 +732,9 @@ private:
 			_argerr("Illegal block column or row.");
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
-			if(m_band->ReadBlock(bcol, brow, m_block) != CE_None)
-				_runerr("Failed to read block.");
+			T *blk = m_cache->getBlock(col, row);
+			//if(m_band->ReadBlock(bcol, brow, m_block) != CE_None)
+			//	_runerr("Failed to read block.");
 			m_currow = brow;
 			m_curcol = bcol;
 		}
@@ -843,7 +933,7 @@ public:
 		m_nodata = m_band->GetNoDataValue();
 		m_bcols = m_cols / m_bw;
 		m_brows = m_rows / m_bh;
-		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
+		//m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
 			_runerr("Failed to allocate memory for raster block.");
 		m_writable = writable;
@@ -1274,6 +1364,8 @@ public:
 
 	~Raster() {
 		flush();
+		if(m_cache)
+			delete m_cache;
 		if(m_ds) // Probably not necessary.
 			GDALClose(m_ds);
 	}
