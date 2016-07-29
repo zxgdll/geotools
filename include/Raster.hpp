@@ -239,6 +239,11 @@ public:
 				other.set(col, row, fill);
 				visited[idx] = true;
 
+				if(row > 0)
+					q.push(new Cell(col, row - 1));
+				if(row < rows() - 1)
+					q.push(new Cell(col, row + 1));
+				
 				for(int c = col - 1; c >= 0; --c) {
 					idx = (unsigned long) row * cols() + c;
 					if(!visited[idx] && op.fill(get(c, row))) {
@@ -622,6 +627,7 @@ private:
 	double m_trans[6];		// Raster transform
 	bool m_inited = false;	// True if the instance is initialized.
 	GDALDataType m_type;	// GDALDataType -- limits the possible template types.
+	std::string m_filename;
 
 	/**
 	 * Loads the block that contains the given row and column.
@@ -641,17 +647,6 @@ private:
 				_runerr("Failed to read block.");
 			m_currow = brow;
 			m_curcol = bcol;
-		}
-	}
-
-	/**
-	 * Flush the current block to the dataset.
-	 */
-	void flush() {
-		if(m_writable && m_dirty) {
-			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
-				_runerr("Flush error.");
-			m_dirty = false;
 		}
 	}
 
@@ -705,11 +700,9 @@ public:
 		m_curcol(-1), m_currow(-1),
 		m_bandn(1),
 		m_bw(-1), m_bh(-1),
-		m_writable(false), m_dirty(false) {
-		m_ds = nullptr;
-		m_band = nullptr;
-		m_block = nullptr;
-		m_type = getType();
+		m_writable(false), m_dirty(false),
+		m_ds(nullptr), m_band(nullptr), m_block(nullptr),
+		m_type(getType()) {
 	}
 
 	/**
@@ -776,7 +769,11 @@ public:
 			_argerr("Minimum x must be smaller than or equal to maximum x.");
 		if(maxy < miny)
 			_argerr("Minimum y must be smaller than or equal to maximum y.");
-		
+		if(filename.empty())
+			_argerr("Filename must be given.");
+
+		m_filename.assign(filename);
+
 		// Compute columns/rows
 		int width = (int) ((maxx - minx) / resolutionX) * (resolutionX < 0 ? -1 : 1);
 		int height = (int) ((maxy - miny) / resolutionY) * (resolutionY < 0 ? -1 : 1);
@@ -822,6 +819,12 @@ public:
 	 * Initializes a Raster from the existing file.
 	 */
 	void init(const std::string &filename, int band = 1, bool writable = false) {
+
+		if(filename.empty())
+			_argerr("Filename must be given.");
+		
+		m_filename.assign(filename);
+
 		// Attempt to open the dataset.
 		GDALAllRegister();
 		m_ds = (GDALDataset *) GDALOpen(filename.c_str(), writable ? GA_Update : GA_ReadOnly);
@@ -845,6 +848,10 @@ public:
 			_runerr("Failed to allocate memory for raster block.");
 		m_writable = writable;
 		m_inited = true;
+	}
+
+	std::string filename() const {
+		return m_filename;
 	}
 
 	/**
@@ -1253,8 +1260,22 @@ public:
 		return idx < (unsigned long) (m_cols * m_rows);
 	}
 
+	/**
+	 * Flush the current block to the dataset.
+	 */
+	void flush() {
+		if(m_writable && m_dirty) {
+			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
+				_runerr("Flush error.");
+			m_ds->FlushCache();
+			m_dirty = false;
+		}
+	}
+
 	~Raster() {
 		flush();
+		if(m_ds) // Probably not necessary.
+			GDALClose(m_ds);
 	}
 
 };
