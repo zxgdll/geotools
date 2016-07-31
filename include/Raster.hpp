@@ -77,7 +77,7 @@ public:
 
 	virtual int cols() const =0;
 	
-	virtual unsigned long size() const =0;
+	virtual size_t size() const =0;
 
 	virtual void fill(const T value) =0;
 
@@ -93,24 +93,24 @@ public:
 	 * Not const because the get operation might imply (e.g.)
 	 * a buffering operation in the subclass.
 	 */
-	virtual T &get(unsigned long idx) =0;
+	virtual T &get(size_t idx) =0;
 
 	virtual T &get(int col, int row) =0;
 
 	virtual void set(int col, int row, const T value) =0;
 
-	virtual void set(unsigned long idx, const T value) =0;
+	virtual void set(size_t idx, const T value) =0;
 
 	virtual bool has(int col, int row) const =0;
-	virtual bool has(unsigned long idx) const =0;
+	virtual bool has(size_t idx) const =0;
 
 	virtual bool isNoData(int col, int row) =0;
-	virtual bool isNoData(unsigned long idx) =0;
+	virtual bool isNoData(size_t idx) =0;
 
 	/**
 	 * Return the element at the given index.
 	 */
-	virtual T &operator[](unsigned long idx) =0;
+	virtual T &operator[](size_t idx) =0;
 
 	virtual bool isSquare() const =0;
 
@@ -238,7 +238,7 @@ public:
 			q.pop();
 			delete cel;
 
-			unsigned long idx = (unsigned long) row * cols() + col;
+			size_t idx = (size_t) row * cols() + col;
 			
 			if(!visited[idx] && op.fill(get(col, row))) {
 
@@ -256,7 +256,7 @@ public:
 					q.push(new Cell(col, row + 1));
 				
 				for(int c = col - 1; c >= 0; --c) {
-					idx = (unsigned long) row * cols() + c;
+					idx = (size_t) row * cols() + c;
 					if(!visited[idx] && op.fill(get(c, row))) {
 						minc = _min(c, minc);
 						++area;
@@ -271,7 +271,7 @@ public:
 					}
 				}	
 				for(int c = col + 1; c < cols(); ++c) {
-					idx = (unsigned long) row * cols() + c;
+					idx = (size_t) row * cols() + c;
 					if(!visited[idx] && op.fill(get(c, row))) {
 						maxc = _max(c, maxc);
 						++area;
@@ -352,7 +352,7 @@ public:
 
 	~MemRaster() {
 		if(m_item_dealloc != nullptr) {
-			for(unsigned long i = 0; i < (unsigned long) m_cols * m_rows; ++i)
+			for(size_t i = 0; i < (size_t) m_cols * m_rows; ++i)
 				m_item_dealloc(m_grid[i]);
 		}
 		if(m_grid != nullptr)
@@ -380,7 +380,7 @@ public:
 	template <class U>
 	operator MemRaster<U>() {
 		MemRaster<U> g(cols(), rows());
-		for(unsigned long i = 0; i < size(); ++i)
+		for(size_t i = 0; i < size(); ++i)
 			g.set(i, (U) get(i));
 		return g;
 	}
@@ -393,8 +393,8 @@ public:
 		return m_cols;
 	}
 
-	unsigned long size() const {
-		return (unsigned long) m_rows * m_cols;
+	size_t size() const {
+		return (size_t) m_rows * m_cols;
 	}
 
 	template <class U>
@@ -423,7 +423,7 @@ public:
 	 */
 	void fill(const T value) {
 		checkInit();
-		for(unsigned long i = 0; i < size(); ++i)
+		for(size_t i = 0; i < size(); ++i)
 			m_grid[i] = value;	
 	}
 
@@ -431,7 +431,7 @@ public:
 	 * Return a reference to the value held at
 	 * the given index in the grid.
 	 */
-	T &get(unsigned long idx) {
+	T &get(size_t idx) {
 		checkInit();
 		if(idx >= size())
 			_argerr("Index out of bounds.");
@@ -439,7 +439,7 @@ public:
 	}
 
 	T &get(int col, int row) {
-		unsigned long idx = (unsigned long) row * m_cols + col;
+		size_t idx = (size_t) row * m_cols + col;
 		return get(idx);
 	}
 
@@ -447,16 +447,16 @@ public:
 		return get(col, row) == m_nodata;
 	}
 
-	bool isNoData(unsigned long idx) {
+	bool isNoData(size_t idx) {
 		return get(idx) == m_nodata;
 	}
 
 	void set(int col, int row, const T value) {
-		unsigned long idx = (unsigned long) row * m_cols + col;
+		size_t idx = (size_t) row * m_cols + col;
 		set(idx, value);
 	}
 
-	void set(unsigned long idx, const T value) {
+	void set(size_t idx, const T value) {
 		checkInit();
 		if(idx >= size())
 			_argerr("Index out of bounds.");
@@ -467,14 +467,14 @@ public:
 		return col >= 0 && col < m_cols && row >= 0 && row < m_rows;
 	}
 
-	bool has(unsigned long idx) const {
-		return idx < (unsigned long) m_cols * m_rows;
+	bool has(size_t idx) const {
+		return idx < (size_t) m_cols * m_rows;
 	}
 
 	/**
 	 * Return the element at the given index.
 	 */
-	T &operator[](unsigned long idx) {
+	T &operator[](size_t idx) {
 		checkInit();
 		if(idx >= size())
 			_argerr("Index out of bounds.");
@@ -628,9 +628,9 @@ private:
 	int m_bw;
 	int m_bh;
 	GDALRasterBand *m_band;
-	std::map<unsigned long, T*> m_blocks;
-	std::map<unsigned long, unsigned long> m_times; // idx, time
-	unsigned long m_time;
+	std::map<size_t, T*> m_blocks;
+	std::map<size_t, size_t> m_times; // idx, time
+	size_t m_time;
 
 public:
 	BlockCache(GDALRasterBand *band, int size = 5) :
@@ -639,8 +639,8 @@ public:
 		m_time(0) {
 		band->GetBlockSize(&m_bw, &m_bh);
 	}
-	unsigned long toIdx(int col, int row) {
-		return ((unsigned long) (col / m_bw) << 32) | (row / m_bh);
+	size_t toIdx(int col, int row) {
+		return ((size_t) (col / m_bw) << 32) | (row / m_bh);
 	}
 	bool hasBlock(int col, int row) {
 		return m_blocks.find(toIdx(col, row)) != m_blocks.end();
@@ -651,8 +651,8 @@ public:
 		m_size = size;
 	}
  	T* freeOldest() {
-		unsigned long t = ULONG_MAX;
-		unsigned long i = 0;
+		size_t t = ULONG_MAX;
+		size_t i = 0;
 		for(auto it = m_times.begin(); it != m_times.end(); ++it) {
 			if(it->second < t) { 
 				t = it->second;
@@ -674,8 +674,8 @@ public:
 		return blk;
 	}
 	T* getBlock(int col, int row) {
-		unsigned long t = ++m_time; // TODO: No provision for rollover
-		unsigned long i = toIdx(col, row);
+		size_t t = ++m_time; // TODO: No provision for rollover
+		size_t i = toIdx(col, row);
 		if(!hasBlock(col, row)) {
 			T *blk = freeOne();
 			if(!blk)
@@ -1212,8 +1212,8 @@ public:
 	/**
 	 * The number of elements in the grid.
 	 */
-	unsigned long size() const {
-		return (unsigned long) (m_cols * m_rows);
+	size_t size() const {
+		return (size_t) (m_cols * m_rows);
 	}
 
 	/**
@@ -1223,7 +1223,7 @@ public:
 		return get(col, row) == m_nodata;
 	}
 
-	bool isNoData(unsigned long idx) {
+	bool isNoData(size_t idx) {
 		return get(idx) == m_nodata;
 	}
 
@@ -1286,11 +1286,11 @@ public:
 	 */
 	T &get(int col, int row) {
 		loadBlock(col, row);
-		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
+		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
 		return m_block[idx];
 	}
 
-	T &get(unsigned long idx) {
+	T &get(size_t idx) {
 		if(idx >= size())
 			_argerr("Index out of bounds.");
 		return get(idx % m_cols, (int) idx / m_cols);
@@ -1299,7 +1299,7 @@ public:
 	/**
 	 * Return the element at the given index.
 	 */
-	T &operator[](unsigned long idx) {
+	T &operator[](size_t idx) {
 		return get(idx);
 	}
 
@@ -1310,12 +1310,12 @@ public:
 		if(!m_writable)
 			_runerr("This raster is not writable.");
 		loadBlock(col, row);
-		unsigned long idx = (unsigned long) (row % m_bh) * m_bw + (col % m_bw);
+		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
 		m_block[idx] = v;
 		m_dirty = true;
 	}
 
-	void set(unsigned long idx, T v) {
+	void set(size_t idx, T v) {
 		if(idx >= size())
 			_argerr("Index out of bounds.");
 		set(idx % m_cols, (int) idx / m_rows, v);
@@ -1346,8 +1346,8 @@ public:
 		return has(toCol(x), toRow(y));
 	}
 
-	bool has(unsigned long idx) const {
-		return idx < (unsigned long) (m_cols * m_rows);
+	bool has(size_t idx) const {
+		return idx < (size_t) (m_cols * m_rows);
 	}
 
 	/**
