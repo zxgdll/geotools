@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <map>
 #include <vector>
+#include <cstring>
 
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
@@ -88,6 +89,12 @@ public:
 	virtual T *grid() =0;
 	
 	/**
+	 * Returns true if this class has a complete, in-memory
+	 * grid that can be manipulated.
+	 */
+	virtual bool hasGrid() const =0;
+
+	/**
 	 * Return a reference to the value held at
 	 * the given index in the grid.
 	 * Not const because the get operation might imply (e.g.)
@@ -121,15 +128,11 @@ public:
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	virtual void readBlock(int col, int row, int cols, int rows, Grid<T> &block) =0;
-
 	virtual void readBlock(int col, int row, Grid<T> &block) =0;
 
 	/**
-	 * Write a part of the given block to the raster.
+	 * Write the given block to the raster.
 	 */
-	virtual void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) =0;
-
 	virtual void writeBlock(int col, int row, Grid<T> &block) =0;
 
 	/**
@@ -143,7 +146,7 @@ public:
 	virtual void readBlock(Grid<T> &block) =0;
 
 	void computeStats() {
-		unsigned int i;
+		size_t i;
 		for(i = 0; i < size(); ++i) {
 			if(!isNoData(i)) {
 				m_min = m_max = get(i);
@@ -374,6 +377,10 @@ public:
 		return m_grid;
 	}
 
+	bool hasGrid() const {
+		return true;
+	}
+
 	/**
 	 * Cast a MemRaster to some other type.
 	 */
@@ -510,43 +517,49 @@ public:
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	void readBlock(int col, int row, int cols, int rows, Grid<T> &block) {
-		for(int r = 0; r < rows; ++r) {
-			for(int c = 0; c < cols; ++c)
-				block.set(c, r, get(c + col, r + row));
-		}
-	}
-
 	void readBlock(int col, int row, Grid<T> &block) {
-		readBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
+		if(&block == this)
+			_argerr("Recursive call to readBlock.");
+		if(block.hasGrid()) {
+			for(int r = 0; r < block.rows(); ++r)
+				std::memcpy(block.grid() + r * block.cols(), m_grid + (row + r) * m_cols + col, block.cols() * sizeof(T));
+		} else {
+			for(int r = 0; r < block.rows(); ++r) {
+				for(int c = 0; c < block.cols(); ++c)
+					block.set(c, r, get(c + col, r + row));
+			}
+		}
 	}
 
 	/**
 	 * Write a part of the given block to the raster.
 	 */
-	void writeBlock(int col, int row, int cols, int rows, Grid<T> &block) {
-		for(int r = 0; r < rows; ++r) {
-			for(int c = 0; c < cols; ++c)
-				set(c + col, r + row, block.get(c, r));
-		}
-	}
-
 	void writeBlock(int col, int row, Grid<T> &block) {
-		writeBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
+		if(&block == this)
+			_argerr("Recursive call to writeBlock.");
+		if(block.hasGrid()) {
+			for(int r = 0; r < block.rows(); ++r)
+				std::memcpy(m_grid + (row + r) * m_cols + col, block.grid() + r * block.cols(), block.cols() * sizeof(T));
+		} else {
+			for(int r = 0; r < block.rows(); ++r) {
+				for(int c = 0; c < block.cols(); ++c)
+					set(c + col, r + row, block.get(c, r));
+			}
+		}
 	}
 
 	/**
 	 * Write the full block to the raster.
 	 */
 	void writeBlock(Grid<T> &block) {
-		writeBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+		writeBlock(0, 0, block);
 	}
 
 	/**
 	 * Read the full block from the raster.
 	 */
 	void readBlock(Grid<T> &block) {
-		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+		readBlock(0, 0, block);
 	}
 
 
@@ -624,7 +637,7 @@ public:
 template <class T>
 class BlockCache {
 private: 
-	int m_size;
+	size_t m_size;
 	int m_bw;
 	int m_bh;
 	GDALRasterBand *m_band;
@@ -633,10 +646,14 @@ private:
 	size_t m_time;
 
 public:
-	BlockCache(GDALRasterBand *band, int size = 5) :
-		m_band(band), 
-		m_size(size),
-		m_time(0) {
+	BlockCache() :
+		m_band(nullptr), 
+		m_size(0),
+		m_time(0),
+		m_bw(0), m_bh(0) {
+	}
+	void setRasterBand(GDALRasterBand *band) {
+		m_band = band;
 		band->GetBlockSize(&m_bw, &m_bh);
 	}
 	size_t toIdx(int col, int row) {
@@ -645,10 +662,13 @@ public:
 	bool hasBlock(int col, int row) {
 		return m_blocks.find(toIdx(col, row)) != m_blocks.end();
 	}
-	void setSize(int size) {
+	void setSize(size_t size) {
 		while(m_blocks.size() > size)
 			freeOne();
 		m_size = size;
+	}
+	size_t getSize() {
+		return m_size;
 	}
  	T* freeOldest() {
 		size_t t = ULONG_MAX;
@@ -680,9 +700,7 @@ public:
 			T *blk = freeOne();
 			if(!blk)
 				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
-			int bcol = (col / m_bw) * m_bw;
-			int brow = (row / m_bh) * m_bh;
-			if(m_band->ReadBlock(bcol, brow, blk) != CE_None)
+			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
 				_runerr("Failed to read block.");
 			m_blocks[i] = blk;
 		}
@@ -690,10 +708,10 @@ public:
 		return m_blocks[i];
 	}
 	~BlockCache() {
-		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
-			if(it->second)
-				free(it->second);
-		}
+		//for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
+		//	if(it->second)
+		//		free(it->second);
+		//}
 	}
 
 };
@@ -716,7 +734,7 @@ private:
 	bool m_inited = false;		// True if the instance is initialized.
 	GDALDataType m_type;		// GDALDataType -- limits the possible template types.
 	std::string m_filename;		// Raster filename
-	BlockCache<T> *m_cache;		// Block cache.
+	BlockCache<T> m_cache;		// Block cache.
 
 	/**
 	 * Loads the block that contains the given row and column.
@@ -732,9 +750,11 @@ private:
 			_argerr("Illegal block column or row.");
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
-			T *blk = m_cache->getBlock(col, row);
-			//if(m_band->ReadBlock(bcol, brow, m_block) != CE_None)
-			//	_runerr("Failed to read block.");
+			T *blk = m_cache.getBlock(col, row);
+			if(!blk)
+				_runerr("Failed to load block from cache.");
+			std::fill_n(m_block, (size_t) m_bw * m_bh, nodata());
+			std::memcpy(m_block, blk, (size_t) m_bw * m_bh);
 			m_currow = brow;
 			m_curcol = bcol;
 		}
@@ -777,6 +797,16 @@ private:
 
 	GDALDataType getType() {
 		return getType((T) 0);
+	}
+
+	T getDefaultNodata() {
+		switch(getType()) {
+		case GDT_Float32:
+		case GDT_Float64:
+			return -9999.0;
+		default:
+			return 0;
+	}
 	}
 
 public:
@@ -898,6 +928,8 @@ public:
 		m_nodata = m_band->GetNoDataValue();
 		m_bcols = m_cols / m_bw;
 		m_brows = m_rows / m_bh;
+		m_cache.setSize(1);
+		m_cache.setRasterBand(m_band);
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
 			_runerr("Failed to allocate memory for raster block.");
@@ -933,11 +965,17 @@ public:
 		m_nodata = m_band->GetNoDataValue();
 		m_bcols = m_cols / m_bw;
 		m_brows = m_rows / m_bh;
-		//m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
+		m_cache.setSize(1);
+		m_cache.setRasterBand(m_band);
+		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
 			_runerr("Failed to allocate memory for raster block.");
 		m_writable = writable;
 		m_inited = true;
+	}
+
+	void setCacheSize(size_t size) {
+		m_cache.setSize(size);
 	}
 
 	std::string filename() const {
@@ -985,76 +1023,57 @@ public:
 	/**
 	 * Return the number of blocks in this raster.
 	 */
-	unsigned int numBlocks() {
-		return (unsigned int) m_bcols * m_brows;
+	size_t numBlocks() {
+		return (size_t) m_bcols * m_brows;
 	}
 
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	void readBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
-		if(&grd == this)
-			_runerr("Recursive call to readBlock.");
-		if(col % m_bw == 0 && row % m_bh == 0 && cols % m_bw == 0 && rows % m_bh == 0) {
-			MemRaster<T> mr(m_bw, m_bh);
-			for(int r = row / m_bh; r < (row + rows) / m_bh; ++r) {
-				for(int c = col / m_bw; c < (col + cols) / m_bw; ++c) {
-					if(m_band->ReadBlock(c, r, mr.grid()) != CE_None)
-						_runerr("Error writing block (1).");
-					grd.writeBlock(0, 0, m_bw, m_bh, mr);
-				}
-			}
-		} else {
-			MemRaster<T> mr(cols, rows);
-			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-				_runerr("Error reading block (2).");
-			grd.writeBlock(0, 0, cols, rows, mr);
-		}
-	}
+	void readBlock(int col, int row, Grid<T> &grd) {
 
-	void readBlock(int col, int row, Grid<T> &block) {
-		readBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
+		int cols = _min(m_cols - col, grd.cols());
+		int rows = _min(m_rows - row, grd.rows());
+		if(cols < 1 || rows < 1)
+			_argerr("Zero read size.");
+
+		MemRaster<T> mr(cols, rows);
+		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+			_runerr("Failed to read from band.");
+		grd.writeBlock(mr);
+
 	}
 
 	/**
 	 * Write a part of the given block to the raster.
 	 */
-	void writeBlock(int col, int row, int cols, int rows, Grid<T> &grd) {
+	void writeBlock(int col, int row, Grid<T> &grd) {
 		if(&grd == this)
 			_runerr("Recursive call to writeBlock.");
-		if(col % m_bw == 0 && row % m_bh == 0 && cols % m_bw == 0 && rows % m_bh == 0) {
-			MemRaster<T> mr(m_bw, m_bh);
-			for(int r = row / m_bh; r < (row + rows) / m_bh; ++r) {
-				for(int c = col / m_bw; c < (col + cols) / m_bw; ++c) {
-					grd.readBlock(c * m_bw, r * m_bh, m_bw, m_bh, mr);
-					if(m_band->WriteBlock(c, r, mr.grid()) != CE_None)
-						_runerr("Error writing block (1).");
-				}
-			}
-		} else {
-			MemRaster<T> mr(cols, rows);
-			grd.readBlock(col, row, cols, rows, mr);
-			if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-				_runerr("Error reading block (2).");
-		}
-	}
 
-	void writeBlock(int col, int row, Grid<T> &block) {
-		writeBlock(col, row, _min(cols() - col, block.cols()), _min(rows() - row, block.rows()), block);
+		int cols = _min(m_cols - col, grd.cols());
+		int rows = _min(m_rows - row, grd.rows());
+		if(cols < 1 || rows < 1)
+			_argerr("Zero read size.");
+
+		MemRaster<T> mr(cols, rows);
+		grd.readBlock(mr);
+		if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+			_runerr("Failed to write to band.");
 	}
 
 	/**
 	 * Write the full block to the raster.
 	 */
 	void writeBlock(Grid<T> &block) {
-		writeBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+		writeBlock(0, 0, block);
 	}
 	
 	/**
 	 * Read the full block from the raster.
 	 */
 	void readBlock(Grid<T> &block) {
-		readBlock(0, 0, _min(block.cols(), cols()), _min(block.rows(), rows()), block);
+		readBlock(0, 0, block);
 	}
 	
 	/**
@@ -1274,6 +1293,10 @@ public:
 		_implerr("grid() Not implemented in Raster.");
 	}
 	
+	bool hasGrid() const {
+		return false;
+	}
+
 	/**
 	 * Returns pixel value at the given coordinate.
 	 */
@@ -1364,8 +1387,6 @@ public:
 
 	~Raster() {
 		flush();
-		if(m_cache)
-			delete m_cache;
 		if(m_ds) // Probably not necessary.
 			GDALClose(m_ds);
 	}

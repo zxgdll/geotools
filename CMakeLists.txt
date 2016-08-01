@@ -13,6 +13,10 @@ add_executable (rasterstats src/rasterstats.cpp)
 target_include_directories (rasterstats PUBLIC include /usr/local/include /usr/include/gdal)
 target_link_libraries (rasterstats gdal)
 
+add_executable (treetops src/treetops.cpp)
+target_include_directories (treetops PUBLIC include /usr/local/include /usr/include/gdal)
+target_link_libraries (treetops gdal)
+
 add_executable (lasgrid src/lasgrid.cpp)
 target_include_directories (lasgrid PUBLIC include /usr/local/include /usr/include/gdal)
 target_link_libraries (lasgrid gdal las laszip boost_system boost_filesystem)
@@ -67,4 +71,5 @@ install (TARGETS lasclip DESTINATION bin)
 install (TARGETS mosaic DESTINATION bin)
 install (TARGETS rasterstats DESTINATION bin)
 install (TARGETS flood DESTINATION bin)
+install (TARGETS treetops DESTINATION bin)
 
