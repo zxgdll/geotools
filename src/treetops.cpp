@@ -52,7 +52,7 @@ bool isMaxCenter(MemRaster<float> &raster, float *max) {
 			}
 		}
 	}
-	return mc == cr && cr == cr;
+	return mc == cr && mr == cr;
 }
 
 /**
