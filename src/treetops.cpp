@@ -9,8 +9,10 @@
 #include <iostream>
 
 #include "Raster.hpp"
-#include "Vector.hpp"
 
+/**
+ * A simple class for maintaining information about a tree top.
+ */
 class Top {
 public:
 	size_t m_id;
@@ -29,17 +31,28 @@ public:
 	}
 };
 
-bool findTop(MemRaster<float> &raster, int window) {
-	float max = raster.get(window / 2, window / 2);
-	if(max == raster.nodata())
+/**
+ * Returns true if the pixel at the center of the given
+ * raster is the maximum value in the raster.
+ */
+bool isMaxCenter(MemRaster<float> &raster, float *max) {
+	int cr = raster.cols() / 2;
+	float nd = raster.nodata();
+	if(raster.get(cr, cr)  == nd)
 		return false;
+	*max = 0;
+	int mc, mr;
 	for(int r = 0; r < raster.rows(); ++r) {
 		for(int c = 0; c < raster.cols(); ++c) {
-			if(c != window / 2 && r != window / 2 && raster.get(c, r) >= max)
-				return false;
+			int v = raster.get(c, r);
+			if(v != nd && v > *max) {
+				*max = v;
+				mc = c;
+				mr = r;
+			}
 		}
 	}
-	return true;
+	return mc == cr && cr == cr;
 }
 
 /**
@@ -61,23 +74,22 @@ bool findTop(MemRaster<float> &raster, int window) {
 	Raster<float> raster(inraster);
 	MemRaster<float> blk(window, window);
 	blk.nodata(raster.nodata());
-
 	std::map<size_t, Top*> tops;
-
-	raster.setCacheSize(window);
+	int offset = window / 2;
+	float max;
 
 	// Run along columns because that's usually the way gdal blocks are oriented.
-	for(int c = 0; c < raster.cols() - window - 1; ++c) {
-		for(int r = 0; r < raster.rows() - window - 1; ++r) {
+	for(int c = 0; c < raster.cols() - window; ++c) {
+		for(int r = 0; r < raster.rows() - window; ++r) {
+			blk.fill(blk.nodata());
 			raster.readBlock(c, r, blk);
-			if(findTop(blk, window)) {
+			if(isMaxCenter(blk, &max)) {
 				size_t id = ((size_t) c << 32) | r;
 				if(tops.find(id) == tops.end()) {
-					int off = window / 2;
 					tops[id] = new Top(id, 
-						raster.toX(c + off) + raster.resolutionX() / 2.0, 
-						raster.toY(r + off) + raster.resolutionY() / 2.0, 
-						blk.get(off, off)
+						raster.toX(c + offset) + raster.resolutionX() / 2.0, // center of pixel
+						raster.toY(r + offset) + raster.resolutionY() / 2.0, 
+						max
 					);
 				}
 			}

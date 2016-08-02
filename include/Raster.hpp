@@ -27,9 +27,8 @@ class Cell {
 public:
 	int col;
 	int row;
-	Cell(int col, int row) {
-		this->col = col;
-		this->row = row;
+	Cell(int col, int row) :
+		col(col), row(row) {
 	}
 };
 
@@ -336,12 +335,11 @@ private:
 	}
 
 public:
-	MemRaster() {
-		m_grid = nullptr;
-		m_cols = -1;
-		m_rows = -1;
-		m_item_dealloc = nullptr;
-		m_nodata = 0; // TODO: Choose a nodata based on type?
+	MemRaster() :
+		m_grid(nullptr),
+		m_cols(-1), m_rows(-1),
+		m_item_dealloc(nullptr),
+		m_nodata(0) {
 	}
 
 	MemRaster(int cols, int rows) : MemRaster() {
@@ -520,6 +518,10 @@ public:
 	void readBlock(int col, int row, Grid<T> &block) {
 		if(&block == this)
 			_argerr("Recursive call to readBlock.");
+		if(col + block.cols() > m_cols)
+			_argerr("Block is wider than the available space.");
+		if(row + block.rows() > m_rows)
+			_argerr("Block is taller than the available space.");
 		if(block.hasGrid()) {
 			for(int r = 0; r < block.rows(); ++r)
 				std::memcpy(block.grid() + r * block.cols(), m_grid + (row + r) * m_cols + col, block.cols() * sizeof(T));
@@ -537,6 +539,10 @@ public:
 	void writeBlock(int col, int row, Grid<T> &block) {
 		if(&block == this)
 			_argerr("Recursive call to writeBlock.");
+		if(col + block.cols() > m_cols)
+			_argerr("Block is wider than the available space.");
+		if(row + block.rows() > m_rows)
+			_argerr("Block is taller than the available space.");
 		if(block.hasGrid()) {
 			for(int r = 0; r < block.rows(); ++r)
 				std::memcpy(m_grid + (row + r) * m_cols + col, block.grid() + r * block.cols(), block.cols() * sizeof(T));
@@ -708,10 +714,10 @@ public:
 		return m_blocks[i];
 	}
 	~BlockCache() {
-		//for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
-		//	if(it->second)
-		//		free(it->second);
-		//}
+		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
+			if(it->second)
+				free(it->second);
+		}
 	}
 
 };
@@ -726,8 +732,8 @@ private:
 	int m_bw, m_bh;			// Block width/height in pixels
 	bool m_writable;		// True if the raster is writable
 	bool m_dirty;			// True if there is a modification that should be flushed.
-	T m_nodata;				// Nodata value.
-	T *m_block;				// Block storage
+	T m_nodata;			// Nodata value.
+	T *m_block;			// Block storage
 	GDALDataset *m_ds;		// GDAL dataset
 	GDALRasterBand *m_band;		// GDAL band
 	double m_trans[6];		// Raster transform
@@ -806,7 +812,7 @@ private:
 			return -9999.0;
 		default:
 			return 0;
-	}
+		}
 	}
 
 public:
