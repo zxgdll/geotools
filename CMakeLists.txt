@@ -1,9 +1,21 @@
 cmake_minimum_required (VERSION 3.1.0)
+
+enable_language(C)
+enable_language(CXX)
+
 set (CMAKE_CXX_STANDARD 11)
+if (${APPLE})
+	set (CMAKE_C_COMPILER /usr/local/bin/gcc-6 CACHE STRING "C compiler" FORCE)
+	set (CMAKE_CXX_COMPILER /usr/local/bin/g++-6 CACHE STRING "C++ compiler" FORCE)
+endif()
+
+find_package(OpenMP)
+set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 
 project (geotools)
 
-link_directories(/usr/local/lib)
+link_directories(/usr/local/lib /usr/lib)
 
 add_executable (flood src/flood.cpp)
 target_include_directories (flood PUBLIC include /usr/local/include /usr/include/gdal)
@@ -48,10 +60,6 @@ target_link_libraries (lasreclass las laszip boost_system boost_filesystem)
 add_executable (lasclip src/lasclip.cpp)
 target_include_directories (lasclip PUBLIC include /usr/include/gdal /usr/local/include)
 target_link_libraries (lasclip gdal las laszip geos boost_system boost_filesystem)
-
-IF (OPENMP_FOUND)
-	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
-ENDIF ()
 
 add_executable (mosaic src/mosaic.cpp)
 target_include_directories (mosaic PUBLIC include /usr/include/gdal /usr/local/include)

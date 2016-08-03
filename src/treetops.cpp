@@ -7,6 +7,7 @@
 
 #include <queue>
 #include <iostream>
+#include <omp.h>
 
 #include "Raster.hpp"
 
@@ -35,16 +36,17 @@ public:
  * Returns true if the pixel at the center of the given
  * raster is the maximum value in the raster.
  */
-bool isMaxCenter(MemRaster<float> &raster, float *max) {
-	int cr = raster.cols() / 2;
+bool isMaxCenter(MemRaster<float> &raster, int col, int row, int window, float *max) {
+	int cc = col + window / 2;
+	int cr = row + window / 2;
 	float nd = raster.nodata();
-	if(raster.get(cr, cr)  == nd)
+	if(raster.get(cc, cr)  == nd)
 		return false;
 	*max = 0;
 	int mc, mr;
-	for(int r = 0; r < raster.rows(); ++r) {
-		for(int c = 0; c < raster.cols(); ++c) {
-			int v = raster.get(c, r);
+	for(int r = row; r < row + window; ++r) {
+		for(int c = col; c < col + window; ++c) {
+			float v = raster.get(c, r);
 			if(v != nd && v > *max) {
 				*max = v;
 				mc = c;
@@ -52,7 +54,7 @@ bool isMaxCenter(MemRaster<float> &raster, float *max) {
 			}
 		}
 	}
-	return mc == cr && mr == cr;
+	return mc == cc && mr == cr;
 }
 
 /**
@@ -71,30 +73,58 @@ bool isMaxCenter(MemRaster<float> &raster, float *max) {
 	}
 
 	// Input raster.
-	Raster<float> raster(inraster);
-	MemRaster<float> blk(window, window);
-	blk.nodata(raster.nodata());
 	std::map<size_t, Top*> tops;
-	int offset = window / 2;
-	float max;
 
-	// Run along columns because that's usually the way gdal blocks are oriented.
-	for(int c = 0; c < raster.cols() - window; ++c) {
-		for(int r = 0; r < raster.rows() - window; ++r) {
-			blk.fill(blk.nodata());
-			raster.readBlock(c, r, blk);
-			if(isMaxCenter(blk, &max)) {
-				size_t id = ((size_t) c << 32) | r;
-				if(tops.find(id) == tops.end()) {
-					tops[id] = new Top(id, 
-						raster.toX(c + offset) + raster.resolutionX() / 2.0, // center of pixel
-						raster.toY(r + offset) + raster.resolutionY() / 2.0, 
-						max
-					);
+	Raster<float> raster(inraster);
+	size_t n = 0;
+	size_t count = raster.size();
+	int cols = raster.cols();
+	int rows = raster.rows();
+	int offset = window / 2;
+	int row = 0;
+
+	#pragma omp parallel
+	{
+		_trace("Thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
+		MemRaster<float> blk(cols, window);
+		float max;
+		std::map<size_t, Top*> tops0;
+	
+		while(row < rows) {
+			for(int r = row; r < _min(row + window, rows - window); ++r) { 
+				blk.nodata(raster.nodata());
+				#pragma omp critical
+				{
+					raster.readBlock(0, r, blk);
+				}
+				for(int c = 0; c < cols - window; ++c) {
+					size_t id = ((size_t) c << 32) | r;
+					if(isMaxCenter(blk, c, 0, window, &max)) {
+						Top *t = new Top(id, 
+							raster.toX(c + offset) + raster.resolutionX() / 2.0, // center of pixel
+							raster.toY(r + offset) + raster.resolutionY() / 2.0, 
+							max
+						);
+						tops0[id] = t;
+					}
 				}
 			}
+
+			#pragma omp atomic
+			row += window;
+
+			_status(row, rows);
+		}
+
+		_trace("Copying tops to output dict.");
+		#pragma omp critical
+		{
+			for(auto it = tops0.begin(); it != tops0.end(); ++it) 
+				tops[it->first] = it->second;
 		}
 	}
+
+	_status(rows, rows, true);
 
 	std::stringstream out;
 	out << std::setprecision(12);
@@ -123,7 +153,7 @@ int main(int argc, char **argv) {
 		std::string inraster; // Input raster.
 		std::string topshp;   // Treetops output.
 		int window = 0;
-
+		
 		int i = 1;
 		for(; i < argc; ++i) {
 			std::string arg = argv[i];
@@ -133,6 +163,8 @@ int main(int argc, char **argv) {
 				topshp = argv[++i];
 			} else if(arg == "-w") {
 				window = atoi(argv[++i]);
+			} else if(arg == "-v") {
+				_loglevel(LOG_TRACE);
 			}
 		}
 
