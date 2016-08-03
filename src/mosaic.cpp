@@ -103,43 +103,43 @@ namespace mosaic {
 		
 		if(distance <= 0.0)
 			throw "Invalid distance.";
-
 		if(outfile.size() == 0)
 			throw "No output file given.";
-
 		if(files.size() < 2)
 			throw "Less than 2 files. Nothing to do.";
 
 		using namespace mosaic::util;
 
 		// Copy the background file to the destination.
-		std::cout << "Copying background file." << std::endl;
+		_trace("Copying background file.");
 		Util::copyfile(files[0], outfile);
 
 		// Open the destination file to modify it.
-		Raster<float> output(outfile);
+		Raster<float> output(outfile, 1, true);
 
 		// Iterate over the files, adding each one to the background.
 		for(unsigned int i = 1; i < files.size(); ++i) {
 
-			std::cout << "Processing file: " << files[i] << std::endl;
-
+			_trace("Processing file: " << files[i]);
 			Raster<float> input(files[i]);
 			if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
-				throw "Raster's resolution does not match the background.";
+				_argerr("Raster's resolution does not match the background.");
+
+			bool posYRes = input.resolutionY() > 0;
 
 			// Get the origin of the input w/r/t the output.
 			int col = output.toCol(input.minx());
-			int row = output.toRow(input.miny());
-			int cols = _abs(output.toCol(input.maxx()) - col);
-			int rows = _abs(output.toRow(input.maxy()) - row);
+			int row = output.toRow(posYRes ? input.miny() : input.maxy());
+			int cols = output.toCol(input.maxx()) - col;
+			int rows = output.toRow(posYRes ? input.maxy() : input.miny()) - row;
 
 			float imNodata = input.nodata();
 			float outNodata = output.nodata();
 
 			// TODO: Configurable row height.
 			int rowHeight = 500 > rows ? rows : 500;
-			int rowOffset = (int) _abs(distance / input.resolutionY()) + 1;
+			float res = (_abs(input.resolutionX()) + _abs(input.resolutionY())) / 2.0;
+			int rowOffset = (int) _abs(distance / res) + 1;
 			int bufRows = rowHeight + rowOffset * 2;
 
 			// Move the window down by rowHeight and one rowOffset *not* two.
@@ -187,12 +187,12 @@ namespace mosaic {
 				// Load the overlay.
 				#pragma omp critical
 				{
-					imGrid.readBlock(0, bufRow0, imGrid);
+					input.readBlock(0, bufRow0, imGrid);
 				}
 
 				std::cout << "Feathering" << std::endl;
 				// Feather the overlay
-				feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, _abs(input.resolutionX()));
+				feather(imGrid, alphaGrid, cols, bufRows0, distance, imNodata, _abs(input.resolutionX()));
 
 				// Read background data.
 				#pragma omp critical 
