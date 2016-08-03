@@ -41,9 +41,9 @@ void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<
 	if(mappings.size() == 0)
 		throw "At least one mapping is required.";
 
-	_log("Mappings:");
+	_trace("Mappings:");
 	for(std::map<int, int>::iterator it = mappings.begin(); it != mappings.end(); ++it)
-		_log(" " << it->first << " > " << it->second);
+		_trace(" " << it->first << " > " << it->second);
 
 	if(outfile.size() == 0) 
 		throw "An output directory (-o) is required.";
@@ -60,7 +60,7 @@ void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<
 		std::string base = path.substr(path.find_last_of("/") + 1);
 		std::string newpath = outfile + "/" + base;
 		
-		_log("Saving " << path << " to " << newpath);
+		_trace("Saving " << path << " to " << newpath);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -107,7 +107,7 @@ public:
 
 	void initialize(const std::string &filename, las::Header &h) {
 		std::string file = filename + "_" + std::to_string(id) + ".las";
-		_log("Seg initialized as " << file);
+		_trace("Seg initialized as " << file);
 		out.open(file.c_str(), std::ios::out | std::ios::binary);
 		header = new las::Header(h);
 		writer = new las::Writer(out, *header);
@@ -151,19 +151,19 @@ public:
 		return ((start - seg->end) < 1.0 && start > seg->end) || ((seg->start - end) < 1.0 && seg->start > end);
 	}
 	bool insert(Seg *seg) {
-		_log("Insert: " << seg->id << ": " << seg->start << " > " << seg->end);
+		_trace("Insert: " << seg->id << ": " << seg->start << " > " << seg->end);
 		if(seg->id == id) {
-			_log("> same seg.");
+			_trace("> same seg.");
 			return false;
 		} else if(intersects(seg) || near(seg)) {
-			_log("> " << id << " joins " << seg->id);
+			_trace("> " << id << " joins " << seg->id);
 			start = _min(start, seg->start);
 			end = _max(end, seg->end);
 		} else {
-			_log("> " << id << " no relationship " << seg->id);
+			_trace("> " << id << " no relationship " << seg->id);
 			return false;
 		}
-		_log("New span: " << id << ": " << start << " > ");
+		_trace("New span: " << id << ": " << start << " > ");
 		return true;
 	}
 };
@@ -190,10 +190,10 @@ void normalizeFlightLines(std::vector<Seg*> &flightLines) {
 	}
 	flightLines.resize(0);
 	flightLines.assign(output.begin(), output.end());
-	_log(flightLines.size() << " remaining of " << count);
+	_trace(flightLines.size() << " remaining of " << count);
 	std::sort(flightLines.begin(), flightLines.end(), segsort);
 	for(Seg *seg:flightLines)
-		_log(" -- " << seg->id << ": " << seg->start << " > " << seg->end);
+		_trace(" -- " << seg->id << ": " << seg->start << " > " << seg->end);
 }
 
 // TODO: Replace with interval tree.
@@ -202,7 +202,7 @@ int findFlightLine(std::vector<Seg*> &flightLines, double time) {
 		if(time >= seg->start && time <= seg->end)
 			return seg->id;
 	}
-	_log("Seg for time not found: " << time);
+	_trace("Seg for time not found: " << time);
 	return 0;
 }
 
@@ -229,7 +229,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 	for(unsigned int i = 0; i < files.size(); ++i) {
 		std::string path = files[i];
 
-		_log("Checking " << path);
+		_trace("Checking " << path);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -246,7 +246,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 				double gap = time - endTime;
 				if(gap < 0.0 || gap > timeGap) { // One what?
 					flightLines.push_back(new Seg(startTime, endTime));
-					_log("Time gap. Flightline: " << gap << "; " << startTime << " > " << endTime);
+					_trace("Time gap. Flightline: " << gap << "; " << startTime << " > " << endTime);
 					startTime = time;
 				}
 				endTime = time;
@@ -255,7 +255,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 
 		if(endTime != startTime) { // TODO: What is the time scale?)
 			flightLines.push_back(new Seg(startTime, endTime));
-			_log("Time gap. Flightline: " << startTime << " > " << endTime);
+			_trace("Time gap. Flightline: " << startTime << " > " << endTime);
 		}
   		in.close();
   	}
@@ -270,7 +270,7 @@ void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, d
 
 		std::string path = files[i];
 		
-		_log("Processing " << path);
+		_trace("Processing " << path);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -342,7 +342,7 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 		std::string base = path.substr(path.find_last_of("/") + 1);
 		std::string newpath = outfile + "/" + base;
 		
-		_log("Saving " << path << " to " << newpath);
+		_trace("Saving " << path << " to " << newpath);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -359,7 +359,7 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 		double lastTime = 0.0;
 
 		while(r.ReadNextPoint()) {
-			//_log("Q0: " << pq0.size() << "; Q1: " << pq1.size());
+			//_trace("Q0: " << pq0.size() << "; Q1: " << pq1.size());
 			las::Point pt = r.GetPoint();
 			//_print("time " << pt.GetTime());
 			double t = pt.GetTime();
@@ -380,11 +380,11 @@ void recoverEdges(std::vector<std::string> &files, std::string &outfile) {
 			if(pq1.size() == limit) {
 				computeDirection(pq0, &dir0);
 				computeDirection(pq1, &dir1);
-				//_log("Dirs: " << dir0 << ", " << dir1);
+				//_trace("Dirs: " << dir0 << ", " << dir1);
 				if(std::abs(std::abs(dir0) - std::abs(dir1)) > PI * 0.75) {
 					dumpQueue(pq0, w, 31);
 					dumpQueue(pq1, w, 31);
-					//_log("Flip " << dir0 << "," << dir1 << ": " << (int) pq1.front()->GetClassification().GetClass());
+					//_trace("Flip " << dir0 << "," << dir1 << ": " << (int) pq1.front()->GetClassification().GetClass());
 				} else {
 					w.WritePoint(pq1.front());
 					pq1.pop_front();
@@ -418,7 +418,7 @@ void recoverEdgesWEdgeMarker(std::vector<std::string> &files, std::string &outfi
 		std::string base = path.substr(path.find_last_of("/") + 1);
 		std::string newpath = outfile + "/" + base;
 		
-		_log("Saving " << path << " to " << newpath);
+		_trace("Saving " << path << " to " << newpath);
 		
 		std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -433,7 +433,7 @@ void recoverEdgesWEdgeMarker(std::vector<std::string> &files, std::string &outfi
 		int limit = 20;
 
 		while(r.ReadNextPoint()) {
-			//_log("Q0: " << pq0.size() << "; Q1: " << pq1.size());
+			//_trace("Q0: " << pq0.size() << "; Q1: " << pq1.size());
 			las::Point pt = r.GetPoint();
 			//_print("time " << pt.GetTime());
 			pq0.push_back(pt);

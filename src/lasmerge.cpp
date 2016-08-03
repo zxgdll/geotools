@@ -22,16 +22,16 @@
 namespace las = liblas;
 
 void usage() {
-	_print("Usage: lasmerge [options] srcfiles*\n"
+	std::cerr << "Usage: lasmerge [options] srcfiles*\n"
 		<< " -o                              Speficy an output file.\n"
 		<< " -v                              Verbose output.\n"
 		<< " --maxx, --maxy, --minx, --miny  Specify the bounds of the data set.\n"
-		<< "                                 Any combination of these can be used.");
+		<< "                                 Any combination of these can be used.\n";
 }
 
 void merge(std::vector<std::string> &files, std::string &outfile, double minx, double miny, double maxx, double maxy) {
 
-	_log("Processing " << files.size() << " files.");
+	_trace("Processing " << files.size() << " files.");
 
 	if(outfile.empty())
 		_argerr("An output file (-o) is required.");
@@ -53,7 +53,7 @@ void merge(std::vector<std::string> &files, std::string &outfile, double minx, d
 
 	for(unsigned int i = 0; i < files.size(); ++i) {
 
-		_log("Checking file " << files[i]);
+		_trace("Checking file " << files[i]);
 
 		std::ifstream in(files[i], std::ios::in | std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
@@ -109,11 +109,11 @@ void merge(std::vector<std::string> &files, std::string &outfile, double minx, d
 	las::WriterFactory wf;
 	las::Writer w(out, *dsth);
 
-	_log("Using points from " << indices.size() << " files.");
+	_trace("Using points from " << indices.size() << " files.");
 
 	for(unsigned int i = 0; i < indices.size(); ++i) {
 
-		_log("Processing file " << files[indices[i]]);
+		_trace("Processing file " << files[indices[i]]);
 
 		std::string filename = files[indices[i]];
 		std::ifstream in(filename, std::ios::in | std::ios::binary);
@@ -165,7 +165,7 @@ int main(int argc, char ** argv) {
 	try {
 		merge(files, outfile, minx, miny, maxx, maxy);
 	} catch(const std::exception &e) {
-		_print(e.what());
+		std::cerr << e.what() << std::endl;
 		usage();
 		return 1;
 	}
