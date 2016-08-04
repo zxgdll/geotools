@@ -331,13 +331,13 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	// Welford's method for variance.
 	switch(type) {
 	case TYPE_MEAN:
-		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+		for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 			if(counts[i] > 0)
 				grid1.set(i, grid1.get(i) / counts.get(i));
 		}
 		break;
 	case TYPE_PVARIANCE:
-		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+		for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 			if(counts[i] > 1) {
 				double m = 0;
 				double s = 0;
@@ -356,7 +356,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		}
 		break;
 	case TYPE_VARIANCE:
-		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+		for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 			if(counts[i] > 1) {
 				double m = 0;
 				double s = 0;
@@ -375,7 +375,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		}
 		break;
 	case TYPE_PSTDDEV:
-		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+		for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 			if(counts[i] > 1) {
 				double m = 0;
 				double s = 0;
@@ -394,7 +394,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		}
 		break;
 	case TYPE_STDDEV:
-		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+		for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 			if(counts[i] > 1) {
 				double m = 0;
 				double s = 0;
@@ -415,9 +415,10 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	case TYPE_DENSITY:
 		{
 			double r2 = _sq(resolution);
-			for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+			for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 				if(counts[i] > 0) {
-					grid1.set(i, counts[i] / r2);
+					grid1.set(i, (double) counts[i] / r2);
+					_trace("res: " << r2 << ", " << counts[i] << ", " << i << ": " << (double) counts[i] / r2 << ": " << grid1.get(i));
 				} else {
 					grid1.set(i, 0.0);
 				}
@@ -425,7 +426,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		}
 		break;
 	case TYPE_MEDIAN:
-		for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+		for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 			if(counts[i] > 0) {
 				std::sort(qGrid[i]->begin(), qGrid[i]->end());
 				int size = qGrid[i]->size();
@@ -441,6 +442,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	}
 
 	if(type == TYPE_COUNT) {
+		// TODO: Determine resolution sign properly.
 		Raster<int> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
 					resolution, -resolution, -1, crs);
 		rast.writeBlock(counts);
@@ -448,7 +450,8 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 		Raster<float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
 					resolution, -resolution, -9999.0, crs);
 		// Cast the double grid to float for writing.
-		MemRaster<float> tmp = (MemRaster<float>) grid1;
+		MemRaster<float> tmp;
+		grid1.convert(tmp);
 		tmp.nodata(rast.nodata());
 		if(fill)
 			tmp.voidFillIDW(resolution);
@@ -492,7 +495,7 @@ int main(int argc, char **argv) {
 			} else if(s == "-d") {
 				radius = atof(argv[++i]);
 			} else if(s == "-v") {
-				_loglevel(1);
+				_loglevel(LOG_TRACE);
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
 			} else if(s == "-b") {
