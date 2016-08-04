@@ -98,8 +98,6 @@ public:
 			bounds[1] = floor(bounds[1] / res) * res;
 			bounds[2] = (floor(bounds[2] / res) + 1.0) * res;
 			bounds[3] = (floor(bounds[3] / res) + 1.0) * res;
-			//if(bounds[0] == bounds[2]) bounds[2] += res;
-			//if(bounds[1] == bounds[3]) bounds[3] += res;
 		}
 		if(dims == 3) {
 			bounds[4] = floor(bounds[4] / res) * res;

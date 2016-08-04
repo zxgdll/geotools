@@ -179,7 +179,7 @@ public:
 		m_stats = true;
 		_trace("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min 
 			<< "; Max: " << m_max << "; Mean: " << m_mean 
-			<< "; Variance: " << m_variance << "; Std Dev: " << m_stddev << std::endl);
+			<< "; Variance: " << m_variance << "; Std Dev: " << m_stddev);
 	}
 
 	T max() {
@@ -1445,18 +1445,12 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 				double a = 0.0;
 				double b = 0.0;
 				int cnt = 0;
-				//std::list<std::pair<T, double> > values;
-				//_log(rad << ", " << _min(cols(), rows()));
 
 				for(int r0 = _max(0, r - rad); r0 < _min(rows(), r + rad + 1); ++r0) {
 					for(int c0 = _max(0, c - rad); c0 < _min(cols(), c + rad + 1); ++c0) {
-
 						double d0 = _sq((double) c0 - c) + _sq((double) r0 - r);
-						//_log(d0 << ", " << d << ", " << get(c0, r0));
-
 						if(d0 <= d && get(c0, r0) != nodata()) {
 							double dp = 1.0 / std::pow(d0, exp);
-							//values.push_back(std::pair<T, double>(get(c0, r0), d0));
 							a += dp * get(c0, r0);
 							b += dp;
 							++cnt;
