@@ -53,7 +53,7 @@ namespace mosaic {
 			// Fill grid is used to keep track of where the edges are as they're "snowed in"
 			// Starts out as a mask of non-nodata pixels from the source.
 			MemRaster<char> fillGrid(cols, rows);
-			for(unsigned long i = 0; i < (unsigned long) rows * cols; ++i)
+			for(size_t i = 0; i < (size_t) rows * cols; ++i)
 				fillGrid.set(i, srcGrid[i] == nodata ? 0 : 1);
 			// The number of steps is just the number of pixels needed to 
 			// cover the distance of the fade.
@@ -73,7 +73,7 @@ namespace mosaic {
 					}
 				}
 				// Reset dirty edges to 0
-				for(int i = 0; i < rows * cols; ++i) 
+				for(size_t i = 0; i < (size_t) rows * cols; ++i) 
 					if(fillGrid[i] == 2) fillGrid.set(i, 0);
 				++step;
 			} while(found);
@@ -83,7 +83,7 @@ namespace mosaic {
 		 * Blends two rasters together using the alpha grid for blending.
 		 */
 		void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, int cols, int rows, float imNodata, float bgNodata) {
-			for(unsigned long i = 0; i < (unsigned long) cols * rows; ++i) {
+			for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 				if(!(bgGrid[i] == bgNodata || imgGrid[i] == imNodata))
 					bgGrid.set(i, bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i]);
 			}
@@ -99,23 +99,23 @@ namespace mosaic {
 	* used, the existing overviews may obscure the fact that the image has changed (when zoomed out.)
 	 */
 	 // TODO: Background must be larger than other files. Remedy this.
-	void mosaic(std::vector<std::string> &files, std::string &outfile, float distance) {
+	void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, int rowHeight = 500) {
 		
 		if(distance <= 0.0)
-			throw "Invalid distance.";
+			_argerr("Invalid distance: " << distance);
 		if(outfile.size() == 0)
-			throw "No output file given.";
+			_argerr("No output file given.");
 		if(files.size() < 2)
-			throw "Less than 2 files. Nothing to do.";
+			_argerr("Less than 2 files. Nothing to do.");
 
 		using namespace mosaic::util;
 
-		// Copy the background file to the destination.
-		_trace("Copying background file.");
-		Util::copyfile(files[0], outfile);
+		// Open the BG file for reading only.
+		Raster<float> base(files[0]);
 
-		// Open the destination file to modify it.
-		Raster<float> output(outfile, 1, true);
+		// Create the destination file to modify it.
+		Raster<float> output(outfile, base);
+		output.writeBlock(base);
 
 		// Iterate over the files, adding each one to the background.
 		for(unsigned int i = 1; i < files.size(); ++i) {
@@ -125,24 +125,31 @@ namespace mosaic {
 			if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
 				_argerr("Raster's resolution does not match the background.");
 
+			// Determine if the vertical and horizontal resolution are positive.
 			bool posYRes = input.resolutionY() > 0;
+			bool posXRes = input.resolutionX() > 0;
 
-			// Get the origin of the input w/r/t the output.
-			int col = output.toCol(input.minx());
-			int row = output.toRow(posYRes ? input.miny() : input.maxy());
-			int cols = output.toCol(input.maxx()) - col;
-			int rows = output.toRow(posYRes ? input.maxy() : input.miny()) - row;
+			// Get the origin of the input w/r/t the output and the number of overlapping cols, rows.
+			double maxx = _min(input.maxx(), output.maxx());
+			double minx = _max(input.minx(), output.minx());
+			double maxy = _min(input.maxy(), output.maxy());
+			double miny = _max(input.miny(), output.miny());
+			int col = output.toCol(posXRes ? minx : maxx);
+			int row = output.toRow(posYRes ? miny : maxy);
+			int cols = output.toCol(posXRes ? maxx : minx) - col;
+			int rows = output.toRow(posYRes ? maxy : miny) - row;
 
 			float imNodata = input.nodata();
 			float outNodata = output.nodata();
 
-			// TODO: Configurable row height.
-			int rowHeight = 500 > rows ? rows : 500;
+			// Compute the average resolution between x and y.
 			float res = (_abs(input.resolutionX()) + _abs(input.resolutionY())) / 2.0;
-			int rowOffset = (int) _abs(distance / res) + 1;
+			// The number of rows required to accomodate the fade distance.
+			int rowOffset = (int) distance / res + 1;
+			// The height, in rows, of the buffer.
 			int bufRows = rowHeight + rowOffset * 2;
 
-			// Move the window down by rowHeight and one rowOffset *not* two.
+			// Move the window down by rowHeight and one rowOffset *not* two for each iteration.
 			#pragma omp parallel for
 			for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) {
 
@@ -167,13 +174,6 @@ namespace mosaic {
 					rowOffset0 = 0;
 				}
 
-				// If the height of the row has changed, reinit the grids.
-				if(bufRows0 < bufRows) {
-					imGrid.init(cols, bufRows0);
-					outGrid.init(cols, bufRows0);
-					alphaGrid.init(cols, bufRows0);
-				}
-
 				// The last row might have to be smaller.
 				if(bufRow0 + bufRows0 > rows) {
 					bufRows0 = rows - bufRow0;
@@ -183,6 +183,13 @@ namespace mosaic {
 				// Could happen with multiple threads.
 				if(rowHeight0 < 1)
 					continue;
+
+				// If the height of the row has changed, reinit the grids.
+				if(bufRows0 < bufRows) {
+					imGrid.init(cols, bufRows0);
+					outGrid.init(cols, bufRows0);
+					alphaGrid.init(cols, bufRows0);
+				}
 
 				// Load the overlay.
 				#pragma omp critical
@@ -197,7 +204,7 @@ namespace mosaic {
 				// Read background data.
 				#pragma omp critical 
 				{
-					output.readBlock(col, row + bufRow0, outGrid);
+					base.readBlock(col, row + bufRow0, outGrid);
 				}
 
 				std::cout << "Blending" << std::endl;
@@ -208,7 +215,7 @@ namespace mosaic {
 				// We are extracting a slice out of the buffer, not writing the whole thing.
 				#pragma omp critical 
 				{
-					output.writeBlock(col, row + bufRow0 + rowOffset0, outGrid);
+					output.writeBlock(col, row + bufRow0 + rowOffset0, outGrid, 0, rowOffset0);
 				}
 
 			}
@@ -246,8 +253,8 @@ int main(int argc, char **argv) {
 
  		mosaic::mosaic(files, outfile, distance);
 
- 	} catch(const char *e) {
- 		std::cerr << e << std::endl;
+ 	} catch(const std::exception &e) {
+ 		std::cerr << e.what() << std::endl;
  		usage();
  		return 1;
  	}

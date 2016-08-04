@@ -127,12 +127,12 @@ public:
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	virtual void readBlock(int col, int row, Grid<T> &block) =0;
+	virtual void readBlock(int col, int row, Grid<T> &block, int srcCol = 0, int srcRow = 0) =0;
 
 	/**
 	 * Write the given block to the raster.
 	 */
-	virtual void writeBlock(int col, int row, Grid<T> &block) =0;
+	virtual void writeBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0) =0;
 
 	/**
 	 * Write the full block to the raster.
@@ -515,20 +515,25 @@ public:
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	void readBlock(int col, int row, Grid<T> &block) {
+	void readBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0) {
 		if(&block == this)
 			_argerr("Recursive call to readBlock.");
-		if(col + block.cols() > m_cols)
+		if(col + block.cols() - dstRow > m_cols)
 			_argerr("Block is wider than the available space.");
-		if(row + block.rows() > m_rows)
+		if(row + block.rows() - dstCol > m_rows)
 			_argerr("Block is taller than the available space.");
 		if(block.hasGrid()) {
-			for(int r = 0; r < block.rows(); ++r)
-				std::memcpy(block.grid() + r * block.cols(), m_grid + (row + r) * m_cols + col, block.cols() * sizeof(T));
+			for(int r = 0; r < block.rows() - dstRow; ++r) {
+				std::memcpy(
+					block.grid() + (r + dstRow) * block.cols() + dstCol, 
+					m_grid + (row + r) * m_cols + col, 
+					(block.cols() - dstCol) * sizeof(T)
+				);
+			}
 		} else {
-			for(int r = 0; r < block.rows(); ++r) {
-				for(int c = 0; c < block.cols(); ++c)
-					block.set(c, r, get(c + col, r + row));
+			for(int r = 0; r < block.rows() - dstRow; ++r) {
+				for(int c = 0; c < block.cols() - dstCol; ++c)
+					block.set(c + dstCol, r + dstRow, get(c + col, r + row));
 			}
 		}
 	}
@@ -536,20 +541,25 @@ public:
 	/**
 	 * Write a part of the given block to the raster.
 	 */
-	void writeBlock(int col, int row, Grid<T> &block) {
+	void writeBlock(int col, int row, Grid<T> &block, int srcCol = 0, int srcRow = 0) {
 		if(&block == this)
 			_argerr("Recursive call to writeBlock.");
-		if(col + block.cols() > m_cols)
+		if(col + block.cols() - srcCol > m_cols)
 			_argerr("Block is wider than the available space.");
-		if(row + block.rows() > m_rows)
+		if(row + block.rows() - srcRow > m_rows)
 			_argerr("Block is taller than the available space.");
 		if(block.hasGrid()) {
-			for(int r = 0; r < block.rows(); ++r)
-				std::memcpy(m_grid + (row + r) * m_cols + col, block.grid() + r * block.cols(), block.cols() * sizeof(T));
-		} else {
 			for(int r = 0; r < block.rows(); ++r) {
-				for(int c = 0; c < block.cols(); ++c)
-					set(c + col, r + row, block.get(c, r));
+				std::memcpy(
+					m_grid + (row + r) * m_cols + col, 
+					block.grid() + (r + srcRow) * block.cols() + srcCol, 
+					(block.cols() - srcRow) * sizeof(T)	
+				);
+			}
+		} else {
+			for(int r = 0; r < block.rows() - srcRow; ++r) {
+				for(int c = 0; c < block.cols() - srcCol; ++c)
+					set(c + col, r + row, block.get(c + srcCol, r + srcRow));
 			}
 		}
 	}
@@ -1036,34 +1046,34 @@ public:
 	/**
 	 * Load the contents of a single block into the given Grid instance.
 	 */
-	void readBlock(int col, int row, Grid<T> &grd) {
+	void readBlock(int col, int row, Grid<T> &grd, int dstCol = 0, int dstRow = 0) {
 
-		int cols = _min(m_cols - col, grd.cols());
-		int rows = _min(m_rows - row, grd.rows());
+		int cols = _min(m_cols - col, grd.cols() - dstCol);
+		int rows = _min(m_rows - row, grd.rows() - dstRow);
 		if(cols < 1 || rows < 1)
 			_argerr("Zero read size.");
 
 		MemRaster<T> mr(cols, rows);
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
 			_runerr("Failed to read from band.");
-		grd.writeBlock(mr);
+		grd.writeBlock(dstCol, dstRow, mr);
 
 	}
 
 	/**
 	 * Write a part of the given block to the raster.
 	 */
-	void writeBlock(int col, int row, Grid<T> &grd) {
+	void writeBlock(int col, int row, Grid<T> &grd, int srcCol = 0, int srcRow = 0) {
 		if(&grd == this)
 			_runerr("Recursive call to writeBlock.");
 
-		int cols = _min(m_cols - col, grd.cols());
-		int rows = _min(m_rows - row, grd.rows());
+		int cols = _min(m_cols - col, grd.cols() - srcCol);
+		int rows = _min(m_rows - row, grd.rows() - srcRow);
 		if(cols < 1 || rows < 1)
-			_argerr("Zero read size.");
+			_argerr("Zero write size.");
 
 		MemRaster<T> mr(cols, rows);
-		grd.readBlock(mr);
+		grd.readBlock(srcCol, srcRow, mr);
 		if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
 			_runerr("Failed to write to band.");
 	}

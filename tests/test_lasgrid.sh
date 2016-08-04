@@ -2,7 +2,7 @@
 
 # Tests for lasgrid.
 
-txt2las -a_srs epsg:2956 -i stats_coords.txt -o /tmp/stats_coords.las
+txt2las -a_srs epsg:2956 -i data/stats_coords.txt -o /tmp/stats_coords.las
 
 echo "Min"
 lasgrid -v -o /tmp/lasgrid_min.tif -t min -r 1 -d -1 -s 2956 /tmp/stats_coords.las

@@ -112,7 +112,8 @@ void usage() {
 		<< "                             For example, if the cell size is 2, the circumcircle's radius is sqrt(2) (~1.41).\n"
 		<< " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size.\n"
 		<< " -f                          Fill voids.\n"
-		<< " -v                          Verbose output.\n";
+		<< " -v                          Verbose output.\n"
+		<< " --angle-limit               Points located outside of this angle (devation from nadir) are excluded.\n";
 }
 
 void vector_dealloc(std::vector<double> *item) {
@@ -162,7 +163,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	_trace("Type: " << type);
 
 	if(classes.size() == 0) {
-		_trace("WARNING: No classes given. Matching all classes.");
+		_warn("No classes given. Matching all classes.");
 	} else {
 		_trace("Classes: " << classes.size());
 	}
@@ -193,7 +194,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 
 		_trace("Checking file " << files[i]);
 
-		std::ifstream in(files[i].c_str());
+		std::ifstream in(files[i].c_str(), std::ios::in|std::ios::binary);
 		las::Reader r = rf.CreateWithStream(in);
 		las::Header h = r.GetHeader();
 		std::vector<double> bounds0 = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
@@ -223,7 +224,7 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 	if(radius == -1.0)
 		radius = sqrt(_sq(resolution / 2.0) * 2.0);
 
-	_trace("Raster size: " << cols << ", " << rows << "\nCell radius: " << radius);
+	_trace("Raster size: " << cols << ", " << rows << "; Cell radius: " << radius);
 	
 	// For types other than count, we need a double grid to manage sums.
 	if(type != TYPE_COUNT) {
@@ -459,58 +460,55 @@ void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int
 
 int main(int argc, char **argv) {
 
-	std::string dstFile;
-	int crs = 0;
-	int type = TYPE_MEAN;
-	int att = ATT_HEIGHT;
-	bool fill = false;
-	double resolution = 2.0;
-	double radius = -1.0;
-	unsigned char angleLimit = 100;
-	std::vector<double> bounds;
-	std::set<int> classes;
-	std::vector<std::string> files;
-
-	for(int i = 1; i < argc; ++i) {
-		std::string s(argv[i]);
-		if(s == "-o") {
-			dstFile = argv[++i];
-		} else if(s == "-s") {
-			crs = atoi(argv[++i]);
-		} else if(s == "-f") {
-			fill = true;
-		} else if(s == "-t") {
-			type = parseType(argv[++i]);
-		} else if(s == "-r") {
-			resolution = atof(argv[++i]);
-		} else if(s == "-c") {
-			Util::intSplit(classes, argv[++i]);
-		} else if(s == "-a") {
-			att = parseAtt(argv[++i]);
-		} else if(s == "-d") {
-			radius = atof(argv[++i]);
-		} else if(s == "-v") {
-			_loglevel(1);
-		} else if(s == "--angle-limit") {
-			angleLimit = (unsigned char) atoi(argv[++i]);
-		} else if(s == "-b") {
-			bounds.push_back(atof(argv[++i]));
-			bounds.push_back(atof(argv[++i]));
-			bounds.push_back(atof(argv[++i]));
-			bounds.push_back(atof(argv[++i]));
-		} else {
-			files.push_back(argv[i]);
-		}
-	}
-
 	try {
+		std::string dstFile;
+		int crs = 0;
+		int type = TYPE_MEAN;
+		int att = ATT_HEIGHT;
+		bool fill = false;
+		double resolution = 2.0;
+		double radius = -1.0;
+		unsigned char angleLimit = 100;
+		std::vector<double> bounds;
+		std::set<int> classes;
+		std::vector<std::string> files;
+
+		for(int i = 1; i < argc; ++i) {
+			std::string s(argv[i]);
+			if(s == "-o") {
+				dstFile = argv[++i];
+			} else if(s == "-s") {
+				crs = atoi(argv[++i]);
+			} else if(s == "-f") {
+				fill = true;
+			} else if(s == "-t") {
+				type = parseType(argv[++i]);
+			} else if(s == "-r") {
+				resolution = atof(argv[++i]);
+			} else if(s == "-c") {
+				Util::intSplit(classes, argv[++i]);
+			} else if(s == "-a") {
+				att = parseAtt(argv[++i]);
+			} else if(s == "-d") {
+				radius = atof(argv[++i]);
+			} else if(s == "-v") {
+				_loglevel(1);
+			} else if(s == "--angle-limit") {
+				angleLimit = (unsigned char) atoi(argv[++i]);
+			} else if(s == "-b") {
+				bounds.push_back(atof(argv[++i]));
+				bounds.push_back(atof(argv[++i]));
+				bounds.push_back(atof(argv[++i]));
+				bounds.push_back(atof(argv[++i]));
+			} else {
+				files.push_back(argv[i]);
+			}
+		}
+
 		lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit, fill);
+
 	} catch(const std::exception &ex) {
-		_trace(ex.what());
-		usage();
-		return 1;
-	} catch(const char *ex) {
-		_trace(ex);
+		std::cerr << ex.what() << std::endl;
 		usage();
 		return 1;
 	}
