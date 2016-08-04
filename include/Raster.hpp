@@ -380,14 +380,13 @@ public:
 	}
 
 	/**
-	 * Cast a MemRaster to some other type.
+	 * Cas a MemRaster to some other type.
 	 */
 	template <class U>
-	operator MemRaster<U>() {
-		MemRaster<U> g(cols(), rows());
+	void convert(MemRaster<U> &g) {
+		g.init(cols(), rows());
 		for(size_t i = 0; i < size(); ++i)
 			g.set(i, (U) get(i));
-		return g;
 	}
 
 	int rows() const {
