@@ -1,3 +1,5 @@
+sudo: required
+dist: xenial
 language: cpp
 branches: big_refactor
 install: 
