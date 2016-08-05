@@ -8,6 +8,6 @@ before_script:
 script: make
 after_script:
  - cd ../tests
- - ./run_tests.py
+ - ./run_tests.sh
 
   
