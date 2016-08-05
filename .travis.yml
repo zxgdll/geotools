@@ -1,6 +1,12 @@
 language: cpp
 branches: big_refactor
-install: sudo apt-get install libproj-dev libboost-system-dev libboost-filesystem-dev libgdal-dev libgeos-dev liblaszip-dev liblas-dev liblas-c-dev liblas-bin  
+install: 
+ - wget laszip-2.2.0.tar.gz
+ - tar -xzf laszip-2.2.0.tar.gz
+ - cd laszip-2.2.0
+ - ./configure && make && make install
+ - sudo apt-get install libproj-dev libboost-system-dev libboost-filesystem-dev libgdal-dev libgeos-dev 
+ - sudo apt-get install liblas-dev liblas-c-dev liblas-bin  
 before_script: 
   - mkdir makefiles
   - cd makefiles
