@@ -1,7 +1,7 @@
 language: cpp
 branches: big_refactor
 install: 
- - wget laszip-2.2.0.tar.gz
+ - wget https://github.com/LASzip/LASzip/releases/download/v2.2.0/laszip-src-2.2.0.tar.gz
  - tar -xzf laszip-2.2.0.tar.gz
  - cd laszip-2.2.0
  - ./configure && make && make install
