@@ -1,5 +1,3 @@
-cmake_minimum_required (VERSION 3.1.0)
-
 if (${APPLE})
 	set (CMAKE_C_COMPILER /usr/local/bin/gcc-6 CACHE STRING "C compiler" FORCE)
 	set (CMAKE_CXX_COMPILER /usr/local/bin/g++-6 CACHE STRING "C++ compiler" FORCE)
