@@ -5,7 +5,7 @@ install:
  - tar -xzf laszip-src-2.2.0.tar.gz
  - ls
  - cd laszip-src-2.2.0
- - ./configure && make && make install
+ - ./configure && make && sudo make install
  - cd ..
  - sudo apt-get install libproj-dev libboost-system-dev libboost-filesystem-dev libgdal-dev libgeos-dev 
  - sudo apt-get install liblas-dev liblas-c-dev liblas-bin  
