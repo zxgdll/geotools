@@ -5,8 +5,27 @@ import os
 import subprocess
 
 sys.path.append(os.path.realpath('../scripts'))
-os.environ['PATH'] += os.pathsep + os.path.realpath('../bin')
+os.environ['PATH'] += os.pathsep + os.path.realpath('../makefiles')
+os.environ['LAS2CSRS_DATA'] = os.pathsep + os.path.realpath('../share')
+"""
+Usage: las2csrs <options> <las files>
 
+This program converts coordinates from LAS files from any reference frame to NAD83(CSRS),
+between any two epochs.
+
+If orthometric heights are used, be sure to provide SRSes with geoid parameters, or that the source
+files contain such information. SRSes are entered in the form, 'epsg:<horizontal code>+<vertical code>'.
+The + is only required if orthometric heights are desired.
+
+ -o     Overwrite existing files. Defaults to false.
+ -v     Verbose output.
+ -d 	Destination folder. Required.
+ -fs    The source SRS. If left out, will use the first las file's SRS. If the file has no SRS, will fail.
+ -ts    The destination SRS. Required.
+ -fe    The source epoch. Required.
+ -te    The destination epoch. Required.
+ -f     The source reference frame. Required.
+"""
 def test():
     
     tests = [
@@ -33,7 +52,7 @@ def test():
         
         ffrom, efrom, eto, fsrid, tsrid, x0, y0, z0, x1, y1, z1 = test
         params = map(str, test[:8])
-        p = subprocess.Popen(['las2csrs', 'test'] + params, stdout=subprocess.PIPE)
+        p = sub.Popen(['las2csrs', '-o', '-v', '-d', 'output', '-fs', test[3], '-ts', test[4], '-fe', test[1], '-te', test[2], '-f', test[0], 'data/las2csrs.las'], stdout=sub.PIPE, stderr=sub.PIPE)
         stdout, stderr = p.communicate()
         x2, y2, z2 = map(float, stdout.split())
         print 'input: %f %f %f; output: %f %f %f; expected: %f %f %f' % (x0, y0, z0, x2, y2, z2, x1, y1, z1)
