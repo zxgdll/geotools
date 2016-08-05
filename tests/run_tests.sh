@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# This script runs tests for travis.
+
 echo "Running tests..."
 
 for f in test_*.py;
