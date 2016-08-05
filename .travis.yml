@@ -1,0 +1,13 @@
+language: cpp
+branches: big_refactor
+install: sudo apt-get install libproj-dev libboost-system-dev libboost-filesystem-dev libgdal-dev libgeos-dev liblaszip-dev liblas-dev liblas-c-dev liblas-bin  
+before_script: 
+  - mkdir makefiles
+  - cd makefiles
+  - cmake ..
+script: make
+after_script:
+ - cd ../tests
+ - ./run_tests.py
+
+  
