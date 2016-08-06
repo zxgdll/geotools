@@ -17,7 +17,7 @@ install:
  - sudo apt-get install -y --reinstall cmake
  - sudo apt-get install -y gcc-5 g++-5
  - sudo apt-get install -y libproj-dev libboost-system-dev libboost-filesystem-dev libgdal-dev 
- - sudo apt-get install -y libgeos-dev libgeos++-dev
+ - sudo apt-get install -y libgeos-dev libgeos++-dev libgeos-c1v5
  - sudo apt-get install -y liblas-dev liblas-c-dev liblas-bin libeigen3-dev 
  - find /usr -name geos.h
 
