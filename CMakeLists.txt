@@ -17,7 +17,7 @@ set (CMAKE_CXX_STANDARD 11)
 project (geotools)
 
 link_directories(/usr/local/lib /usr/lib)
-include_directories(include /usr/local/include /usr/include /usr/include/gdal)
+include_directories(include /usr/local/include /usr/include /usr/local/include/gdal /usr/local/include/geos /usr/include/gdal /usr/include/geos)
 
 add_executable (flood src/flood.cpp)
 target_link_libraries (flood gdal)
