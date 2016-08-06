@@ -22,6 +22,7 @@
 #include <gdal_priv.h>
 #include <ogr_geometry.h>
 
+#include "geos/geos.h"
 #include <geos/geom/GeometryCollection.h>
 #include <geos/geom/GeometryFactory.h>
 #include <geos/geom/Geometry.h>
