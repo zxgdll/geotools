@@ -24,6 +24,8 @@ install:
  - cd laszip-src-2.2.0
  - ./configure && make && sudo make install
  - cd ..
+ - sudo apt-get install python-software-properties
+ - sudo add-apt-repository ppa:george-edison55/cmake-3.5
  - sudo apt-get update -qq
  - sudo apt-get install -y libproj-dev libboost-system-dev libboost-filesystem-dev libgdal-dev libgeos-dev 
  - sudo apt-get install -y liblas-dev liblas-c-dev liblas-bin libeigen3-dev 
