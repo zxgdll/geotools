@@ -1,18 +1,4 @@
 language: cpp
-
-#matrix:
-#  include:
-#    - compiler: gcc
-#      addons:
-#        apt:
-#          sources:
-#           - ubuntu-toolchain-r-test
-#           - llvm-toolchain-precise-3.6
-#         packages:
-#           - gcc-5
-#           - g++-5
-#     env: COMPILER=g++-5
-
 branches: big_refactor
 
 install: 
@@ -31,6 +17,7 @@ install:
  - sudo apt-get install -y liblas-dev liblas-c-dev liblas-bin libeigen3-dev 
  - sudo apt-get install -y --reinstall cmake
  - sudo apt-get install -y gcc-5 g++-5
+
 script: 
  - mkdir makefiles
  - cd makefiles
