@@ -8,15 +8,9 @@ install:
  - cd laszip-src-2.2.0
  - ./configure && make && sudo make install
  - cd ..
- - sudo apt-get install -y python-software-properties
- - sudo add-apt-repository -y ppa:george-edison55/cmake-3.x
- - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
- - sudo sh -c 'echo "Package: *\nPin: release o=LP-PPA-george-edison55-cmake-3.x\nPin-Priority: 1000" > /etc/apt/preferences.d/cmake_prefs'
- - sudo apt-get update -qq
+ - sudo ./travis_build_upgrade.sh
  - sudo apt-get install -y libproj-dev libboost-system-dev libboost-filesystem-dev libgdal-dev libgeos-dev 
  - sudo apt-get install -y liblas-dev liblas-c-dev liblas-bin libeigen3-dev 
- - sudo apt-get install -y --reinstall cmake
- - sudo apt-get install -y gcc-5 g++-5
 
 script: 
  - mkdir makefiles
