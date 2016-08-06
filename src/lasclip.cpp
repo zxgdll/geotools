@@ -20,6 +20,7 @@
 #include <ogr_api.h>
 #include <ogrsf_frmts.h>
 #include <gdal_priv.h>
+#include <ogr_geometry.h>
 
 #include <geos/geom/GeometryCollection.h>
 #include <geos/geom/GeometryFactory.h>
