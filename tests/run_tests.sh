@@ -4,6 +4,8 @@
 
 echo "Running tests..."
 
+mkdir -p output
+
 for f in test_*.py;
 do
 	python $f
