@@ -1,8 +1,9 @@
 **/.DS_Store
 **/.pyc
 **/.swp
+**/*.tif.xml
 data/*
 makefiles
-tests/output/*
-tests/data/*.tif.xml
+tests/output
+
 
