@@ -204,8 +204,7 @@ namespace geotools {
 			void interpolateSampleZ(Sample &sample) {
 				using namespace geos::geom;
 				using namespace geos::triangulate;
-				GeometryFactory::unique_ptr gf = GeometryFactory::create();
-				//std::unique_ptr<GeometryFactory> gf(new GeometryFactory());
+				const geom::GeometryFactory *gf = geom::GeometryFactory::getDefaultInstance();
 				Coordinate sc(sample.x, sample.y, sample.z);
 				// Convert returns to Points.
 				std::vector<Geometry *> points;
