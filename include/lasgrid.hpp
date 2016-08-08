@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <set>
+#include <map>
 
 #define TYPE_MIN 1
 #define TYPE_MAX 2
@@ -25,6 +26,20 @@
 namespace geotools {
 	
 	namespace las {
+
+		namespace config {
+
+			std::map<std::string, int> types = {
+				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
+				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
+				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
+			};
+
+			std::map<std::string, int> attributes {
+				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
+			};
+
+		}
 
 		namespace util {
 

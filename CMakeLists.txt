@@ -9,6 +9,10 @@ enable_language(C)
 enable_language(CXX)
 
 find_package(OpenMP)
+find_package(Qt4)
+
+set(CMAKE_AUTOUIC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -43,7 +47,7 @@ target_link_libraries (treetops-app treetops gdal)
 add_library(lasgrid SHARED src/lasgrid.cpp)
 target_link_libraries (lasgrid las gdal las laszip boost_system boost_filesystem)
 add_executable (lasgrid-app src/apps/lasgrid.cpp)
-target_link_libraries (lasgrid-app PUBLIC lasgrid)
+target_link_libraries (lasgrid-app PUBLIC lasgrid Qt4::QtGui)
 
 add_executable (lasboundary src/lasboundary.cpp)
 target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system boost_filesystem)

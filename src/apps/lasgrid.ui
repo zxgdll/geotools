@@ -6,20 +6,20 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>726</width>
-    <height>472</height>
+    <width>533</width>
+    <height>315</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>10</x>
      <y>10</y>
      <width>258</width>
-     <height>229</height>
+     <height>261</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -52,13 +52,13 @@
     </item>
    </layout>
   </widget>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
-     <x>360</x>
-     <y>40</y>
-     <width>271</width>
-     <height>260</height>
+     <x>280</x>
+     <y>9</y>
+     <width>241</width>
+     <height>261</height>
     </rect>
    </property>
    <layout class="QFormLayout" name="formLayout">
@@ -143,6 +143,19 @@
      </widget>
     </item>
    </layout>
+  </widget>
+  <widget class="QDialogButtonBox" name="buttonBox">
+   <property name="geometry">
+    <rect>
+     <x>350</x>
+     <y>276</y>
+     <width>171</width>
+     <height>31</height>
+    </rect>
+   </property>
+   <property name="standardButtons">
+    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+   </property>
   </widget>
  </widget>
  <resources/>
