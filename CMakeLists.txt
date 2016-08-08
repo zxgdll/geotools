@@ -35,23 +35,23 @@ target_link_libraries (mosaic gdal boost_system boost_filesystem)
 
 add_library (treetops SHARED src/treetops.cpp)
 target_link_libraries (treetops gdal)
-
 add_executable (treetops-app src/apps/treetops.cpp)
 target_link_libraries (treetops-app treetops gdal)
 
 
 
-add_executable (lasgrid src/lasgrid.cpp)
-target_link_libraries (lasgrid PUBLIC las gdal las laszip boost_system boost_filesystem)
+add_library(lasgrid SHARED src/lasgrid.cpp)
+target_link_libraries (lasgrid las gdal las laszip boost_system boost_filesystem)
+add_executable (lasgrid-app src/apps/lasgrid.cpp)
+target_link_libraries (lasgrid-app PUBLIC lasgrid)
 
 add_executable (lasboundary src/lasboundary.cpp)
 target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system boost_filesystem)
 
 add_library(lasvalidate SHARED src/lasvalidate.cpp)
 target_link_libraries (lasvalidate las laszip geos)
-
 add_executable (lasvalidate-app src/apps/lasvalidate.cpp)
-target_link_libraries (lasvalidate-app lasvalidate las geos)
+target_link_libraries (lasvalidate-app lasvalidate)
 
 add_executable (lasstats src/lasstats.cpp)
 target_link_libraries (lasstats gdal las laszip geos boost_system boost_filesystem)
@@ -80,7 +80,9 @@ install (TARGETS rasterstats DESTINATION bin)
 
 install (TARGETS mosaic DESTINATION bin)
 
-install (TARGETS lasgrid DESTINATION bin)
+install (TARGETS lasgrid DESTINATION lib)
+install (TARGETS lasgrid-app DESTINATION bin)
+install (FILES include/lasgrid.hpp DESTINATION include)
 
 install (TARGETS lasvalidate DESTINATION lib)
 install (TARGETS lasvalidate-app DESTINATION bin)
