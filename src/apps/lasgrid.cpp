@@ -5,6 +5,7 @@
 #include "geotools.h"
 #include "Util.hpp"
 #include "lasgrid.hpp"
+#include "ui_lasgrid.h"
 
 using namespace geotools::util;
 using namespace geotools::las;
@@ -25,9 +26,18 @@ void usage() {
 		<< " -f                          Fill voids.\n"
 		<< " -v                          Verbose output.\n"
 		<< " -h                          Print this message.\n"
-		<< " --angle-limit               Points located outside of this angle (devation from nadir) are excluded.\n";
+		<< " --angle-limit               Points located outside of this angle (devation from nadir) are excluded.\n"
+		<< " -gui                        Run the graphical user interface.\n";
 }
 
+int runWithUI(int argc, char **argv) {
+	QApplication q(argc, argv);
+	QWidget *w = new QWidget();
+	Ui::Form f;
+	f.setupUi(w);
+	w->show();
+	return q.exec();
+}
 
 int main(int argc, char **argv) {
 
@@ -52,6 +62,8 @@ int main(int argc, char **argv) {
 			if(s == "-h") {
 				usage();
 				return 0;
+			} else if(s == "-gui") {
+				return runWithUI(argc, argv);
 			} else if(s == "-o") {
 				dstFile = argv[++i];
 			} else if(s == "-s") {

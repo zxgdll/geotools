@@ -44,10 +44,10 @@ target_link_libraries (treetops-app treetops gdal)
 
 
 
-add_library(lasgrid SHARED src/lasgrid.cpp)
-target_link_libraries (lasgrid las gdal las laszip boost_system boost_filesystem)
-add_executable (lasgrid-app src/apps/lasgrid.cpp)
-target_link_libraries (lasgrid-app PUBLIC lasgrid Qt4::QtGui)
+add_library(liblasgrid SHARED src/lasgrid.cpp)
+target_link_libraries (liblasgrid las gdal las laszip boost_system boost_filesystem)
+add_executable (lasgrid src/apps/lasgrid.cpp)
+target_link_libraries (lasgrid PUBLIC liblasgrid Qt4::QtGui)
 
 add_executable (lasboundary src/lasboundary.cpp)
 target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system boost_filesystem)
@@ -84,8 +84,8 @@ install (TARGETS rasterstats DESTINATION bin)
 
 install (TARGETS mosaic DESTINATION bin)
 
-install (TARGETS lasgrid DESTINATION lib)
-install (TARGETS lasgrid-app DESTINATION bin)
+install (TARGETS liblasgrid DESTINATION lib)
+install (TARGETS lasgrid DESTINATION bin)
 install (FILES include/lasgrid.hpp DESTINATION include)
 
 install (TARGETS lasvalidate DESTINATION lib)
