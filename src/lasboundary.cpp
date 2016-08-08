@@ -42,6 +42,7 @@
 
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
+namespace geom = geos::geom;
 
 using namespace geotools::util;
 using namespace geotools::raster;
@@ -155,8 +156,7 @@ namespace geotools {
 			using namespace geos::geom;
 			using namespace geos::triangulate;
 
-			GeometryFactory::unique_ptr gf = GeometryFactory::create();
-
+			const geom::GeometryFactory *gf = geom::GeometryFactory::getDefaultInstance();
 			std::vector<Geometry*> coords;
 
 			// Create a point set from the grid cells with returns in them.
