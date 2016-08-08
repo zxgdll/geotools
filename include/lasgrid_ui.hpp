@@ -7,17 +7,20 @@ namespace geotools {
 
 	namespace ui {
 
-		class LasgridForm : public Ui::Form {
+		class LasgridForm : public Ui::LasgridForm {
 		public:
 			void setupUi(QWidget *Form) {
 				using namespace geotools::las::config;
 
-	                        Ui::Form::setupUi(Form);
+	                        Ui::LasgridForm::setupUi(Form);
 
-        	                int i = 0;
+				spnResolution->setValue(defaultResolution);
+				spnRadius->setValue(defaultRadius);
+
+				int i = 0;
 				int defaultIdx = -1;
                         	for(auto it = types.begin(); it != types.end(); ++it) {
-                                	cboType->insertItem(i, QString::fromStdString(it->first), QVariant(it->second));
+                                	cboType->addItem(QString::fromStdString(it->first), QVariant(it->second));
 					if(it->second == defaultType)
 						defaultIdx = i;
 					++i;
@@ -26,14 +29,22 @@ namespace geotools {
 
 				i = 0;
 				defaultIdx = -1;
-				std::map<std::string, int> atts = geotools::las::config::attributes;
-				for(auto it = atts.begin(); it != atts.end(); ++it) {
-					cboAttribute->insertItem(i, QString::fromStdString(it->first), QVariant(it->second));
+				for(auto it = attributes.begin(); it != attributes.end(); ++it) {
+					cboAttribute->addItem(QString::fromStdString(it->first), QVariant(it->second));
 					if(it->second == defaultAttribute)
 						defaultIdx = i;
 					++i;
 				}
 				cboAttribute->setCurrentIndex(defaultIdx);
+
+				for(i = 0; i < 255; ++i) {
+					QString str;
+					str.setNum(i);
+					QListWidgetItem *item = new QListWidgetItem(str, lstClasses);
+					item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+					item->setCheckState(defaultClasses.count(i) > 0 ? Qt::Checked : Qt::Unchecked);
+					lstClasses->addItem(item);
+				}
 			}
 		};
 

@@ -1,161 +1,215 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>Form</class>
- <widget class="QWidget" name="Form">
+ <class>LasgridForm</class>
+ <widget class="QWidget" name="LasgridForm">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>533</width>
-    <height>315</height>
+    <width>532</width>
+    <height>463</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Form</string>
+   <string>LASGrid</string>
   </property>
-  <widget class="QWidget" name="layoutWidget">
+  <widget class="QWidget" name="verticalLayoutWidget">
    <property name="geometry">
     <rect>
      <x>10</x>
      <y>10</y>
-     <width>258</width>
-     <height>261</height>
+     <width>511</width>
+     <height>443</height>
     </rect>
    </property>
-   <layout class="QVBoxLayout" name="verticalLayout_2">
+   <layout class="QVBoxLayout" name="verticalLayout" stretch="1,1,1">
+    <property name="sizeConstraint">
+     <enum>QLayout::SetDefaultConstraint</enum>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
     <item>
-     <widget class="QListView" name="lstFiles"/>
-    </item>
-    <item>
-     <layout class="QHBoxLayout" name="horizontalLayout">
+     <layout class="QHBoxLayout" name="horizontalLayout_3">
       <item>
-       <widget class="QPushButton" name="btnSelectFiles">
-        <property name="text">
-         <string>Select Files</string>
-        </property>
-        <attribute name="buttonGroup">
-         <string notr="true">grpFileButtons</string>
-        </attribute>
-       </widget>
+       <layout class="QVBoxLayout" name="verticalLayout_2">
+        <item>
+         <widget class="QListView" name="lstFiles"/>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout">
+          <item>
+           <widget class="QPushButton" name="btnSelectFiles">
+            <property name="text">
+             <string>Select Files</string>
+            </property>
+            <attribute name="buttonGroup">
+             <string notr="true">grpFileButtons</string>
+            </attribute>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnRemoveSelected">
+            <property name="text">
+             <string>Remove Selected</string>
+            </property>
+            <attribute name="buttonGroup">
+             <string notr="true">grpFileButtons</string>
+            </attribute>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
       </item>
       <item>
-       <widget class="QPushButton" name="btnRemoveSelected">
-        <property name="text">
-         <string>Remove Selected</string>
+       <layout class="QFormLayout" name="formLayout">
+        <property name="fieldGrowthPolicy">
+         <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
         </property>
-        <attribute name="buttonGroup">
-         <string notr="true">grpFileButtons</string>
-        </attribute>
-       </widget>
+        <item row="0" column="0">
+         <widget class="QLabel" name="lblResolution">
+          <property name="text">
+           <string>Resolution</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="lblRadius">
+          <property name="text">
+           <string>Radius</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QDoubleSpinBox" name="spnRadius">
+          <property name="singleStep">
+           <double>0.100000000000000</double>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="lblAttribute">
+          <property name="text">
+           <string>Attribute</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QComboBox" name="cboAttribute"/>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="lblType">
+          <property name="text">
+           <string>Type</string>
+          </property>
+         </widget>
+        </item>
+        <item row="3" column="1">
+         <widget class="QComboBox" name="cboType"/>
+        </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="lblQuantiles">
+          <property name="text">
+           <string>Quantiles</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QSpinBox" name="spnQuantiles">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="minimum">
+           <number>1</number>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="lblQuantile">
+          <property name="text">
+           <string>Quantile</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <widget class="QSpinBox" name="spnQuantile">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="lblSRID">
+          <property name="text">
+           <string>CRS</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <item>
+           <widget class="QLineEdit" name="txtCRSConfig"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnCRSConfig">
+            <property name="text">
+             <string>Confgure</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item row="7" column="0">
+         <widget class="QLabel" name="lblClasses">
+          <property name="text">
+           <string>Classes</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1">
+         <widget class="QListWidget" name="lstClasses"/>
+        </item>
+        <item row="0" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_5">
+          <item>
+           <widget class="QDoubleSpinBox" name="spnResolution">
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="chkSnapToGrid">
+            <property name="text">
+             <string>Snap to Grid</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
       </item>
      </layout>
     </item>
-   </layout>
-  </widget>
-  <widget class="QWidget" name="layoutWidget">
-   <property name="geometry">
-    <rect>
-     <x>280</x>
-     <y>9</y>
-     <width>241</width>
-     <height>261</height>
-    </rect>
-   </property>
-   <layout class="QFormLayout" name="formLayout">
-    <item row="0" column="0">
-     <widget class="QLabel" name="lblResolution">
-      <property name="text">
-       <string>Resolution</string>
+    <item>
+     <widget class="QProgressBar" name="progressBar">
+      <property name="value">
+       <number>24</number>
       </property>
      </widget>
     </item>
-    <item row="0" column="1">
-     <widget class="QDoubleSpinBox" name="spnResolution"/>
-    </item>
-    <item row="2" column="0">
-     <widget class="QLabel" name="lblType">
-      <property name="text">
-       <string>Type</string>
-      </property>
-     </widget>
-    </item>
-    <item row="2" column="1">
-     <widget class="QComboBox" name="cboType"/>
-    </item>
-    <item row="3" column="0">
-     <widget class="QLabel" name="lblQuantiles">
-      <property name="text">
-       <string>Quantiles</string>
-      </property>
-     </widget>
-    </item>
-    <item row="3" column="1">
-     <widget class="QComboBox" name="cboQuantiles"/>
-    </item>
-    <item row="4" column="0">
-     <widget class="QLabel" name="lblQuantile">
-      <property name="text">
-       <string>Quantile</string>
-      </property>
-     </widget>
-    </item>
-    <item row="4" column="1">
-     <widget class="QComboBox" name="cboQuantile"/>
-    </item>
-    <item row="5" column="1">
-     <widget class="QComboBox" name="cboSRID"/>
-    </item>
-    <item row="5" column="0">
-     <widget class="QLabel" name="lblSRID">
-      <property name="text">
-       <string>CRS</string>
-      </property>
-     </widget>
-    </item>
-    <item row="6" column="1">
-     <widget class="QComboBox" name="cboClasses"/>
-    </item>
-    <item row="6" column="0">
-     <widget class="QLabel" name="lblClasses">
-      <property name="text">
-       <string>Classes</string>
-      </property>
-     </widget>
-    </item>
-    <item row="7" column="1">
-     <widget class="QComboBox" name="cboAttribute"/>
-    </item>
-    <item row="7" column="0">
-     <widget class="QLabel" name="lblAttribute">
-      <property name="text">
-       <string>Attribute</string>
-      </property>
-     </widget>
-    </item>
-    <item row="1" column="1">
-     <widget class="QDoubleSpinBox" name="spnRadius"/>
-    </item>
-    <item row="1" column="0">
-     <widget class="QLabel" name="lblRadius">
-      <property name="text">
-       <string>Radius</string>
+    <item>
+     <widget class="QDialogButtonBox" name="buttonBox">
+      <property name="standardButtons">
+       <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
       </property>
      </widget>
     </item>
    </layout>
-  </widget>
-  <widget class="QDialogButtonBox" name="buttonBox">
-   <property name="geometry">
-    <rect>
-     <x>350</x>
-     <y>276</y>
-     <width>171</width>
-     <height>31</height>
-    </rect>
-   </property>
-   <property name="standardButtons">
-    <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
-   </property>
   </widget>
  </widget>
  <resources/>

@@ -29,6 +29,12 @@ namespace geotools {
 
 		namespace config {
 
+			double defaultResolution = 2.0;
+			double defaultRadius = std::sqrt(_sq(defaultResolution / 2) * 2);
+			bool defaultSnapToGrid = true;
+
+			std::set<int> defaultClasses = {2};
+
 			std::map<std::string, int> types = {
 				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
 				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
