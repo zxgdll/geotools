@@ -24,6 +24,7 @@ void usage() {
 		<< " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size.\n"
 		<< " -f                          Fill voids.\n"
 		<< " -v                          Verbose output.\n"
+		<< " -h                          Print this message.\n"
 		<< " --angle-limit               Points located outside of this angle (devation from nadir) are excluded.\n";
 }
 
@@ -48,7 +49,10 @@ int main(int argc, char **argv) {
 
 		for(int i = 1; i < argc; ++i) {
 			std::string s(argv[i]);
-			if(s == "-o") {
+			if(s == "-h") {
+				usage();
+				return 0;
+			} else if(s == "-o") {
 				dstFile = argv[++i];
 			} else if(s == "-s") {
 				crs = atoi(argv[++i]);
