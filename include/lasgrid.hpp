@@ -34,10 +34,12 @@ namespace geotools {
 				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
 				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
 			};
+			int defaultType = TYPE_MEAN;
 
 			std::map<std::string, int> attributes {
 				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
 			};
+			int defaultAttribute = ATT_HEIGHT;
 
 		}
 

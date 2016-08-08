@@ -2,6 +2,8 @@
 #include <set>
 #include <vector>
 
+#include "ui_lasgrid.h" // To trigger uic.
+
 #include "geotools.h"
 #include "Util.hpp"
 #include "lasgrid.hpp"
