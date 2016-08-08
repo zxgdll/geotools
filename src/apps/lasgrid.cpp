@@ -5,7 +5,7 @@
 #include "geotools.h"
 #include "Util.hpp"
 #include "lasgrid.hpp"
-#include "ui_lasgrid.h"
+#include "lasgrid_ui.hpp"
 
 using namespace geotools::util;
 using namespace geotools::las;
@@ -33,7 +33,7 @@ void usage() {
 int runWithUI(int argc, char **argv) {
 	QApplication q(argc, argv);
 	QWidget *w = new QWidget();
-	Ui::Form f;
+	geotools::ui::LasgridForm f;
 	f.setupUi(w);
 	w->show();
 	return q.exec();
