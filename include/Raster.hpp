@@ -20,6 +20,10 @@
 
 #include "geotools.h"
 
+namespace geotools {
+
+namespace raster {
+
 /**
  * Simple class to represent a single grid cell.
 */
@@ -1477,6 +1481,8 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 }
 
 
+} // rater
 
+} // geotools
 
 #endif /* INCLUDE_RASTER_HPP_ */

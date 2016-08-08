@@ -6,126 +6,49 @@
  */
 
 #include <queue>
+#include <map>
 #include <iostream>
 
 #include "Raster.hpp"
 #include "Vector.hpp"
 
-static unsigned int _crown_id = 0;
-
-/**
- * A rule provides parameters for processing crowns given
- * their properties, such as height.
- */
-class Rule {
+class Node {
 public:
-	double minHeight;
-	double maxHeight;
-	double dropOff;
-	double radius;
-	Rule(double minHeight, double maxHeight, double dropOff, double radius) {
-		this->minHeight = minHeight;
-		this->maxHeight = maxHeight;
-		this->dropOff = dropOff;
-		this->radius = radius;
-	}
-	bool match(double height) {
-		return height >= this->minHeight && height < this->maxHeight;
-	}
-};
+	std::map<int, Node*> children;
+	std::map<int, Node*> parents;
+	int level;
+	int id; 
+	int row, col;
 
-/**
- * Represents a single cell (pixel) in the input/output rasters.
- */
-class Px {
-public:
-	double crownHeight;
-	int col;
-	int row;
-	unsigned int id;
-	unsigned int radius;
-	Px(double crownHeight, int col, int row, unsigned int id, unsigned int radius = 0) {
-		this->crownHeight = crownHeight;
-		this->col = col;
-		this->row = row;
+	Node(int id, int level, int col, int row) {
 		this->id = id;
-		this->radius = radius;
-	}
-};
-
-/** 
- * Represents a single crown.
- */
-class Crown {
-public:
-	unsigned int id;
-	int col;
-	int row;
-	double height;
-	double radius;
-	Crown(int col, int row, double height, double radius) {
+		this->level = level;
 		this->col = col;
 		this->row = row;
-		this->height = height;
-		this->radius = radius;
-		this->id = ++_crown_id;
+	}
+
+	void addChild(Node *child) {
+		if(children.find(child->id) == children.end())
+			children[child->id] = child;
+	}
+
+	void addParent(Node *parent) {
+		if(parents.find(parent->id) == parents.end())
+			parents[parent->id] = parent;
+	}
+
+	int depth() {
+		int l = 0;
+		for(auto it = parents.begin(); it != parents.end(); ++it)
+			l = _max(l, it->second->depth());
+		return l + 1;
+	}
+
+	~Node() {
+
 	}
 };
 
-/**
- * Returns a rule corresponding to the given crown height.
- */
-// TODO: Don't use a pointer; use a reference to a special no-rule Rule.
-Rule *getRuleForHeight(std::vector<Rule> &rules, double height) {
-	for(Rule &rule:rules) {
-		if(rule.match(height))
-			return &rule;
-	}
-	return nullptr;
-}
-
-/**
- * Returns true if the given cell is a maximum, according to the given Rule.
- */
-bool isMaximum(Raster<float> &raster, int col, int row, std::vector<Rule> &rules, double *height, double resolution) {
-
-	*height = raster.get(col, row);
-	if(*height == raster.nodata())
-		return false;
-
-	Rule *rule = getRuleForHeight(rules, *height);
-	if(rule == nullptr)
-		return false;
-
-	double radius = rule->radius;
-	int ks = _max(3, (int) (radius / resolution / 2.0) * 2 + 1);
-	int ks0 = (int) ks / 2;
-
-	if(col < ks0 || row < ks0 || col >= raster.cols() - ks0 || row >= raster.rows() - ks0)
-		return false;
-
-	for(int r = 0; r < ks; ++r) {
-		for(int c = 0; c < ks; ++c) {
-			if(r == ks0 && c == ks0) continue;
-			if(raster.get(col - ks0 + c, row - ks0 + r) > *height)
-				return false;
-		}
-	}
-	return true;
-}
-
-/**
- * Find the maxima in the raster and append a Crown object to the list for each one.
- */
-void findMaxima(Raster<float> &raster, std::vector<Crown> &crowns, std::vector<Rule> &rules, double resolution) {
-	double height = nan("");
-	for(int r = 0; r < raster.rows(); ++r) {
-		for(int c = 0; c < raster.cols(); ++c) {
-			if(isMaximum(raster, c, r, rules, &height, resolution))
-				crowns.push_back(Crown(c, r, height, 0.0));
-		}
-	}
-}
 
 /**
  * Compute the table of Gaussian weights given the size of the table
@@ -145,7 +68,9 @@ void gaussianWeights(double *weights, int size, double sigma) {
 /**
  * Smooth the raster and write the smoothed version to the output raster.
  */
-void smooth(Raster<float> &raster, Raster<float> &smoothed, double sigma, int size) {
+// TODO: No accounting for nodata.
+// TODO: Move to Raster.
+void smooth(Grid<float> &raster, Grid<float> &smoothed, double sigma, int size) {
 	double weights[size*size];
 	gaussianWeights(weights, size, sigma);
 	for(int r = 0; r < raster.rows(); ++r) {
@@ -164,6 +89,102 @@ void smooth(Raster<float> &raster, Raster<float> &smoothed, double sigma, int si
 	}
 }
 
+/** "Segment" the raster. By binning the heights into levels (starting with
+ * 1). The range in heights is from minHeight to the raster's max. Anything 
+ * below minHeight is set to 0.
+ */
+void segment(Grid<float> &src, Grid<int> &levels, Grid<int> &ids, int numLevels, float minHeight) {
+	float min = minHeight;
+	float max = src.max();
+	float step = (max - min) / numLevels;
+	levels.fill(0);
+	for(unsigned int i = 0; i < src.size(); ++i) {
+		if(src.get(i) < minHeight) {
+			levels.set(i, 0);
+		} else {
+			levels.set(i, (int) ((src.get(i) - min) / step) + 1);
+		}
+	}
+
+	// Set IDs to the negative value of the level patches.
+	for(unsigned int i = 0; i < levels.size(); ++i)
+		ids.set(i, -((int) levels.get(i)));
+
+	// Flood fill the patches with new IDs -- a unique one for each patch.
+	int id = 0;
+	for(int r = 0; r < ids.rows(); ++r) {
+		for(int c = 0; c < ids.cols(); ++c) {
+			int value = ids.get(c, r);
+			if(value < 0)
+				ids.floodFill(c, r, value, ++id);
+		}
+	}
+}
+
+void buildGraph(Grid<int> &levels, Grid<int> &ids, std::map<int, Node*> &nodeMap) {
+	for(int r = 0; r < levels.rows(); ++r) {
+		for(int c = 0; c < levels.cols(); ++c) {
+			
+			int level = levels.get(c, r);
+			int id = ids.get(c, r);
+			Node *parent = nullptr;
+
+			if(nodeMap.find(id) == nodeMap.end()) {
+				parent = nodeMap[id] = new Node(id, level, c, r);
+			} else {
+				parent = nodeMap[id];
+			}
+
+			for(int rr = r - 1; rr < r + 2; ++rr) {
+				for(int cc = c - 1; cc < c + 2; ++cc) {
+					if((cc == c && rr == r) || cc < 0 || rr < 0 || 
+						cc >= levels.cols() || rr >= levels.rows())
+						continue;
+
+					int id0 = ids.get(cc, rr);
+					if(id0 == id)
+						continue;
+
+					int level0 = levels.get(cc, rr); // It's possible to have an equal level in the D8 case.
+					Node *node = nullptr;
+
+					if(nodeMap.find(id0) == nodeMap.end()) {
+						node = nodeMap[id0] = new Node(id0, level0, cc, rr);
+					} else {
+						node = nodeMap[id0];
+					}
+
+					if(level0 < level) {
+						parent->addChild(node);
+						node->addParent(parent);
+					} else if(level0 > level) {
+						node->addChild(parent);
+						parent->addParent(node);
+					}
+				}
+			}
+		}
+	}
+}
+
+void printNode(Node *node, int level = 0, int depth = 1) {
+	if(--depth < 0) return;
+	char *pad = (char *) calloc(sizeof(char), level * 2 + 1);
+	memset(pad, ' ', level * 2);
+	std::cout << pad << "Node: " << node->id << ", " << node->level << "; " << node->col << ", " << node->row << std::endl;
+	std::cout << pad << " - parents: " << node->parents.size() << std::endl;
+	std::cout << pad << " - children: " << node->children.size() << std::endl;
+	std::cout << pad << " -- parents: " << std::endl;
+	for(auto it = node->parents.begin(); it != node->parents.end(); ++it) {
+		printNode(it->second, level + 1, depth);
+	}
+	std::cout << pad << " -- chilren: " << std::endl;
+	for(auto it = node->children.begin(); it != node->children.end(); ++it) {
+		printNode(it->second, level + 1, depth);
+	}
+	std::cout << pad << "--------------------------------------" << std::endl;
+}
+
 /**
  * Delineate and output the treetops present in the given canopy height model.
  * Outputs a tree tops vector (with heights, IDs), a smoothed CHM and a raster containing 
@@ -174,43 +195,67 @@ void treetops(std::string &inraster, std::string &smraster, std::string &crownsh
 
 	if(inraster.empty())
 		throw "Input raster cannot be empty.";
-	if(crownshp.empty())
-		throw "The crown output name cannot be empty.";
-	if(topshp.empty())
-		throw "The treetop output name cannot be empty.";
-	if(smraster.empty())
-		throw "The smoothed raster output name cannot be empty.";
-	if(smraster == topshp || topshp == crownshp || smraster == crownshp)
-		throw "The output file names are in conflict.";
-
-	std::vector<Rule> rules = {
-		Rule(3.0, 6.0, 0.65, 1.0),
-		Rule(6.0, 35.0, 0.65, 1.0),
-		Rule(35.0, 100.0, 0.65, 1.0)
-	};
+	//if(crownshp.empty())
+	//	throw "The crown output name cannot be empty.";
+	//if(topshp.empty())
+	//	throw "The treetop output name cannot be empty.";
+	//if(smraster.empty())
+	//	throw "The smoothed raster output name cannot be empty.";
+	//if(smraster == topshp || topshp == crownshp || smraster == crownshp)
+	//	throw "The output file names are in conflict.";
 
 	std::cerr << "Loading " << inraster << std::endl;
 
-	// Work grid.
-	static MemRaster<float> k(3, 3);
 
 	// Input raster.
 	Raster<float> raster(inraster);
+	MemRaster<float> smoothed(raster.cols(), raster.rows());
+	MemRaster<int> levels(raster.cols(), raster.rows());
+	levels.fill(0);
+	levels.nodata(0);
+	MemRaster<int> ids(raster.cols(), raster.rows());
+	levels.fill(0);
+	ids.nodata(0);
+	
+	// Smooth the input raster.
+	std::cerr << "Smoothing..." << std::endl;
+	smooth(raster, smoothed, 0.5, 3);
 
-	// Output raster.
-	std::string proj;
-	raster.projection(proj);
+	// Segment the smoothed raster into patches.
+	std::cerr << "Segmenting..." << std::endl;
+	segment(smoothed, levels, ids, 10, 3.0);
 
-	// To store the IDs and extents of the crowns.
-	Raster<int> ids(crownshp, raster.minx(), raster.miny(), raster.maxx(), raster.maxy(),
-				raster.resolution(), 0, proj);
-	// So track which cells are visited (faster than using IDs).
-	MemRaster<char> visited(raster.cols(), raster.rows());
-	visited.fill(0);
+	//Raster<float> smoothedr(std::string("/tmp/smoothed.tif"), raster);
+	Raster<int> levelsr(std::string("/tmp/levels.tif"), raster);
+	//Raster<int> idsr(std::string("/tmp/ids.tif"), raster);
+	//smoothedr.writeBlock(smoothed);
+	levelsr.writeBlock(levels);
+	//idsr.writeBlock(ids);
 
-	// Gaussian-smoothed version of source raster.
-	Raster<float> smoothed(smraster, raster);
+	Raster<int> idsr1(std::string("/tmp/ids1.tif"), raster);
+	idsr1.writeBlock(ids);
 
+	std::cerr << "Building graph..." << std::endl;
+	// Build a graph on the patches.
+	std::map<int, Node*> nodes;
+	buildGraph(levels, ids, nodes);
+
+	ids.fill(0);
+
+	std::vector<Node*> rootNodes;
+	for(auto it = nodes.begin(); it != nodes.end(); ++it) {
+		if(it->second->depth() == 2)
+			rootNodes.push_back(it->second);
+	}
+	for(Node *node:rootNodes) {
+		//printNode(node, 0, 2);
+		levels.floodFill(node->col, node->row, node->level, 0, &ids, node->id);
+	}
+
+	Raster<int> idsr(std::string("/tmp/ids2.tif"), raster);
+	idsr.writeBlock(ids);
+
+	/*
 	// Treetops vector file.
 	remove(topshp.c_str());
 	// Configure attributes.
@@ -222,8 +267,6 @@ void treetops(std::string &inraster, std::string &smraster, std::string &crownsh
 	// Tree crown objects.
 	std::vector<Crown> crowns;
 
-	// Smooth the input raster.
-	smooth(raster, smoothed, 0.84089642, 7);
 
 	// Find the treetops.
 	findMaxima(smoothed, crowns, rules, raster.resolution());
@@ -277,6 +320,7 @@ void treetops(std::string &inraster, std::string &smraster, std::string &crownsh
 			}
 		}
 	}
+	*/
 }
 
 void usage() {
