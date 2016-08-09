@@ -6,6 +6,8 @@
 #include <set>
 #include <map>
 
+#include "Util.hpp"
+
 #define TYPE_MIN 1
 #define TYPE_MAX 2
 #define TYPE_MEAN 3
@@ -27,29 +29,20 @@ namespace geotools {
 	
 	namespace las {
 
-		namespace config {
+		namespace lasgrid_config {
 
-			double defaultResolution = 2.0;
-			double defaultRadius = std::sqrt(_sq(defaultResolution / 2) * 2);
-			bool defaultSnapToGrid = true;
-
-			std::set<int> defaultClasses = {2};
-
-			std::map<std::string, int> types = {
-				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
-				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
-				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
-			};
-			int defaultType = TYPE_MEAN;
-
-			std::map<std::string, int> attributes {
-				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
-			};
-			int defaultAttribute = ATT_HEIGHT;
+			extern double defaultResolution();
+			extern double defaultRadius();
+			extern bool defaultSnapToGrid();
+			extern int defaultType;
+			extern std::set<int> defaultClasses();
+			extern std::map<std::string, int> types();
+			extern std::map<std::string, int> attributes();
+			extern int defaultAttribute();
 
 		}
 
-		namespace util {
+		namespace lasgrid_util {
 
 			int parseAtt(char *attStr);
 
@@ -62,9 +55,10 @@ namespace geotools {
 
 		void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
 							int crs, int attribute, int type, double radius,
-							double resolution, std::vector<double> &bounds, unsigned char angleLimit, bool fill);
+							double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill);
 
-	}
-}
+	} // las
+	
+} // geotools
 
 #endif

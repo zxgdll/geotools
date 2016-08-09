@@ -11,7 +11,7 @@
 
 using namespace geotools::util;
 using namespace geotools::las;
-using namespace geotools::las::util;
+using namespace geotools::las::lasgrid_util;
 
 void usage() {
 	std::cerr << "Usage: lasgrid <options> <file [file [file]]>\n"
@@ -45,8 +45,6 @@ int main(int argc, char **argv) {
 
 	try {
 
-		using namespace geotools::las::util;
-		
 		std::string dstFile;
 		int crs = 0;
 		int type = TYPE_MEAN;
@@ -55,7 +53,7 @@ int main(int argc, char **argv) {
 		double resolution = 2.0;
 		double radius = -1.0;
 		unsigned char angleLimit = 100;
-		std::vector<double> bounds;
+		Bounds bounds;
 		std::set<int> classes;
 		std::vector<std::string> files;
 
@@ -87,10 +85,8 @@ int main(int argc, char **argv) {
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
 			} else if(s == "-b") {
-				bounds.push_back(atof(argv[++i]));
-				bounds.push_back(atof(argv[++i]));
-				bounds.push_back(atof(argv[++i]));
-				bounds.push_back(atof(argv[++i]));
+				bounds.extend(atof(argv[++i]), atof(argv[++i]));
+				bounds.extend(atof(argv[++i]), atof(argv[++i]));
 			} else {
 				files.push_back(argv[i]);
 			}

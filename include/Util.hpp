@@ -92,6 +92,31 @@ namespace geotools {
 				m_maxx = _max(b.maxz(), m_maxz);
 			}
 
+			void extendX(double x) {
+				m_minx = _min(x, m_minx);
+				m_maxx = _max(x, m_maxx);
+			}
+			
+			void extendY(double y) {
+				m_miny = _min(y, m_miny);
+				m_maxy = _max(y, m_maxy);
+			}
+			
+			void extendZ(double z) {
+				m_minz = _min(z, m_minz);
+				m_maxz = _max(z, m_maxz);
+			}
+			
+			void extend(double x, double y) {
+				extendX(x);
+				extendY(y);
+			}
+			
+			void extend(double x, double y, double z) {
+				extend(x, y);
+				extendZ(z);
+			}
+			
 		};
 
 		/**

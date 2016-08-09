@@ -40,7 +40,45 @@ namespace geotools {
 
 	namespace las {
 
-		namespace util {
+		namespace lasgrid_config {
+			
+			double defaultResolution() { 
+				return 2.0; 
+			}
+			double defaultRadius() { 
+				return std::sqrt(_sq(defaultResolution / 2) * 2); 
+			}
+			bool defaultSnapToGrid() { 
+				return true;
+			}
+			int defaultType() {
+				return TYPE_MEAN;
+			}
+			int defaultAttribute() {
+				return ATT_HEIGHT;
+			}
+
+			std::set<int> defaultClasses() { 
+				return {2}; 
+			}
+
+			std::map<std::string, int> types() { 
+				return {
+					{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
+					{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
+					{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
+				};
+			}
+			
+			std::map<std::string, int> attributes() {
+				return {
+					{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
+				};
+			}
+
+		} // config
+		
+		namespace lasgrid_util {
 
 			/**
 			 * Interpret the value of a string attribute name, return the constant int value.
@@ -146,7 +184,7 @@ namespace geotools {
 			if(bounds.size() == 4) 
 				Util::snapBounds(bounds, resolution, 2);
 
-			using namespace geotools::las::util;
+			using namespace geotools::las::lasgrid_util;
 
 			MemRaster<double> grid1;
 			MemRaster<int> counts;
