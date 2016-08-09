@@ -12,14 +12,14 @@ void LasgridForm::setupUi(QWidget *Form) {
 
 	Ui::LasgridForm::setupUi(Form);
 
-	spnResolution->setValue(defaultResolution());
-	spnRadius->setValue(defaultRadius());
+	spnResolution->setValue(defaultResolution);
+	spnRadius->setValue(defaultRadius);
 
 	int i = 0;
 	int defaultIdx = -1;
-	for(auto it = types().begin(); it != types().end(); ++it) {
+	for(auto it = types.begin(); it != types.end(); ++it) {
 		cboType->addItem(QString::fromStdString(it->first), QVariant(it->second));
-		if(it->second == defaultType())
+		if(it->second == defaultType)
 			defaultIdx = i;
 		++i;
 	}
@@ -27,9 +27,9 @@ void LasgridForm::setupUi(QWidget *Form) {
 
 	i = 0;
 	defaultIdx = -1;
-	for(auto it = attributes().begin(); it != attributes().end(); ++it) {
+	for(auto it = attributes.begin(); it != attributes.end(); ++it) {
 		cboAttribute->addItem(QString::fromStdString(it->first), QVariant(it->second));
-		if(it->second == defaultAttribute())
+		if(it->second == defaultAttribute)
 			defaultIdx = i;
 		++i;
 	}
@@ -40,7 +40,7 @@ void LasgridForm::setupUi(QWidget *Form) {
 		str.setNum(i);
 		QListWidgetItem *item = new QListWidgetItem(str, lstClasses);
 		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-		item->setCheckState(defaultClasses().count(i) > 0 ? Qt::Checked : Qt::Unchecked);
+		item->setCheckState(defaultClasses.count(i) > 0 ? Qt::Checked : Qt::Unchecked);
 		lstClasses->addItem(item);
 	}
 }

@@ -21,7 +21,7 @@ with open('data/lasgrid.txt', 'r') as f:
 print 'Testing...'
 for arg in args.keys():
 	print 'Testing', arg
-	sub.Popen(['../makefiles/lasgrid', '-o', '/tmp/lasgrid_test.tif', '-t', arg, '-r', '1', '-d', '-1', '-s', '2956', '/tmp/lasgrid_data.las']).wait()
+	sub.Popen(['../makefiles/lasgrid-app', '-o', '/tmp/lasgrid_test.tif', '-t', arg, '-r', '1', '-d', '0.77', '-s', '2956', '/tmp/lasgrid_data.las']).wait()
 	com = sub.Popen(['md5sum', '/tmp/lasgrid_test.tif'], stdout=sub.PIPE, stderr=sub.PIPE)
 	if args[arg] != com.stdout.read().strip().split()[0].strip():
 		print 'Failed on', arg

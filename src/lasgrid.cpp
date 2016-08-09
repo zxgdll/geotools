@@ -39,39 +39,20 @@ namespace geotools {
 
 		namespace lasgrid_config {
 			
-			double defaultResolution() { 
-				return 2.0; 
-			}
-			double defaultRadius() { 
-				return std::sqrt(g_sq(defaultResolution() / 2.0) * 2.0); 
-			}
-			bool defaultSnapToGrid() { 
-				return true;
-			}
-			int defaultType() {
-				return TYPE_MEAN;
-			}
-			int defaultAttribute() {
-				return ATT_HEIGHT;
-			}
-
-			std::set<int> defaultClasses() { 
-				return {2}; 
-			}
-
-			std::map<std::string, int> types() { 
-				return {
-					{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
-					{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
-					{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
-				};
-			}
-			
-			std::map<std::string, int> attributes() {
-				return {
-					{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
-				};
-			}
+			double defaultResolution = 2.0; 
+			double defaultRadius = std::sqrt(g_sq(defaultResolution / 2.0) * 2.0); 
+			bool defaultSnapToGrid = true;
+			int defaultType = TYPE_MEAN;
+			int defaultAttribute = ATT_HEIGHT;
+			std::set<int> defaultClasses = {2}; 
+			std::map<std::string, int> types = {
+				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
+				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
+				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
+			};
+			std::map<std::string, int> attributes = {
+				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
+			};
 
 		} // config
 		

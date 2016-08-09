@@ -33,14 +33,14 @@ namespace geotools {
 
 		namespace lasgrid_config {
 
-			extern double defaultResolution();
-			extern double defaultRadius();
-			extern bool defaultSnapToGrid();
-			extern int defaultType();
-			extern std::set<int> defaultClasses();
-			extern std::map<std::string, int> types();
-			extern std::map<std::string, int> attributes();
-			extern int defaultAttribute();
+			extern double defaultResolution;
+			extern double defaultRadius;
+			extern bool defaultSnapToGrid;
+			extern int defaultType;
+			extern std::set<int> defaultClasses;
+			extern std::map<std::string, int> types;
+			extern std::map<std::string, int> attributes;
+			extern int defaultAttribute;
 
 		}
 
