@@ -6,7 +6,7 @@
 #include "Raster.hpp"
 #include "Util.hpp"
 
-int _min(int a, int b) {
+int g_min(int a, int b) {
 	return a < b ? a : b;
 }
 

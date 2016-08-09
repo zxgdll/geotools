@@ -48,13 +48,13 @@ namespace geotools {
 			std::vector<std::string> &files, std::set<int> &classes, bool quiet) {
 
 			if(outfile.empty()) 
-				_argerr("An output file is required.");
+				g_argerr("An output file is required.");
 			if(shapefile.empty())
-				_argerr("A shape file is required.");
+				g_argerr("A shape file is required.");
 			if(files.size() == 0)
-				_argerr("At least one input file is required.");
+				g_argerr("At least one input file is required.");
 			if(classes.size() == 0)
-				_warn("No classes specified, matching all classes.");
+				g_warn("No classes specified, matching all classes.");
 
 			/* Attempt to open and load geometries from the shape file. */
 			OGRRegisterAll();
@@ -67,18 +67,18 @@ namespace geotools {
 
 			OGRDataSource *ds = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
 			if(ds == nullptr)
-				_runerr("Couldn't open shapefile.");
+				g_runerr("Couldn't open shapefile.");
 			if(layername.empty()) {
 				layer = ds->GetLayer(0);
 			} else {
 				layer = ds->GetLayerByName(layername.c_str());
 			}
 			if(layer == nullptr)
-				_runerr("Couldn't get layer.");
+				g_runerr("Couldn't get layer.");
 
 			type = layer->GetGeomType();
 			if(type != wkbPolygon && type != wkbMultiPolygon)
-				_runerr("Geometry must be polygon or multipolygon.");
+				g_runerr("Geometry must be polygon or multipolygon.");
 
 			const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
 			const gg::GeometryFactory *gf = gg::GeometryFactory::getDefaultInstance();
@@ -94,13 +94,13 @@ namespace geotools {
 			GDALClose(ds);
 
 			if(geoms.size() == 0)
-				_runerr("No geometries were found.");
+				g_runerr("No geometries were found.");
 
 			/* The geometry collection is used for checking whether a las file intersects
 			   the region of interest. */
 			geomColl = gf->createGeometryCollection(geoms);
 			const gg::Envelope *env = geomColl->getEnvelopeInternal();
-			double cbounds[] = { env->getMinX(), env->getMinY(), env->getMaxX(), env->getMaxY() };
+			Bounds cbounds(env->getMinX(), env->getMinY(), env->getMaxX(), env->getMaxY());
 
 			/* Loop over files and figure out which ones are relevant. */
 			liblas::ReaderFactory rf;
@@ -134,7 +134,7 @@ namespace geotools {
 			}
 
 			if(indices.size() == 0) 
-				_runerr("No files matched the given bounds.");
+				g_runerr("No files matched the given bounds.");
 
 			std::ofstream out(outfile, std::ios::out | std::ios::binary);
 			liblas::WriterFactory wf;
@@ -142,9 +142,9 @@ namespace geotools {
 			liblas::Header::RecordsByReturnArray recs;
 			int count = 0;
 
-			double bounds[] = { DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
+			double bounds[] = { G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_NEG };
 
-			_trace("Using points from " << indices.size() << " files.");
+			g_trace("Using points from " << indices.size() << " files.");
 
 			for(int i = 0; i < 5; ++i)
 				recs.push_back(0);
@@ -155,7 +155,7 @@ namespace geotools {
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 
-				_trace("Processing file " << files[indices[i]]);
+				g_trace("Processing file " << files[indices[i]]);
 
 				while(r.ReadNextPoint()) {
 					liblas::Point pt = r.GetPoint();
@@ -169,7 +169,7 @@ namespace geotools {
 					const gg::Coordinate c(x, y);
 					gg::Point *p = gf->createPoint(c);
 
-					if(Util::inBounds(x, y, cbounds) && geomColl->contains(p)) {
+					if(cbounds.contains(x, y) && geomColl->contains(p)) {
 						++recs[cls];
 						++count;
 						w.WritePoint(pt);

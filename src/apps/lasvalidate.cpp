@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
  			} else if(p == "-r") {
  				distance = atof(argv[++i]);
  			} else if(p == "-v") {
- 				_loglevel(1);
+ 				g_loglevel(1);
  			} else if(p == "-c") {
 				Util::intSplit(classes, argv[++i]);
  			} else {

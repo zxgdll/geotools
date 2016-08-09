@@ -171,8 +171,8 @@ public:
 				m = m + (v - m) / k;
 				s = s + (v - m) * (v - oldm);
 				m_sum += v;
-				m_min = _min(m_min, v);
-				m_max = _max(m_max, v);
+				m_min = g_min(m_min, v);
+				m_max = g_max(m_max, v);
 				++m_count;
 				++k;
 			}
@@ -181,7 +181,7 @@ public:
 		m_variance = s / m_count;
 		m_stddev = std::sqrt(m_variance);
 		m_stats = true;
-		_trace("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min 
+		g_trace("Count: " << m_count << "; Sum: " << m_sum << "; Min: " << m_min 
 			<< "; Max: " << m_max << "; Mean: " << m_mean 
 			<< "; Variance: " << m_variance << "; Std Dev: " << m_stddev);
 	}
@@ -248,10 +248,10 @@ public:
 			
 			if(!visited[idx] && op.fill(get(col, row))) {
 
-				minc = _min(col, minc);
-				maxc = _max(col, maxc);
-				minr = _min(row, minr);
-				maxr = _max(row, maxr);
+				minc = g_min(col, minc);
+				maxc = g_max(col, maxc);
+				minr = g_min(row, minr);
+				maxr = g_max(row, maxr);
 				++area;
 				other.set(col, row, fill);
 				visited[idx] = true;
@@ -264,7 +264,7 @@ public:
 				for(int c = col - 1; c >= 0; --c) {
 					idx = (size_t) row * cols() + c;
 					if(!visited[idx] && op.fill(get(c, row))) {
-						minc = _min(c, minc);
+						minc = g_min(c, minc);
 						++area;
 						other.set(c, row, fill);
 						visited[idx] = true;
@@ -279,7 +279,7 @@ public:
 				for(int c = col + 1; c < cols(); ++c) {
 					idx = (size_t) row * cols() + c;
 					if(!visited[idx] && op.fill(get(c, row))) {
-						maxc = _max(c, maxc);
+						maxc = g_max(c, maxc);
 						++area;
 						other.set(c, row, fill);
 						visited[idx] = true;
@@ -335,7 +335,7 @@ private:
 	 */
 	void checkInit() const {
 		if(m_grid == nullptr)
-			_runerr("This instance has not been initialized.");
+			g_runerr("This instance has not been initialized.");
 	}
 
 public:
@@ -416,7 +416,7 @@ public:
 	 */
 	void init(int cols, int rows) {
 		if(cols <= 0 || rows <= 0)
-			_argerr("Invalid row or column count.");
+			g_argerr("Invalid row or column count.");
 		if(cols != m_cols || rows != m_rows) {
 			m_cols = cols;
 			m_rows = rows;
@@ -442,7 +442,7 @@ public:
 	T &get(size_t idx) {
 		checkInit();
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			g_argerr("Index out of bounds.");
 		return m_grid[idx];
 	}
 
@@ -467,7 +467,7 @@ public:
 	void set(size_t idx, const T value) {
 		checkInit();
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			g_argerr("Index out of bounds.");
 		m_grid[idx] = value;
 	}
 
@@ -485,7 +485,7 @@ public:
 	T &operator[](size_t idx) {
 		checkInit();
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			g_argerr("Index out of bounds.");
 		return m_grid[idx];
 	}
 
@@ -520,11 +520,11 @@ public:
 	 */
 	void readBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0) {
 		if(&block == this)
-			_argerr("Recursive call to readBlock.");
+			g_argerr("Recursive call to readBlock.");
 		if(col + block.cols() - dstRow > m_cols)
-			_argerr("Block is wider than the available space.");
+			g_argerr("Block is wider than the available space.");
 		if(row + block.rows() - dstCol > m_rows)
-			_argerr("Block is taller than the available space.");
+			g_argerr("Block is taller than the available space.");
 		if(block.hasGrid()) {
 			for(int r = 0; r < block.rows() - dstRow; ++r) {
 				std::memcpy(
@@ -546,11 +546,11 @@ public:
 	 */
 	void writeBlock(int col, int row, Grid<T> &block, int srcCol = 0, int srcRow = 0) {
 		if(&block == this)
-			_argerr("Recursive call to writeBlock.");
+			g_argerr("Recursive call to writeBlock.");
 		if(col + block.cols() - srcCol > m_cols)
-			_argerr("Block is wider than the available space.");
+			g_argerr("Block is wider than the available space.");
 		if(row + block.rows() - srcRow > m_rows)
-			_argerr("Block is taller than the available space.");
+			g_argerr("Block is taller than the available space.");
 		if(block.hasGrid()) {
 			for(int r = 0; r < block.rows(); ++r) {
 				std::memcpy(
@@ -720,7 +720,7 @@ public:
 			if(!blk)
 				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
 			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
-				_runerr("Failed to read block.");
+				g_runerr("Failed to read block.");
 			m_blocks[i] = blk;
 		}
 		m_times[i] = t;
@@ -760,18 +760,18 @@ private:
 	 */
 	void loadBlock(int col, int row) {
 		if(!m_inited)
-			_runerr("Not inited before attempted read.");
+			g_runerr("Not inited before attempted read.");
 		if(!has(col, row))
-			_argerr("Row or column out of bounds.");
+			g_argerr("Row or column out of bounds.");
 		int bcol = (int) (col / m_bw);
 		int brow = (int) (row / m_bh);
 		if(bcol >= m_bcols || bcol < 0 || brow >= m_brows || brow < 0)
-			_argerr("Illegal block column or row.");
+			g_argerr("Illegal block column or row.");
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
 			T *blk = m_cache.getBlock(col, row);
 			if(!blk)
-				_runerr("Failed to load block from cache.");
+				g_runerr("Failed to load block from cache.");
 			std::fill_n(m_block, (size_t) m_bw * m_bh, nodata());
 			std::memcpy(m_block, blk, (size_t) m_bw * m_bh);
 			m_currow = brow;
@@ -903,13 +903,13 @@ public:
 			double resolutionX, double resolutionY, double nodata, std::string proj) {
 		
 		if(resolutionX == 0 || resolutionY == 0)
-			_argerr("Resolution must be larger or smaller than 0.");
+			g_argerr("Resolution must be larger or smaller than 0.");
 		if(maxx < minx)
-			_argerr("Minimum x must be smaller than or equal to maximum x.");
+			g_argerr("Minimum x must be smaller than or equal to maximum x.");
 		if(maxy < miny)
-			_argerr("Minimum y must be smaller than or equal to maximum y.");
+			g_argerr("Minimum y must be smaller than or equal to maximum y.");
 		if(filename.empty())
-			_argerr("Filename must be given.");
+			g_argerr("Filename must be given.");
 
 		m_filename.assign(filename);
 
@@ -922,7 +922,7 @@ public:
 		m_ds = GetGDALDriverManager()->GetDriverByName("GTiff")->Create(filename.c_str(),
 				width, height, 1, m_type, NULL);
 		if(m_ds == nullptr)
-			_runerr("Failed to create file.");
+			g_runerr("Failed to create file.");
 
 		// Initialize geotransform.
 		auto lst = std::initializer_list<double>({ 
@@ -941,7 +941,7 @@ public:
 		m_cols = m_ds->GetRasterXSize();
 		m_band = m_ds->GetRasterBand(1);
 		if(m_band == NULL)
-			_runerr("Failed to get band.");
+			g_runerr("Failed to get band.");
 		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_band->SetNoDataValue(nodata);
 		m_nodata = m_band->GetNoDataValue();
@@ -951,7 +951,7 @@ public:
 		m_cache.setRasterBand(m_band);
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
-			_runerr("Failed to allocate memory for raster block.");
+			g_runerr("Failed to allocate memory for raster block.");
 		m_writable = true;
 		m_inited = true;
 	}
@@ -962,7 +962,7 @@ public:
 	void init(const std::string &filename, int band = 1, bool writable = false) {
 
 		if(filename.empty())
-			_argerr("Filename must be given.");
+			g_argerr("Filename must be given.");
 		
 		m_filename.assign(filename);
 
@@ -970,14 +970,14 @@ public:
 		GDALAllRegister();
 		m_ds = (GDALDataset *) GDALOpen(filename.c_str(), writable ? GA_Update : GA_ReadOnly);
 		if(m_ds == NULL)
-			_runerr("Failed to open raster.");
+			g_runerr("Failed to open raster.");
 
 		// Save some raster
 		m_bandn = band;
 		m_ds->GetGeoTransform(m_trans);
 		m_band = m_ds->GetRasterBand(band);
 		if(m_band == nullptr)
-			_runerr("Failed to get band.");
+			g_runerr("Failed to get band.");
 		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
@@ -988,7 +988,7 @@ public:
 		m_cache.setRasterBand(m_band);
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
-			_runerr("Failed to allocate memory for raster block.");
+			g_runerr("Failed to allocate memory for raster block.");
 		m_writable = writable;
 		m_inited = true;
 	}
@@ -1025,7 +1025,7 @@ public:
 		grd.fill(value);
 		do {
 			if(m_band->WriteBlock(blk.blockCol(), blk.blockRow(), grd.grid()) != CE_None)
-				_runerr("Flush error.");
+				g_runerr("Flush error.");
 		} while(blk.next());		
 	}
 
@@ -1051,14 +1051,14 @@ public:
 	 */
 	void readBlock(int col, int row, Grid<T> &grd, int dstCol = 0, int dstRow = 0) {
 
-		int cols = _min(m_cols - col, grd.cols() - dstCol);
-		int rows = _min(m_rows - row, grd.rows() - dstRow);
+		int cols = g_min(m_cols - col, grd.cols() - dstCol);
+		int rows = g_min(m_rows - row, grd.rows() - dstRow);
 		if(cols < 1 || rows < 1)
-			_argerr("Zero read size.");
+			g_argerr("Zero read size.");
 
 		MemRaster<T> mr(cols, rows);
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-			_runerr("Failed to read from band.");
+			g_runerr("Failed to read from band.");
 		grd.writeBlock(dstCol, dstRow, mr);
 
 	}
@@ -1068,17 +1068,17 @@ public:
 	 */
 	void writeBlock(int col, int row, Grid<T> &grd, int srcCol = 0, int srcRow = 0) {
 		if(&grd == this)
-			_runerr("Recursive call to writeBlock.");
+			g_runerr("Recursive call to writeBlock.");
 
-		int cols = _min(m_cols - col, grd.cols() - srcCol);
-		int rows = _min(m_rows - row, grd.rows() - srcRow);
+		int cols = g_min(m_cols - col, grd.cols() - srcCol);
+		int rows = g_min(m_rows - row, grd.rows() - srcRow);
 		if(cols < 1 || rows < 1)
-			_argerr("Zero write size.");
+			g_argerr("Zero write size.");
 
 		MemRaster<T> mr(cols, rows);
 		grd.readBlock(srcCol, srcRow, mr);
 		if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-			_runerr("Failed to write to band.");
+			g_runerr("Failed to write to band.");
 	}
 
 	/**
@@ -1309,7 +1309,7 @@ public:
 	}
 
 	T *grid() {
-		_implerr("grid() Not implemented in Raster.");
+		g_implerr("grid() Not implemented in Raster.");
 	}
 	
 	bool hasGrid() const {
@@ -1334,7 +1334,7 @@ public:
 
 	T &get(size_t idx) {
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			g_argerr("Index out of bounds.");
 		return get(idx % m_cols, (int) idx / m_cols);
 	}
 
@@ -1350,7 +1350,7 @@ public:
 	 */
 	void set(int col, int row, T v) {
 		if(!m_writable)
-			_runerr("This raster is not writable.");
+			g_runerr("This raster is not writable.");
 		loadBlock(col, row);
 		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
 		m_block[idx] = v;
@@ -1359,7 +1359,7 @@ public:
 
 	void set(size_t idx, T v) {
 		if(idx >= size())
-			_argerr("Index out of bounds.");
+			g_argerr("Index out of bounds.");
 		set(idx % m_cols, (int) idx / m_rows, v);
 	}
 
@@ -1398,7 +1398,7 @@ public:
 	void flush() {
 		if(m_writable && m_dirty) {
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
-				_runerr("Flush error.");
+				g_runerr("Flush error.");
 			m_ds->FlushCache();
 			m_dirty = false;
 		}
@@ -1445,14 +1445,14 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 
 			do {
 
-				double d = _sq(rad);
+				double d = g_sq(rad);
 				double a = 0.0;
 				double b = 0.0;
 				int cnt = 0;
 
-				for(int r0 = _max(0, r - rad); r0 < _min(rows(), r + rad + 1); ++r0) {
-					for(int c0 = _max(0, c - rad); c0 < _min(cols(), c + rad + 1); ++c0) {
-						double d0 = _sq((double) c0 - c) + _sq((double) r0 - r);
+				for(int r0 = g_max(0, r - rad); r0 < g_min(rows(), r + rad + 1); ++r0) {
+					for(int c0 = g_max(0, c - rad); c0 < g_min(cols(), c + rad + 1); ++c0) {
+						double d0 = g_sq((double) c0 - c) + g_sq((double) r0 - r);
 						if(d0 <= d && get(c0, r0) != nodata()) {
 							double dp = 1.0 / std::pow(d0, exp);
 							a += dp * get(c0, r0);
@@ -1470,7 +1470,7 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 
 				rad += 1.0;
 
-			} while(rad < _min(cols(), rows()));
+			} while(rad < g_min(cols(), rows()));
 
 			if(!found)
 				std::cerr << "WARNING: Pixel not filled at " << c << "," << r << ". Consider larger radius or smaller count." << std::endl;

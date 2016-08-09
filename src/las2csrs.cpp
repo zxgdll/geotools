@@ -61,8 +61,8 @@ namespace geotools {
 
 				for(int i = 0; i < count; ++i) {
 					double l = *(lat + i);
-					double m = a * (1.0 - e2) / pow((1.0 - e2 * _sq(sin(l))), 3.0/2.0); 	// Meridional radius of curvature.
-					double n = a / pow((1.0 - e2 * _sq(sin(l))), 1.0/2.0); 					// Parallel radius of curvature.
+					double m = a * (1.0 - e2) / pow((1.0 - e2 * g_sq(sin(l))), 3.0/2.0); 	// Meridional radius of curvature.
+					double n = a / pow((1.0 - e2 * g_sq(sin(l))), 1.0/2.0); 					// Parallel radius of curvature.
 					double r = n * cos(l); 													// Radius of parallel.
 					*(dlon + i) = *(dx + i) / (r + *(h + i));
 					*(dlat + i) = *(dy + i) / (m + *(h + i));		
@@ -107,18 +107,18 @@ namespace geotools {
 						ds = (GDALDataset *) GDALOpen(path, GA_ReadOnly);
 					}
 					if(!ds)
-						_runerr("Failed to load shift grid. Set the LAS2CSRS_DATA variable to point to the itrf database and grid shift file.");
+						g_runerr("Failed to load shift grid. Set the LAS2CSRS_DATA variable to point to the itrf database and grid shift file.");
 
 					xband = ds->GetRasterBand(1);
 					yband = ds->GetRasterBand(2);
 					zband = ds->GetRasterBand(3);
 					if(!xband || !yband || !zband)
-						_runerr("Failed to retrieve shift bands.");
+						g_runerr("Failed to retrieve shift bands.");
 
 					width = xband->GetXSize();
 					height = yband->GetYSize();
 					if(width <= 0 || height <= 0)
-						_runerr("The dimensions of the shift grid are invalid.");
+						g_runerr("The dimensions of the shift grid are invalid.");
 
 					xg.init(width, height);
 					yg.init(width, height);
@@ -129,7 +129,7 @@ namespace geotools {
 					CPLErr ze = zband->RasterIO(GF_Read, 0, 0, width, height, zg.grid(), width, height, GDT_Float32, 0, 0);
 
 					if(xe == CE_Failure || ye == CE_Failure || ze == CE_Failure)
-						_runerr("Failed to read shift grid.");
+						g_runerr("Failed to read shift grid.");
 
 					ds->GetGeoTransform(tg);
 				}
@@ -151,8 +151,8 @@ namespace geotools {
 					double c, r;
 					int c0, c1, r0, r1;
 					for(;count;--count, ++x, ++y, ++dx, ++dy, ++dz) {
-						c = ((_deg(*x) - tg[0]) / tg[1]);
-						r = ((_deg(*y) - tg[3]) / tg[5]);
+						c = ((g_deg(*x) - tg[0]) / tg[1]);
+						r = ((g_deg(*y) - tg[3]) / tg[5]);
 						c0 = (int) c;
 						r0 = (int) r;
 						c1 = c0 + 1;
@@ -235,7 +235,7 @@ namespace geotools {
 			*/
 			void epochTransform(Params &params, Grid<double> &gx, Grid<double> &gy, Grid<double> &gz, int count, double dt) {
 
-				_trace("epochTransform");
+				g_trace("epochTransform");
 
 				double *x = gx.grid();
 				double *y = gy.grid();
@@ -251,7 +251,7 @@ namespace geotools {
 
 				DSt += 1.0; // Scale is w/r/t 1.
 
-				_trace("  > Txt: " << Txt << "; Tyt: " << Tyt << "; Tzt: " << Tzt << "\n" \
+				g_trace("  > Txt: " << Txt << "; Tyt: " << Tyt << "; Tzt: " << Tzt << "\n" \
 					<< "  > Rxt: " << Rxt << "; Ryt: " << Ryt << "; Rzt: " << Rzt << "\n" \
 					<< "  > DSt: " << DSt << "\n" \
 					<< "  > drx: " << params.drx << "; dry: " << params.dry << "; drz: " << params.drz << "\n");
@@ -268,25 +268,25 @@ namespace geotools {
 			 */
 			void initProjections() {
 
-				_trace("initProjection");
+				g_trace("initProjection");
 
 				// Initialize projections.
 				if(!params.fromSRS || !params.toSRS)
-					_argerr("SRSes are not set.");
-				_trace("From projection: " << params.fromSRS->GetProj4());
+					g_argerr("SRSes are not set.");
+				g_trace("From projection: " << params.fromSRS->GetProj4());
 				projFrom = pj_init_plus(params.fromSRS->GetProj4().c_str());
 				if(!projFrom)
-					_argerr(pj_strerrno(pj_errno));
-				_trace("To projection: " << params.toSRS->GetProj4());
+					g_argerr(pj_strerrno(pj_errno));
+				g_trace("To projection: " << params.toSRS->GetProj4());
 				projTo = pj_init_plus(params.toSRS->GetProj4().c_str());
 				if(!projTo)
-					_argerr(pj_strerrno(pj_errno));
+					g_argerr(pj_strerrno(pj_errno));
 				projECEF = pj_init_plus("+proj=geocent +ellps=GRS80 +units=m +no_defs");
 				if(!projECEF)
-					_argerr(pj_strerrno(pj_errno));
+					g_argerr(pj_strerrno(pj_errno));
 				projGeog = pj_init_plus("+proj=latlon +ellps=GRS80 +no_defs");
 				if(!projGeog)
-					_argerr(pj_strerrno(pj_errno));
+					g_argerr(pj_strerrno(pj_errno));
 			}
 
 			/**
@@ -294,7 +294,7 @@ namespace geotools {
 			 */
 			void loadHelmert(Params &p) {
 
-				_trace("loadHelmert " << p.ffrom);
+				g_trace("loadHelmert " << p.ffrom);
 
 				std::string ffrom;
 				std::string fto;
@@ -308,7 +308,7 @@ namespace geotools {
 					f.open(path);
 				}
 				if(!f.is_open()) 
-					_runerr("Failed to open itrf database. If necessary, set LAS2CSRS_DATA environment variable.");
+					g_runerr("Failed to open itrf database. If necessary, set LAS2CSRS_DATA environment variable.");
 				std::string line;
 				while(std::getline(f, line)) {
 					if(line[0] == '/' || line[0] == ' ')
@@ -317,9 +317,9 @@ namespace geotools {
 					ls >> ffrom >> fto >> epoch >> tx >> ty >> tz >> rx >> ry >> rz >> d 
 						>> dtx >> dty >> dtz >> drx >> dry >> drz >> dd;
 
-					_trace(" -- Checking: " << ffrom);
+					g_trace(" -- Checking: " << ffrom);
 					if(ffrom == p.ffrom) {
-						_trace(" -- Found entry for " << ffrom);
+						g_trace(" -- Found entry for " << ffrom);
 						p.epoch = epoch;
 						p.d = d / 1000000000.0; 		// Listed as ppb.
 						p.dd = dd / 1000000000.0;
@@ -341,10 +341,10 @@ namespace geotools {
 				}
 
 				if(!found)
-					_argerr("Failed to find a transformation matching the parameters.");
+					g_argerr("Failed to find a transformation matching the parameters.");
 
-				_trace(" -- Params: dtx: " << p.dtx << "; dty: " << p.dty << "; dtz: " << p.dtz);
-				_trace("            drx: " << p.drx << "; dry: " << p.dry << "; drz: " << p.drz);
+				g_trace(" -- Params: dtx: " << p.dtx << "; dty: " << p.dty << "; dtz: " << p.dtz);
+				g_trace("            drx: " << p.drx << "; dry: " << p.dry << "; drz: " << p.drz);
 
 			}
 
@@ -368,17 +368,17 @@ namespace geotools {
 			Transformer(const std::string &ffrom, float efrom, float eto, const std::string &fromSRS, const std::string &toSRS) {
 
 				if(ffrom.empty())
-					_argerr("A source reference frame is required.");
+					g_argerr("A source reference frame is required.");
 				if(efrom < 1980)
-					_argerr("A source epoch is required (should be 1980 or higher.)");
+					g_argerr("A source epoch is required (should be 1980 or higher.)");
 				if(eto < 1980)
-					_argerr("A destination epoch is required (should be 1980 or higher.)");
+					g_argerr("A destination epoch is required (should be 1980 or higher.)");
 				if(toSRS.empty())
-					_argerr("A destination SRS is required. Include geoid information if orthometric output is required.");
+					g_argerr("A destination SRS is required. Include geoid information if orthometric output is required.");
 				if(fromSRS.empty())
-					_warn("Attempting to load source SRS information from LAS files.");
+					g_warn("Attempting to load source SRS information from LAS files.");
 
-				_trace("Transformer:\n -- src ref frame: " << ffrom << "; src epoch: " << efrom \
+				g_trace("Transformer:\n -- src ref frame: " << ffrom << "; src epoch: " << efrom \
 					<< "; dst epoch: " << eto << " -- from srs: " << fromSRS << "; to srs: ");
 
 				params.efrom = efrom;
@@ -410,16 +410,16 @@ namespace geotools {
 				// 2) Deduce the transformation parameters to NAD83 @ 1997.0.
 				// 3) Transform from NAD83 forward to target epoch.
 
-				_trace("transformPoints" \
+				g_trace("transformPoints" \
 					<< " -- Original: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0]);
 
 				// 1) Project to ECEF in the original reference frame.
 				pj_transform(projFrom, projECEF, count, 1, x.grid(), y.grid(), z.grid());
-				_trace(" -- ECEF (Original): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0]);
+				g_trace(" -- ECEF (Original): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0]);
 
 				// 2) Transform to NAD83 @ 1997.
 				epochTransform(params, x, y, z, count, params.efrom - params.epoch);
-				_trace(" -- ECEF (CSRS): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0]);
+				g_trace(" -- ECEF (CSRS): " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0]);
 
 				// Only use the grid shift if the epoch changes.
 				if(params.efrom != params.eto) {
@@ -437,7 +437,7 @@ namespace geotools {
 					// Transform from Cartesian (CSRS) to latlon.
 					pj_transform(projECEF, projGeog, count, 1, x0.grid(), y0.grid(), z0.grid());
 
-					_trace(" -- Lat Lon (CSRS): " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << z0.grid()[0]);
+					g_trace(" -- Lat Lon (CSRS): " << g_deg(x0.grid()[0]) << ", " << g_deg(y0.grid()[0]) << ", " << z0.grid()[0]);
 
 					// Initalize shift arrays.
 					MemRaster<double> dx(count, 1);
@@ -447,7 +447,7 @@ namespace geotools {
 					// Interpolate shifts using latlon coords -- returns in mm. (d)
 					shiftGrid.interpolate(x0, y0, dx, dy, dz);
 					
-					_trace(" -- Grid Velocities: " << dx.grid()[0] << ", " << dy.grid()[0] << ", " << dz.grid()[0]);
+					g_trace(" -- Grid Velocities: " << dx.grid()[0] << ", " << dy.grid()[0] << ", " << dz.grid()[0]);
 
 					// Transform mm shifts to latlon
 					MemRaster<double> dlat(count, 1);
@@ -460,7 +460,7 @@ namespace geotools {
 					// Get angular shifts from grid shift (mm).
 					_shift2latlon(dx, dy, y0, z0, a, e2, count, dlat, dlon);
 
-					_trace(" -- Lat lon shifts: " << dlat.grid()[0] << ", " << dlon.grid()[0]);
+					g_trace(" -- Lat lon shifts: " << dlat.grid()[0] << ", " << dlon.grid()[0]);
 
 					// Good to here...
 					
@@ -472,7 +472,7 @@ namespace geotools {
 						*(z0.grid() + i) += *(dz.grid() + i) * dt;
 					}
 					
-					_trace(" -- Lat lon shifted: " << _deg(x0.grid()[0]) << ", " << _deg(y0.grid()[0]) << ", " << z0.grid()[0]);
+					g_trace(" -- Lat lon shifted: " << g_deg(x0.grid()[0]) << ", " << g_deg(y0.grid()[0]) << ", " << z0.grid()[0]);
 
 					// Transform latlon to target proj
 					pj_transform(projGeog, projTo, count, 1, x0.grid(), y0.grid(), z0.grid());
@@ -489,7 +489,7 @@ namespace geotools {
 
 				}
 
-				_trace(" -- Final: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0]);
+				g_trace(" -- Final: " << x.grid()[0] << ", " << y.grid()[0] << ", " << z.grid()[0]);
 
 				// Expand the bounds for the new header.
 				for(int i = 0; i < count; ++i) {
@@ -510,29 +510,29 @@ namespace geotools {
 			 */
 			int transformLas(std::vector<std::string> &srcfiles, std::string &dstdir, bool overwrite) {
 				
-				_trace("transformLas");
+				g_trace("transformLas");
 
 				if(!srcfiles.size())
-					_argerr("No source files provided.");
+					g_argerr("No source files provided.");
 
 				fs::path dst(dstdir);
 				if(!fs::exists(dst)) {
 					if(!fs::create_directory(dst))
-						_argerr("Failed to create output directory: " << dst.string());
+						g_argerr("Failed to create output directory: " << dst.string());
 				}
 
-				_trace("Processing " << srcfiles.size() << " files.");
+				g_trace("Processing " << srcfiles.size() << " files.");
 
 				// Start
 				las::WriterFactory wf;
 				las::ReaderFactory rf;
 
 				// The overall bounds: min x, max x, min y, max y, min z, max z
-				double bounds[] = { DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
+				double bounds[] = { G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_NEG };
 
 				for(std::string filename:srcfiles) {
 
-					_trace("Processing file " << filename);
+					g_trace("Processing file " << filename);
 
 					// Open the source file.
 					std::ifstream in(filename.c_str(), std::ios::in | std::ios::binary);
@@ -544,14 +544,14 @@ namespace geotools {
 					if(!params.fromSRS) {
 						params.fromSRS = new las::SpatialReference(h.GetSRS());
 						if(!params.fromSRS)
-							_argerr("SRS not provided and not found on first LAS file.");
+							g_argerr("SRS not provided and not found on first LAS file.");
 					}
 					
 					// Check the files for sanity.
 					const fs::path srcfile(filename);
 					const fs::path dstfile(dst / srcfile.leaf());
 					if(srcfile == dstfile)
-						_argerr("Destination and source are the same: " << dstfile.string() << "==" << srcfile.string());
+						g_argerr("Destination and source are the same: " << dstfile.string() << "==" << srcfile.string());
 
 					las::Header dsth(h);
 					int count = h.GetPointRecordsCount();
@@ -650,7 +650,7 @@ int main(int argc, char **argv) {
 			if(arg == "-o") {
 				overwrite = true;
 			} else if(arg == "-v") {
-				_loglevel(1);
+				g_loglevel(1);
 			} else if(arg == "-d") {
 				dstdir.assign(argv[++i]);
 			} else if(arg == "-fs") {

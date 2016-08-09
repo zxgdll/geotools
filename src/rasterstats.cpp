@@ -143,7 +143,7 @@ namespace geotools {
 						double m = mean();
 						double s = 0.0;
 						for(int i = 0; i < m_values.size(); ++i)
-							s += _sq(m_values[i] - m);
+							s += g_sq(m_values[i] - m);
 						return s / (count() - 1.0);
 					}
 					return nan("");
@@ -193,15 +193,15 @@ namespace geotools {
 					Raster<float> frast1(files[f1]);
 
 					if(frast0.resolutionX() != frast1.resolutionX() || frast0.resolutionY() != frast1.resolutionY())
-						_runerr("Rasters must have the same resolution.");
+						g_runerr("Rasters must have the same resolution.");
 
 					int f0nodata = frast0.nodata();
 					int f1nodata = frast1.nodata();
 
-					double minx = _max(frast0.minx(), frast1.minx());
-					double miny = _max(frast0.miny(), frast1.miny());
-					double maxx = _min(frast0.maxx(), frast1.maxx());
-					double maxy = _min(frast0.maxy(), frast1.maxy());
+					double minx = g_max(frast0.minx(), frast1.minx());
+					double miny = g_max(frast0.miny(), frast1.miny());
+					double maxx = g_min(frast0.maxx(), frast1.maxx());
+					double maxy = g_min(frast0.maxy(), frast1.maxy());
 
 					int cols = (int) (maxx - minx) / frast0.resolutionX();
 					int rows = (int) (miny - maxy) / frast0.resolutionY();

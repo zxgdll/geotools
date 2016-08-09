@@ -34,11 +34,11 @@
 
 using namespace interp;
 
-double _min(double a, double b) {
+double g_min(double a, double b) {
 	return a > b ? b : a;
 }
 
-double _max(double a, double b) {
+double g_max(double a, double b) {
 	return a < b ? b : a;
 }
 
@@ -47,7 +47,7 @@ double _random() {
 	return r;
 }
 
-double _sq(double a) {
+double g_sq(double a) {
 	return a*a;
 }
 
@@ -125,8 +125,8 @@ void printSamples(std::list<InterpPoint> &samples) {
 	std::cout << "x,y,base,adj,diff,final,resid" << std::endl;
 	double d = 0.0, r = 0.0;
 	for(auto it = samples.begin(); it != samples.end(); ++it) {
-		d += _sq(it->z);
-		r += _sq(it->resid);
+		d += g_sq(it->z);
+		r += g_sq(it->resid);
 		std::cout << std::setprecision(9) 
 			<< it->x << "," << it->y << "," << it->z << "," << it->resid << std::endl;
 	}
@@ -137,10 +137,10 @@ void printSamples(std::list<InterpPoint> &samples) {
  * Compute the intersection of the bounds of the two rasters.
  */
 void computeBounds(Raster<float> &a, Raster<float> &b, double *bounds) {
-	bounds[0] = _max(a.toX(0), b.toX(0));
-	bounds[1] = _max(a.toY(a.rows()), b.toY(b.rows()));
-	bounds[2] = _min(a.toX(a.cols()), b.toX(b.cols()));
-	bounds[3] = _min(a.toY(0), b.toY(0));
+	bounds[0] = g_max(a.toX(0), b.toX(0));
+	bounds[1] = g_max(a.toY(a.rows()), b.toY(b.rows()));
+	bounds[2] = g_min(a.toX(a.cols()), b.toX(b.cols()));
+	bounds[3] = g_min(a.toY(0), b.toY(0));
 }
 
 void adjust(std::string &basefile, std::string &adjfile, 

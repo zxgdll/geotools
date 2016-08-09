@@ -25,9 +25,6 @@
 
 #include <liblas/liblas.hpp>
 
-#include "geotools.h"
-#include "Util.hpp"
-#include "Raster.hpp"
 #include "lasgrid.hpp"
  
 namespace fs = boost::filesystem;
@@ -46,7 +43,7 @@ namespace geotools {
 				return 2.0; 
 			}
 			double defaultRadius() { 
-				return std::sqrt(_sq(defaultResolution / 2) * 2); 
+				return std::sqrt(g_sq(defaultResolution() / 2.0) * 2.0); 
 			}
 			bool defaultSnapToGrid() { 
 				return true;
@@ -144,14 +141,14 @@ namespace geotools {
 			 * @param bounds The bounds of the raster.
 			 */
 			bool inRadius(double px, double py, int col, int row, double radius,
-					double resolution, std::vector<double> &bounds){
+					double resolution, Bounds &bounds){
 				if(radius == 0.0) return true;
 				// If a radius is given, extract the x and y of the current cell's centroid
 				// and measure its distance (squared) from the point.
 				double x = col * resolution + bounds[0] + resolution * 0.5;
 				double y = row * resolution + bounds[1] + resolution * 0.5;
 				// If the cell is outside the radius, ignore it.
-				double r = sqrt(_sq(x - px) + _sq(y - py));
+				double r = sqrt(g_sq(x - px) + g_sq(y - py));
 				return r <= radius;
 			}
 
@@ -159,30 +156,24 @@ namespace geotools {
 
 		void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
 					int crs, int attribute, int type, double radius,
-					double resolution, std::vector<double> &bounds, unsigned char angleLimit, bool fill) {
+					double resolution, Bounds &bounds, unsigned char angleLimit, bool fill, bool snap) {
 
+			if(radius <= 0.0)
+				g_argerr("Radius must be > 0.");
+			if(resolution <= 0.0)
+				g_argerr("Resolution must be > 0.");
 			if(files.size() == 0)
-				_argerr("At least one input file is required.");
-			_trace(files.size() << " files.");
+				g_argerr("At least one input file is required.");
 			if(dstFile.empty()) 
-				_argerr("An output file is required.");
-			_trace("Creating " << dstFile);
-			if(attribute == 0)
-				_argerr("An attribute is required.");
-			_trace("Attribute: " << attribute);
-			if(type == 0)
-				_argerr("A valid type is required.");
-			_trace("Type: " << type);
-			if(classes.size() == 0) {
-				_warn("No classes given. Matching all classes.");
-			} else {
-				_trace("Classes: " << classes.size());
-			}
+				g_argerr("An output file is required.");
+			if(attribute <= 0)
+				g_argerr("An attribute is required.");
+			if(type <= 0)
+				g_argerr("A valid type is required.");
+			if(classes.size() == 0)
+				g_warn("No classes given. Matching all classes.");
 			if(angleLimit <= 0)
-				_argerr("Angle limit must be greater than zero.");
-			// Snap bounds
-			if(bounds.size() == 4) 
-				Util::snapBounds(bounds, resolution, 2);
+				g_argerr("Angle limit must be greater than zero.");
 
 			using namespace geotools::las::lasgrid_util;
 
@@ -193,49 +184,29 @@ namespace geotools {
 			liblas::ReaderFactory rf;
 			std::vector<unsigned int> indices;
 
-			bool hasBounds = bounds.size() > 0;
-			if(!hasBounds) {
-				bounds.push_back(DBL_MAX_POS);
-				bounds.push_back(DBL_MAX_POS);
-				bounds.push_back(DBL_MAX_NEG);
-				bounds.push_back(DBL_MAX_NEG);
-			}
-
 			for(unsigned int i=0; i<files.size(); ++i) {
-
-				_trace("Checking file " << files[i]);
-
+				g_trace("Checking file " << files[i]);
 				std::ifstream in(files[i].c_str(), std::ios::in|std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
-				std::vector<double> bounds0 = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
+				Bounds bounds0;
 				if(!Util::computeLasBounds(h, bounds0, 2))
 					Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 				in.close();
-				if(hasBounds) {
-					// If bounds are given, ignore blocks that do not intersect.
-					if(!Util::intersects(bounds0, bounds, 2))
-						continue;
-				} else {
-					// Otherwise expand to include each block.
-					Util::expand(bounds, bounds0, 2);
-				}
-				indices.push_back(i);
+				if(bounds.intersects(bounds0, 2))
+					indices.push_back(i);
 			}
 
-			Util::snapBounds(bounds, resolution, 2);
-			Util::printBounds(bounds, 2);
+			if(snap)
+				bounds.snap(resolution);
+			
+			g_trace(bounds.print());
 
 			// Prepare grid
-			int cols;
-			int rows;
-			Util::boundsToColsRows(bounds, resolution, &cols, &rows);
+			int cols = bounds.cols(resolution);
+			int rows = bounds.rows(resolution);
 
-			// Compute the radius given the cell size, if it is not given.
-			if(radius == -1.0)
-				radius = sqrt(_sq(resolution / 2.0) * 2.0);
-
-			_trace("Raster size: " << cols << ", " << rows << "; Cell radius: " << radius);
+			g_trace("Raster size: " << cols << ", " << rows << "; Cell radius: " << radius);
 			
 			// For types other than count, we need a double grid to manage sums.
 			if(type != TYPE_COUNT) {
@@ -251,10 +222,10 @@ namespace geotools {
 			case TYPE_PSTDDEV:
 			case TYPE_QUANTILE:
 			case TYPE_MEDIAN:
-				qGrid.init(cols, rows);
-				qGrid.setDeallocator(*vector_dealloc);
-				for(int i = 0; i < cols * rows; ++i)
+				for(size_t i = 0; i < qGrid.size(); ++i)
 					qGrid.set(i, new std::vector<double>());
+				qGrid.init(cols, rows);
+				qGrid.setDeallocator(&vector_dealloc);
 				break;
 			}
 
@@ -262,7 +233,7 @@ namespace geotools {
 			counts.init(cols, rows);
 			counts.fill(0);
 
-			_trace("Using " << indices.size() << " of " << files.size() << " files.");
+			g_trace("Using " << indices.size() << " of " << files.size() << " files.");
 
 			// Process files
 			int current = 0; // Current file counter.
@@ -272,18 +243,18 @@ namespace geotools {
 				liblas::Reader reader = rf.CreateWithStream(in);
 				liblas::Header header = reader.GetHeader();
 
-				_trace("File " << ++current << " of " << indices.size());
+				g_trace("File " << ++current << " of " << indices.size());
 
 				while(reader.ReadNextPoint()) {
 					liblas::Point pt = reader.GetPoint();
 					
-					if(_abs(pt.GetScanAngleRank()) > angleLimit)
+					if(g_abs(pt.GetScanAngleRank()) > angleLimit)
 						continue;
 
 					double px = pt.GetX();
 					double py = pt.GetY();
 					// Check if in bounds, but only if clipping is desired.
-					if(!Util::inBounds(px, py, bounds)) 
+					if(!bounds.contains(px, py)) 
 						continue;
 					// If this point is not in the class list, skip it.
 					if(!Util::inList(classes, pt.GetClassification().GetClass()))
@@ -296,14 +267,15 @@ namespace geotools {
 						pz = pt.GetZ();
 					}
 					// Convert x and y, to col and row.
-					int c = (int) ((px - bounds[0]) / resolution);
-					int r = (int) ((py - bounds[1]) / resolution);
+					int c = (int) ((px - bounds.minx()) / resolution);
+					int r = (int) ((py - bounds.miny()) / resolution);
 					// If the radius is > 0, compute the size of the window.
-					int offset = radius > 0.0 ? (int) radius / resolution : 0;
-					for(int cc = _max(0, c - offset); cc < _min(cols, c + offset + 1); ++cc) {
-						for(int rr = _max(0, r - offset); rr < _min(rows, r + offset + 1); ++rr) {
+					int offset = (int) (radius * 2) / resolution;
+					for(int cc = g_max(0, c - offset); cc < g_min(cols, c + offset + 1); ++cc) {
+						for(int rr = g_max(0, r - offset); rr < g_min(rows, r + offset + 1); ++rr) {
 							// If the coordinate is out of the cell's radius, continue.
-							if(!inRadius(px, py, cc, rr, radius, resolution, bounds)) continue;
+							if(!inRadius(px, py, cc, rr, radius, resolution, bounds)) 
+								continue;
 							// Compute the grid index. The rows are assigned from the bottom.
 							int idx = (rows - rr - 1) * cols + cc;
 							counts.set(idx, counts.get(idx) + 1);
@@ -354,7 +326,7 @@ namespace geotools {
 						double s = 0;
 						int k = 1;
 						for(int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = (*qGrid[i])[j];
+							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
 							s = s + (v - m) * (v - oldm);
@@ -373,7 +345,7 @@ namespace geotools {
 						double s = 0;
 						int k = 1;
 						for(int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = (*qGrid[i])[j];
+							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
 							s = s + (v - m) * (v - oldm);
@@ -392,7 +364,7 @@ namespace geotools {
 						double s = 0;
 						int k = 1;
 						for(int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = (*qGrid[i])[j];
+							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
 							s = s + (v - m) * (v - oldm);
@@ -411,7 +383,7 @@ namespace geotools {
 						double s = 0;
 						int k = 1;
 						for(int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = (*qGrid[i])[j];
+							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
 							s = s + (v - m) * (v - oldm);
@@ -425,11 +397,10 @@ namespace geotools {
 				break;
 			case TYPE_DENSITY:
 				{
-					double r2 = _sq(resolution);
+					double r2 = g_sq(resolution);
 					for(size_t i = 0; i < (size_t) cols * rows; ++i) {
 						if(counts[i] > 0) {
 							grid1.set(i, (double) counts[i] / r2);
-							_trace("res: " << r2 << ", " << counts[i] << ", " << i << ": " << (double) counts[i] / r2 << ": " << grid1.get(i));
 						} else {
 							grid1.set(i, 0.0);
 						}
@@ -443,9 +414,9 @@ namespace geotools {
 						int size = qGrid[i]->size();
 						if(size % 2 == 0) {
 							int idx = size / 2;
-							grid1.set(i, ((*qGrid[i])[idx - 1] + (*qGrid[i])[idx]) / 2.0);
+							grid1.set(i, (qGrid[i]->at(idx - 1) + qGrid[i]->at(idx)) / 2.0);
 						} else {
-							grid1.set(i, (*qGrid[i])[size / 2]);
+							grid1.set(i, (qGrid[i]->at(size / 2.0)));
 						}
 					}
 				}

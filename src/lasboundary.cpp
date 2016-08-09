@@ -61,7 +61,7 @@ namespace geotools {
 			void listFiles(std::vector<std::string> &files, std::string &srcDir) {
 				fs::path srcdir_p(srcDir);
 				if(!exists(srcdir_p))
-					_argerr("Path not found.");
+					g_argerr("Path not found.");
 				if(is_directory(srcdir_p)) {
 					fs::directory_iterator end;
 					for(fs::directory_iterator iter(srcdir_p); iter != end; iter++) {
@@ -99,11 +99,11 @@ namespace geotools {
 		void lasboundary(std::string &srcDir, std::string &dstFile, int srid, double res, std::set<int> &classes) {
 
 			if(srcDir.empty()) 
-				_argerr("No source dir given.");
+				g_argerr("No source dir given.");
 			if(dstFile.empty())
-				_argerr("No dest file given.");
+				g_argerr("No dest file given.");
 			if(srid <= 0)
-				_argerr("No SRID given.");
+				g_argerr("No SRID given.");
 
 			using namespace geotools::las::util;
 
@@ -112,24 +112,26 @@ namespace geotools {
 			listFiles(files, srcDir);
 
 			if(files.size() == 0)
-				_argerr("No files found.");
+				g_argerr("No files found.");
 
 			liblas::ReaderFactory rf;
-			std::vector<double> bounds = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
+			Bounds bounds;
+			bounds.collapse();
 
 			for(unsigned int i=0; i<files.size(); ++i) {
 				// Open the file and create a reader.
-				_trace("Checking " << files[i]);
+				g_trace("Checking " << files[i]);
 				std::ifstream in(files[i].c_str());
 				liblas::Reader reader = rf.CreateWithStream(in);
 				liblas::Header header = reader.GetHeader();
-				std::vector<double> bounds0 = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG } ;
+				Bounds bounds0;
+				bounds0.collapse();
 				Util::computeLasBounds(header, bounds0, 2);
-				Util::expand(bounds, bounds0, 2);
+				bounds.extend(bounds0);
 				in.close();
 			}
 
-			Util::snapBounds(bounds, res, 2);
+			bounds.snap(res);
 			int cols = (int) ((bounds[2] - bounds[0]) + res);
 			int rows = (int) ((bounds[3] - bounds[1]) + res);
 			double width = bounds[2] - bounds[0];
@@ -139,7 +141,7 @@ namespace geotools {
 
 			for(unsigned int i=0; i<files.size(); ++i) {
 				// Open the file and create a reader.
-				_trace("Processing " << files[i]);
+				g_trace("Processing " << files[i]);
 				std::ifstream in(files[i].c_str());
 				liblas::Reader reader = rf.CreateWithStream(in);
 				liblas::Header header = reader.GetHeader();

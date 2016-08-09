@@ -48,7 +48,7 @@ namespace geotools {
 			 * Find the distance between two coordinates.
 			 */
 			double dist(double x1, double y1, double x2, double y2) {
-				return sqrt(_sq(x2-x1) + _sq(y2-y1));
+				return sqrt(g_sq(x2-x1) + g_sq(y2-y1));
 			}
 
 			/**
@@ -89,7 +89,7 @@ namespace geotools {
 				}
 				Pnt* nearest() {
 					Pnt *near = nullptr;
-					double dst = DBL_MAX_POS;
+					double dst = G_DBL_MAX_POS;
 					for(Pnt &p:returns) {
 						double dst0 = dist(p.x, p.y, x, y);
 						if(dst0 < dst) {
@@ -105,11 +105,11 @@ namespace geotools {
 			 * Compute a boundary that contains the sample points. Extend it by the
 			 * search radius. This is used as a naive LAS file filter.
 			 */
-			void computeBounds(std::vector<double> &bounds, Sample &sample, double distance) {
-				bounds[0] = sample.x - distance;
-				bounds[1] = sample.y - distance;
-				bounds[2] = sample.x + distance;
-				bounds[3] = sample.y + distance;
+			void computeBounds(Bounds &bounds, Sample &sample, double distance) {
+				bounds.minx(sample.x - distance);
+				bounds.miny(sample.y - distance);
+				bounds.maxx(sample.x + distance);
+				bounds.maxy(sample.y + distance);
 			}
 
 			/**
@@ -163,7 +163,7 @@ namespace geotools {
 			 * Distance between two coordinates (triangle side length.)
 			 */
 			double sideLength(const geom::Coordinate &a, const geom::Coordinate &b) {
-				return sqrt(_sq(a.x - b.x) + _sq(a.y - b.y));	
+				return sqrt(g_sq(a.x - b.x) + g_sq(a.y - b.y));	
 			}
 
 			/**
@@ -238,54 +238,57 @@ namespace geotools {
 			std::set<int> &classes, double distance) {
 
 			if(outfile.empty())
-				_argerr("Outfile not given.");
+				g_argerr("Outfile not given.");
 			if(datafile.empty())
-				_argerr("Data file not given.");
+				g_argerr("Data file not given.");
 			if(lasfiles.size() == 0)
-				_argerr("No LAS files.");
+				g_argerr("No LAS files.");
 			if(distance < 0.0)
-				_argerr("Distance must be greater than zero.");
+				g_argerr("Distance must be greater than zero.");
 			if(outfile == pointfile)
-				_argerr("Output file and LiDAR point file must be different.");
+				g_argerr("Output file and LiDAR point file must be different.");
 			if(classes.size() == 0)
-				_warn("No classes given; matching all classes.");
+				g_warn("No classes given; matching all classes.");
 
 			using namespace geotools::las::util;
 
 			std::vector<Sample> samples;
 			loadSamples(datafile, samples);
 
-			_trace(samples.size() << " samples found.");
+			g_trace(samples.size() << " samples found.");
 
 			liblas::ReaderFactory rf;
 			//for(auto it = lasfiles.begin(); it != lasfiles.end(); ++it) {
 			for(std::string &lasfile:lasfiles) {
 
-				_trace(lasfile);
+				g_trace(lasfile);
 
 				std::ifstream in(lasfile.c_str());
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 
 				// Check that this file is relevant.
-				std::vector<double> bounds0 = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
+				Bounds bounds0;
+				bounds0.collapse(2);
 				if(!Util::computeLasBounds(h, bounds0, 2))
 					Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 
-				_trace("LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3]);
+				g_trace("LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3]);
 
-				std::vector<double> bounds = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG };
+				Bounds bounds;
+				bounds.collapse();
+
 				bool inBounds = false;
 				for(Sample &sample:samples) {
 					computeBounds(bounds, sample, distance);
-					if(Util::intersects(bounds, bounds0, 2)) {
+					if(bounds.intersects(bounds0, 2)) {
 						inBounds = true;
 						break;
 					}
 				}
 
 				if(!inBounds) {
-					_trace("No samples in bounds. Skipping...");
+					g_trace("No samples in bounds. Skipping...");
 					continue;
 				}
 
@@ -312,11 +315,11 @@ namespace geotools {
 				}
 			}
 
-			_trace("Interpolating...");
+			g_trace("Interpolating...");
 			for(Sample &sample:samples)
 				interpolateSampleZ(sample);
 			
-			_trace("Writing...");
+			g_trace("Writing...");
 			writeOutput(outfile, pointfile, samples);
 
 		}

@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
 			} else if(arg == "-w") {
 				window = atoi(argv[++i]);
 			} else if(arg == "-v") {
-				_loglevel(LOG_TRACE);
+				g_loglevel(G_LOG_TRACE);
 			}
 		}
 

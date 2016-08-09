@@ -25,29 +25,29 @@ namespace geotools {
 
 		void merge(std::vector<std::string> &files, std::string &outfile, double minx, double miny, double maxx, double maxy) {
 
-			_trace("Processing " << files.size() << " files.");
+			g_trace("Processing " << files.size() << " files.");
 
 			if(outfile.empty())
-				_argerr("An output file (-o) is required.");
+				g_argerr("An output file (-o) is required.");
 
 			if(files.size() == 0)
-				_argerr("At least one input file is required.");
+				g_argerr("At least one input file is required.");
 
 			if(minx >= maxx || miny >= maxy)
-				_argerr("The bounds are silly.");
+				g_argerr("The bounds are silly.");
 
 			liblas::Header *dsth = nullptr;
 			liblas::Header::RecordsByReturnArray recs;
 			liblas::ReaderFactory rf;
 
 			// min x, max x, min y, max y, min z, max z
-			double bounds[] = { DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
+			double bounds[] = { G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_NEG };
 			int count = 0;
 			std::vector<unsigned int> indices;
 
 			for(unsigned int i = 0; i < files.size(); ++i) {
 
-				_trace("Checking file " << files[i]);
+				g_trace("Checking file " << files[i]);
 
 				std::ifstream in(files[i], std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
@@ -89,7 +89,7 @@ namespace geotools {
 			}
 
 			if(indices.size() == 0)
-				_argerr("No files matched the given bounds.")
+				g_argerr("No files matched the given bounds.")
 
 			// Set the total count and update the point record counts.
 			dsth->SetPointRecordsCount(count);
@@ -103,11 +103,11 @@ namespace geotools {
 			liblas::WriterFactory wf;
 			liblas::Writer w(out, *dsth);
 
-			_trace("Using points from " << indices.size() << " files.");
+			g_trace("Using points from " << indices.size() << " files.");
 
 			for(unsigned int i = 0; i < indices.size(); ++i) {
 
-				_trace("Processing file " << files[indices[i]]);
+				g_trace("Processing file " << files[indices[i]]);
 
 				std::string filename = files[indices[i]];
 				std::ifstream in(filename, std::ios::in | std::ios::binary);
@@ -147,10 +147,10 @@ void usage() {
 int main(int argc, char ** argv) {
 
 	std::vector<std::string> files;
-	double minx = DBL_MAX_NEG;
-	double maxx = DBL_MAX_POS;
-	double miny = DBL_MAX_NEG;
-	double maxy = DBL_MAX_POS;
+	double minx = G_DBL_MAX_NEG;
+	double maxx = G_DBL_MAX_POS;
+	double miny = G_DBL_MAX_NEG;
+	double maxy = G_DBL_MAX_POS;
 	std::string outfile;
 
 	for(int i=1;i<argc;++i) {
@@ -164,7 +164,7 @@ int main(int argc, char ** argv) {
 		} else if(arg == "--miny") {
 			miny = atof(argv[++i]);
 		} else if(arg == "-v") {
-			_loglevel(1);
+			g_loglevel(1);
 		} else if(arg == "-o") {
 			outfile = argv[++i];
 		} else {

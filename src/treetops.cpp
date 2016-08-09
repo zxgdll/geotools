@@ -10,10 +10,11 @@
 #include <omp.h>
 
 #include "Raster.hpp"
-
+#include "Util.hpp"
 #include "trees.hpp"
 
 using namespace geotools::raster;
+using namespace geotools::util;
 
 namespace trees {
 
@@ -72,13 +73,13 @@ namespace trees {
 	void treetops(std::string &inraster, std::string &topshp, int window) {
 
 		if(inraster.empty())
-			_argerr("Input raster cannot be empty.");
+			g_argerr("Input raster cannot be empty.");
 		if(topshp.empty())
-			_argerr("The treetop output name cannot be empty.");
+			g_argerr("The treetop output name cannot be empty.");
 		if(window < 3)
-			_argerr("A window size less than 3 makes no sense.");
+			g_argerr("A window size less than 3 makes no sense.");
 		if(window % 2 == 0) {
-			_warn("Window is " << window << ". Bumping up to " << (window + 1));
+			g_warn("Window is " << window << ". Bumping up to " << (window + 1));
 			window++;
 		}
 
@@ -97,13 +98,13 @@ namespace trees {
 
 		#pragma omp parallel
 		{
-			_trace("Thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
+			g_trace("Thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
 			MemRaster<float> blk(cols, window);
 			float max;
 			std::map<size_t, std::unique_ptr<Top> > tops0;
 		
 			while(row < rows) {
-				for(int r = row; r < _min(row + window, rows - window); ++r) { 
+				for(int r = row; r < g_min(row + window, rows - window); ++r) { 
 					blk.nodata(raster.nodata());
 					#pragma omp critical
 					{
@@ -125,10 +126,10 @@ namespace trees {
 				#pragma omp atomic
 				row += window;
 
-				_status(row, rows);
+				Util::status(row, rows, false);
 			}
 
-			_trace("Copying tops to output dict.");
+			g_trace("Copying tops to output dict.");
 			#pragma omp critical
 			{
 				for(auto it = tops0.begin(); it != tops0.end(); ++it) 
@@ -136,7 +137,7 @@ namespace trees {
 			}
 		}
 
-		_status(rows, rows, true);
+		Util::status(rows, rows, true);
 
 		std::stringstream out;
 		out << std::setprecision(12);

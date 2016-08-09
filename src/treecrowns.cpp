@@ -40,7 +40,7 @@ public:
 	int depth() {
 		int l = 0;
 		for(auto it = parents.begin(); it != parents.end(); ++it)
-			l = _max(l, it->second->depth());
+			l = g_max(l, it->second->depth());
 		return l + 1;
 	}
 
@@ -60,7 +60,7 @@ void gaussianWeights(double *weights, int size, double sigma) {
 		for(int c = 0; c < size; ++c) {
 			int x = c - size / 2;
 			int y = r - size / 2;
-			weights[r * size + c] = (1 / (2 * PI * sigma * sigma)) * pow(E, -((x*x + y*y) / (2.0*sigma*sigma)));
+			weights[r * size + c] = (1 / (2 * G_PI * sigma * sigma)) * pow(E, -((x*x + y*y) / (2.0*sigma*sigma)));
 		}
 	}
 }

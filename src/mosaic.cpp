@@ -27,8 +27,8 @@ namespace geotools {
 			 * The range of step is expected to be 0 -> steps and is clamped.
 			 */
 			float tanCurve(float step, float steps) {
-				step = _min(steps, _max(0.0, step));
-				return tanh(((step - steps / 2.0) / (steps / 2.0)) * PI) * 0.5 + 0.5;
+				step = g_min(steps, g_max(0.0, step));
+				return tanh(((step - steps / 2.0) / (steps / 2.0)) * G_PI) * 0.5 + 0.5;
 			}
 
 			/**
@@ -62,7 +62,7 @@ namespace geotools {
 				// The number of steps is just the number of pixels needed to 
 				// cover the distance of the fade.
 				float step = 0.0;
-				float steps = _max(1.0, distance / resolution);
+				float steps = g_max(1.0, distance / resolution);
 				bool found = false;
 				// "Snow in" the alpha mask. The loop will exit when no more edge pixels can be found.
 				do {
@@ -106,11 +106,11 @@ namespace geotools {
 		void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, int rowHeight = 500) {
 			
 			if(distance <= 0.0)
-				_argerr("Invalid distance: " << distance);
+				g_argerr("Invalid distance: " << distance);
 			if(outfile.size() == 0)
-				_argerr("No output file given.");
+				g_argerr("No output file given.");
 			if(files.size() < 2)
-				_argerr("Less than 2 files. Nothing to do.");
+				g_argerr("Less than 2 files. Nothing to do.");
 
 			using namespace geotools::raster::util;
 
@@ -124,20 +124,20 @@ namespace geotools {
 			// Iterate over the files, adding each one to the background.
 			for(unsigned int i = 1; i < files.size(); ++i) {
 
-				_trace("Processing file: " << files[i]);
+				g_trace("Processing file: " << files[i]);
 				Raster<float> input(files[i]);
 				if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
-					_argerr("Raster's resolution does not match the background.");
+					g_argerr("Raster's resolution does not match the background.");
 
 				// Determine if the vertical and horizontal resolution are positive.
 				bool posYRes = input.resolutionY() > 0;
 				bool posXRes = input.resolutionX() > 0;
 
 				// Get the origin of the input w/r/t the output and the number of overlapping cols, rows.
-				double maxx = _min(input.maxx(), output.maxx());
-				double minx = _max(input.minx(), output.minx());
-				double maxy = _min(input.maxy(), output.maxy());
-				double miny = _max(input.miny(), output.miny());
+				double maxx = g_min(input.maxx(), output.maxx());
+				double minx = g_max(input.minx(), output.minx());
+				double maxy = g_min(input.maxy(), output.maxy());
+				double miny = g_max(input.miny(), output.miny());
 				int col = output.toCol(posXRes ? minx : maxx);
 				int row = output.toRow(posYRes ? miny : maxy);
 				int cols = output.toCol(posXRes ? maxx : minx) - col;
@@ -147,7 +147,7 @@ namespace geotools {
 				float outNodata = output.nodata();
 
 				// Compute the average resolution between x and y.
-				float res = (_abs(input.resolutionX()) + _abs(input.resolutionY())) / 2.0;
+				float res = (g_abs(input.resolutionX()) + g_abs(input.resolutionY())) / 2.0;
 				// The number of rows required to accomodate the fade distance.
 				int rowOffset = (int) distance / res + 1;
 				// The height, in rows, of the buffer.
@@ -203,7 +203,7 @@ namespace geotools {
 
 					std::cout << "Feathering" << std::endl;
 					// Feather the overlay
-					feather(imGrid, alphaGrid, cols, bufRows0, distance, imNodata, _abs(input.resolutionX()));
+					feather(imGrid, alphaGrid, cols, bufRows0, distance, imNodata, g_abs(input.resolutionX()));
 
 					// Read background data.
 					#pragma omp critical 

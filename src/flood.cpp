@@ -78,14 +78,14 @@ namespace geotools {
 				Cell(unsigned int id, int col, int row) :
 					m_id(id), 
 					m_col(col), m_row(row) {
-					__cell_id = _max(id, __cell_id);
+					__cell_id = g_max(id, __cell_id);
 				}
 
 				Cell(unsigned int id, int col, int row, float value) :
 					m_id(id), 
 					m_col(col), m_row(row), 
 					m_value(value) {
-					__cell_id = _max(id, __cell_id);
+					__cell_id = g_max(id, __cell_id);
 
 				}
 
@@ -117,7 +117,7 @@ namespace geotools {
 					double y0 = row() * resy;
 					double x1 = other.col() * resx;
 					double y1 = other.row() * resy;
-					return std::sqrt(_sq(x0 - x1) + _sq(y0 - y1));
+					return std::sqrt(g_sq(x0 - x1) + g_sq(y0 - y1));
 				}
 
 			};
@@ -125,18 +125,18 @@ namespace geotools {
 			// Represents a basin, with bounds and area and the ID of the seed that spawned it.
 			class Basin {
 			private:
-				int m_minc;
-				int m_minr;
-				int m_maxc;
-				int m_maxr;
+				int mg_minc;
+				int mg_minr;
+				int mg_maxc;
+				int mg_maxr;
 				int m_area;
 				unsigned int m_id;
 
 			public:
 				Basin(unsigned int id, int minc, int minr, int maxc, int maxr, int area) :
 					m_id(id),
-					m_minc(minc), m_minr(minr), 
-					m_maxc(maxc), m_maxr(maxr),
+					mg_minc(minc), mg_minr(minr), 
+					mg_maxc(maxc), mg_maxr(maxr),
 					m_area(area) {
 
 				}
@@ -144,8 +144,8 @@ namespace geotools {
 				// Make a list of all the cells that are on the edges of this basin.
 				std::vector<Cell> computeEdges(Grid<unsigned int> &grd) {
 					std::vector<Cell> edgeCells;
-					for(int r = m_minr; r < m_maxr; ++r) {
-						for(int c = m_minc; c < m_maxc; ++c) {
+					for(int r = mg_minr; r < mg_maxr; ++r) {
+						for(int c = mg_minc; c < mg_maxc; ++c) {
 							bool edge = false;
 							if(grd.get(c, r) != m_id)
 								continue;
@@ -163,7 +163,7 @@ namespace geotools {
 							}
 						}
 					}
-					_trace("Cells: " << (m_maxc - m_minc) * (m_maxr - m_minr) << "; " << edgeCells.size());
+					g_trace("Cells: " << (mg_maxc - mg_minc) * (mg_maxr - mg_minr) << "; " << edgeCells.size());
 					return edgeCells;
 				}
 
@@ -211,8 +211,8 @@ namespace geotools {
 				double m_start;
 				double m_end;
 				double m_step;
-				double m_minBasinArea;
-				double m_maxSpillDist;
+				double mg_minBasinArea;
+				double mg_maxSpillDist;
 				std::string m_vdir;
 				std::string m_rdir;
 				std::string m_spill;
@@ -227,23 +227,23 @@ namespace geotools {
 					m_input(input), 
 					m_vdir(vdir), m_rdir(rdir), m_spill(spill),
 					m_start(start), m_end(end), m_step(step),
-					m_minBasinArea(minBasinArea), m_maxSpillDist(maxSpillDist) {
+					mg_minBasinArea(minBasinArea), mg_maxSpillDist(maxSpillDist) {
 				}
 
 				~Config() {
 				}
 
 				double minBasinArea() {
-					return m_minBasinArea;
+					return mg_minBasinArea;
 				}
 
 				double maxSpillDist() {
-					return m_maxSpillDist;
+					return mg_maxSpillDist;
 				}
 
 				void loadSeeds(std::string &seedFile, bool header = false) {
 					if(seedFile.empty())
-						_argerr("No seed file given.");
+						g_argerr("No seed file given.");
 					std::ifstream csv(seedFile);
 					std::vector<std::string> row;
 					if(header) 
@@ -254,7 +254,7 @@ namespace geotools {
 						double y = atof(row[2].c_str());
 						m_seeds.push_back(Cell(id, m_dem.toCol(x), m_dem.toRow(y)));
 					}
-					_trace("Seeds loaded from file: " << m_seeds.size());
+					g_trace("Seeds loaded from file: " << m_seeds.size());
 				}
 
 				std::vector<Cell>& seeds() {
@@ -266,50 +266,50 @@ namespace geotools {
 				}
 
 				void init() {
-					_trace("Checking...");
+					g_trace("Checking...");
 					if(m_input.empty())
-						_argerr("Input DEM must be provided.");
+						g_argerr("Input DEM must be provided.");
 					if(m_rdir.empty())
-						_argerr("No raster directory. It is required.");
+						g_argerr("No raster directory. It is required.");
 					if(m_vdir.empty())
-						_trace("WARNING: No vector directory; not producing flood vectors.");
+						g_trace("WARNING: No vector directory; not producing flood vectors.");
 					if(m_spill.empty())
-						_trace("WARNING: No spill file; not producing spill points.");
+						g_trace("WARNING: No spill file; not producing spill points.");
 					if(std::isnan(m_start))
-						_trace("WARNING: Start value not given; using raster minimum.");
+						g_trace("WARNING: Start value not given; using raster minimum.");
 					if(std::isnan(m_end))
-						_trace("WARNING: End value not given; using raster maximum.");
+						g_trace("WARNING: End value not given; using raster maximum.");
 					if(m_step <= 0.0)
-						_argerr("The step elevation must be greater than zero.");
+						g_argerr("The step elevation must be greater than zero.");
 					if(m_t < 1)
-						_trace("WARNING: Invalid number of threads. Using 1.");
-					if(m_minBasinArea <= 0.0)
-						_argerr("Min basin area must be greater than zero.");
-					if(m_maxSpillDist <= 0.0)
-						_argerr("Max spill distance must be greater than zero.");
+						g_trace("WARNING: Invalid number of threads. Using 1.");
+					if(mg_minBasinArea <= 0.0)
+						g_argerr("Min basin area must be greater than zero.");
+					if(mg_maxSpillDist <= 0.0)
+						g_argerr("Max spill distance must be greater than zero.");
 
-					_trace("Initing...");
+					g_trace("Initing...");
 					m_dem.init(m_input);
 
 					if(std::isnan(m_start)) {
 						m_start = m_dem.min();
 					} else {
-						m_start = _max(m_dem.min(), m_start);
+						m_start = g_max(m_dem.min(), m_start);
 					}
 					if(std::isnan(m_end)) {
 						m_end = m_dem.max();
 					} else {
-						m_end = _min(m_dem.max(), m_end);
+						m_end = g_min(m_dem.max(), m_end);
 					}
 					if(m_end <= m_start)
-						_argerr("The ending elevation must be larger than the starting elevation.");
+						g_argerr("The ending elevation must be larger than the starting elevation.");
 				}
 
 				/**
 				 * Perform flood filling and identify basins.
 				 */
 				int fillBasins(std::string &filename, float elevation) {
-					_trace("Filling basins: " << filename << "; " << elevation);
+					g_trace("Filling basins: " << filename << "; " << elevation);
 
 					Raster<unsigned int> basins(filename, m_dem);
 					basins.nodata(0);
@@ -320,10 +320,10 @@ namespace geotools {
 
 					for(Cell seed : seeds()) {
 
-						_trace("Seed: " << seed.id() << ": " << seed.col() << ", " << seed.row());
+						g_trace("Seed: " << seed.id() << ": " << seed.col() << ", " << seed.row());
 
 						if(!m_dem.has(seed.col(), seed.row())) {
-							_trace("WARNING: Found a seed out of bounds.");
+							g_trace("WARNING: Found a seed out of bounds.");
 							continue;
 						}
 
@@ -331,7 +331,7 @@ namespace geotools {
 						std::vector<int> result = m_dem.floodFill(seed.col(), seed.row(), op, basins, seed.id());
 						int area = result[4];
 
-						_trace("Basin: area: " << area);
+						g_trace("Basin: area: " << area);
 
 						if(area >= minBasinArea()) {
 							// If it's large enough, save the basin.
@@ -348,17 +348,17 @@ namespace geotools {
 				}
 
 				void saveBasinVector(std::string &rfile, std::string &vfile) {
-					_runerr("Saving vectors is not yet implemented.");
+					g_runerr("Saving vectors is not yet implemented.");
 				}
 
 				bool findSpillPoints(std::string &rfile, double elevation) {
-					_trace("Finding spill points.");
+					g_trace("Finding spill points.");
 
 					m_spillPoints.clear();
 
 					Raster<unsigned int> basins(rfile);
 
-					double minDist = DBL_MAX_POS;
+					double minDist = G_DBL_MAX_POS;
 
 					// Compare each basin to each other basin.
 					for(int i = 0; i < m_basinList.size(); ++i) {
@@ -374,21 +374,21 @@ namespace geotools {
 								for(int l = 0; l < cells1.size(); ++l) {
 									double dist = cells0[k].distance(cells1[l], m_dem.resolutionX(), m_dem.resolutionY());
 									minDist = dist < minDist ? dist : minDist;
-									if(dist <= m_maxSpillDist)
+									if(dist <= mg_maxSpillDist)
 										m_spillPoints.push_back(SpillPoint(cells0[k], cells1[l], elevation));
 								}
 							}
 						}
 					}
 
-					_trace("Minimum distance: " << minDist);
+					g_trace("Minimum distance: " << minDist);
 					return m_spillPoints.size();
 				}
 
 				// Output the spill points to a stream, with comma delimiters.
 				// The fields are: ID1, x1, y1, ID2, x2, y2, midpoint x, midpoint y, distance
 				void saveSpillPoints(std::ostream &out) {
-					_trace("Outputting spill points.");
+					g_trace("Outputting spill points.");
 					out << std::setprecision(12);
 					for(SpillPoint sp : m_spillPoints) {
 						const Cell &c1 = sp.cell1();
@@ -399,7 +399,7 @@ namespace geotools {
 						double y2 = c2.row() * m_dem.resolutionY() + m_dem.maxy();
 						double x3 = (x1 + x2) / 2.0;
 						double y3 = (y1 + y2) / 2.0;
-						double dist = std::sqrt(_sq(x1 - x2) + _sq(y1 - y2));
+						double dist = std::sqrt(g_sq(x1 - x2) + g_sq(y1 - y2));
 						out << c1.id() << "," << x1 << "," << y1 << "," 
 							<< c2.id() << "," << x2 << "," << y2 << "," 
 							<< x3 << "," << y3 << "," 
@@ -412,7 +412,7 @@ namespace geotools {
 				 * Find the cells at the bottoms of depressions.
 				 */
 				void findMinima() {
-					_trace("Finding minima.");
+					g_trace("Finding minima.");
 
 					m_seeds.clear();
 					for(int r = 0; r < m_dem.rows(); ++r) {
@@ -420,8 +420,8 @@ namespace geotools {
 							bool skip = false;
 							if(m_dem.isNoData(c, r)) 
 								continue;
-							for(int rr = _max(0, r - 1); !skip && rr < _min(r + 2, m_dem.rows()); ++rr) {
-								for(int cc = _max(0, c - 1); !skip && cc < _min(c + 2, m_dem.cols()); ++cc) {
+							for(int rr = g_max(0, r - 1); !skip && rr < g_min(r + 2, m_dem.rows()); ++rr) {
+								for(int cc = g_max(0, c - 1); !skip && cc < g_min(c + 2, m_dem.cols()); ++cc) {
 									if((cc == c && rr == r) || m_dem.isNoData(cc, rr)) 
 										continue;
 									if(m_dem.get(cc, rr) < m_dem.get(c, r))
@@ -432,7 +432,7 @@ namespace geotools {
 								m_seeds.push_back(Cell(c, r, m_dem.get(c, r)));
 						}
 					}
-					_trace("Seeds found from minima: " << m_seeds.size());
+					g_trace("Seeds found from minima: " << m_seeds.size());
 				}
 			};
 
@@ -446,13 +446,13 @@ namespace geotools {
 
 			using namespace geotools::flood::util;
 
-			_trace("Flooding...");
+			g_trace("Flooding...");
 
 			// Build the config object.
 			Config config(input, vdir, rdir, spill, start, end, step, minBasinArea, maxSpillDist);
 			config.init();
 
-			_trace("Building seed list...");
+			g_trace("Building seed list...");
 			if(!seeds.empty()) {
 				// Load the seeds if given.
 				config.loadSeeds(seeds);
@@ -463,7 +463,7 @@ namespace geotools {
 
 			double elevation = start;
 			while(elevation <= end) {
-				_trace("Filling to " << elevation);
+				g_trace("Filling to " << elevation);
 				std::stringstream ss;
 				ss << rdir << "/" << (int) (elevation / step) << ".tif";
 				std::string rfile = ss.str();
@@ -501,7 +501,7 @@ void usage() {
 
 int main(int argc, char **argv) {
 
-	_loglevel(LOG_TRACE);
+	g_loglevel(G_LOG_TRACE);
 
 	std::string input;
 	std::string seeds;

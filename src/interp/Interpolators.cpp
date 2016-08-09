@@ -81,14 +81,14 @@ namespace interp {
 		 * Returns the squared distance between the two points.
 		 */
 		double _sdist(InterpPoint &a, InterpPoint &b) {
-			return _sq(a.x - b.x) + _sq(a.y - b.y);
+			return g_sq(a.x - b.x) + g_sq(a.y - b.y);
 		}
 
 		/**
 		 * Returns the squared distance between the point and the coordinate given by x, y.
 		 */
 		double _sdist(InterpPoint &a, double x, double y) {
-			return _sq(a.x - x) + _sq(a.y - y);
+			return g_sq(a.x - x) + g_sq(a.y - y);
 		}
 
 	}
@@ -102,13 +102,13 @@ namespace interp {
 			for(auto it0 = samples.begin(); it0 != samples.end(); ++it0) {
 				for(auto it1 = samples.begin(); it1 != samples.end(); ++it1) {
 					if(it0->equals(*it1)) continue;
-					double dist = sqrt(_sq(it0->x - it1->x) + _sq(it0->y - it1->y));
+					double dist = sqrt(g_sq(it0->x - it1->x) + g_sq(it0->y - it1->y));
 					if(std::isnan(dist)) {
 						std::cerr << it0->x << ", " << it1->x << ":" << it0->y << ", " << it1->y << std::endl;
-						std::cerr << _sq(it0->x - it1->x) << ":" << _sq(it0->y - it1->y) << std::endl;
+						std::cerr << g_sq(it0->x - it1->x) << ":" << g_sq(it0->y - it1->y) << std::endl;
 						throw "Bad distance.";
 					}
-					double diff = _sq(it0->z - it1->z) / 2.0;
+					double diff = g_sq(it0->z - it1->z) / 2.0;
 					variogram.push_back(VariogramPoint(dist, diff));
 				}
 			}
@@ -156,7 +156,7 @@ namespace interp {
  			for(auto it0 = samples.begin(); it0 != samples.end(); ++it0) {
  				c = 0;
  				for(auto it1 = samples.begin(); it1 != samples.end(); ++it1) {
- 					double dist = sqrt(_sq(it0->x - it1->x) + _sq(it0->y - it1->y));
+ 					double dist = sqrt(g_sq(it0->x - it1->x) + g_sq(it0->y - it1->y));
  					D(c, r) = dist;
  					// TODO: Use functor for this?
  					A(c, r) = kargs.model(dist, kargs.nugget, kargs.sill, kargs.range);
@@ -180,7 +180,7 @@ namespace interp {
  				for(int c = 0; c < out.cols(); ++c) {
  					int i = 0;
  					for(auto it = samples.begin(); it != samples.end(); ++it) {
- 						double dist = sqrt(_sq(out.toX(c) - it->x) + _sq(out.toY(r) - it->y));
+ 						double dist = sqrt(g_sq(out.toX(c) - it->x) + g_sq(out.toY(r) - it->y));
  						d(i, 0) = dist;
  						b(i, 0) = kargs.model(dist, kargs.nugget, kargs.sill, kargs.range);
  						++i;
@@ -583,7 +583,7 @@ namespace interp {
 			 */
 			double faceArea(const VFace &f, const Voronoi &vor, const Polygon_2 &bounds) {
 				// Compute a length for unbounded segments.
-				double d = _max(bounds.bbox().xmax() - bounds.bbox().xmin(),
+				double d = g_max(bounds.bbox().xmax() - bounds.bbox().xmin(),
 						bounds.bbox().ymax() - bounds.bbox().ymin()) * 2.0;
 				std::list<Point_2> pts;
 				// Build segments from the face edges.

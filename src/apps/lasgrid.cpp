@@ -2,10 +2,6 @@
 #include <set>
 #include <vector>
 
-#include "ui_lasgrid.h" // To trigger uic.
-
-#include "geotools.h"
-#include "Util.hpp"
 #include "lasgrid.hpp"
 #include "lasgrid_ui.hpp"
 
@@ -81,7 +77,7 @@ int main(int argc, char **argv) {
 			} else if(s == "-d") {
 				radius = atof(argv[++i]);
 			} else if(s == "-v") {
-				_loglevel(LOG_TRACE);
+				g_loglevel(G_LOG_TRACE);
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
 			} else if(s == "-b") {

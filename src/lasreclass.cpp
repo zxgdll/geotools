@@ -40,7 +40,7 @@ namespace geotools {
 				liblas::Writer *writer = nullptr;
 				std::ofstream out;
 				bool inited = false;
-				double bounds[6] = { DBL_MAX_POS, DBL_MAX_POS, DBL_MAX_NEG, DBL_MAX_NEG, DBL_MAX_POS, DBL_MAX_NEG };
+				double bounds[6] = { G_DBL_MAX_POS, G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_NEG };
 				bool marked;
 				int ptCount = 0;
 				int ptRecByRetCount[5] = {0,0,0,0,0};
@@ -51,7 +51,7 @@ namespace geotools {
 
 				void initialize(const std::string &filename, liblas::Header &h) {
 					std::string file = filename + "_" + std::to_string(id) + ".las";
-					_trace("Seg initialized as " << file);
+					g_trace("Seg initialized as " << file);
 					out.open(file.c_str(), std::ios::out | std::ios::binary);
 					header = new liblas::Header(h);
 					writer = new liblas::Writer(out, *header);
@@ -95,19 +95,19 @@ namespace geotools {
 					return ((start - seg->end) < 1.0 && start > seg->end) || ((seg->start - end) < 1.0 && seg->start > end);
 				}
 				bool insert(Seg *seg) {
-					_trace("Insert: " << seg->id << ": " << seg->start << " > " << seg->end);
+					g_trace("Insert: " << seg->id << ": " << seg->start << " > " << seg->end);
 					if(seg->id == id) {
-						_trace("> same seg.");
+						g_trace("> same seg.");
 						return false;
 					} else if(intersects(seg) || near(seg)) {
-						_trace("> " << id << " joins " << seg->id);
-						start = _min(start, seg->start);
-						end = _max(end, seg->end);
+						g_trace("> " << id << " joins " << seg->id);
+						start = g_min(start, seg->start);
+						end = g_max(end, seg->end);
 					} else {
-						_trace("> " << id << " no relationship " << seg->id);
+						g_trace("> " << id << " no relationship " << seg->id);
 						return false;
 					}
-					_trace("New span: " << id << ": " << start << " > ");
+					g_trace("New span: " << id << ": " << start << " > ");
 					return true;
 				}
 			};
@@ -134,10 +134,10 @@ namespace geotools {
 				}
 				flightLines.resize(0);
 				flightLines.assign(output.begin(), output.end());
-				_trace(flightLines.size() << " remaining of " << count);
+				g_trace(flightLines.size() << " remaining of " << count);
 				std::sort(flightLines.begin(), flightLines.end(), segsort);
 				for(Seg *seg:flightLines)
-					_trace(" -- " << seg->id << ": " << seg->start << " > " << seg->end);
+					g_trace(" -- " << seg->id << ": " << seg->start << " > " << seg->end);
 			}
 
 			// TODO: Replace with interval tree.
@@ -146,7 +146,7 @@ namespace geotools {
 					if(time >= seg->start && time <= seg->end)
 						return seg->id;
 				}
-				_trace("Seg for time not found: " << time);
+				g_trace("Seg for time not found: " << time);
 				return 0;
 			}
 
@@ -156,9 +156,9 @@ namespace geotools {
 				liblas::Point pt1 = q.back();
 				double d = atan2(pt1.GetY() - pt0.GetY(), pt1.GetX() - pt0.GetX());
 				while(d < 0)
-					d += PI * 2.0;
-				while(d > PI * 2.0)
-					d -= PI * 2.0;
+					d += G_PI * 2.0;
+				while(d > G_PI * 2.0)
+					d -= G_PI * 2.0;
 				*pdir = d;
 			}
 
@@ -177,9 +177,9 @@ namespace geotools {
 			void recoverEdges(std::vector<std::string> &files, std::string &outfile) { 
 
 				if(outfile.size() == 0) 
-					_argerr("An output directory is required.");
+					g_argerr("An output directory is required.");
 				if(files.size() == 0)
-					_argerr("At least one input file is required.");
+					g_argerr("At least one input file is required.");
 
 				/* Loop over files and figure out which ones are relevant. */
 				liblas::ReaderFactory rf;
@@ -190,7 +190,7 @@ namespace geotools {
 					std::string base = path.substr(path.find_last_of("/") + 1);
 					std::string newpath = outfile + "/" + base;
 					
-					_trace("Saving " << path << " to " << newpath);
+					g_trace("Saving " << path << " to " << newpath);
 					
 					std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 					liblas::Reader r = rf.CreateWithStream(in);
@@ -207,7 +207,7 @@ namespace geotools {
 					double lastTime = 0.0;
 
 					while(r.ReadNextPoint()) {
-						//_trace("Q0: " << pq0.size() << "; Q1: " << pq1.size());
+						//g_trace("Q0: " << pq0.size() << "; Q1: " << pq1.size());
 						liblas::Point pt = r.GetPoint();
 						//_print("time " << pt.GetTime());
 						double t = pt.GetTime();
@@ -228,11 +228,11 @@ namespace geotools {
 						if(pq1.size() == limit) {
 							computeDirection(pq0, &dir0);
 							computeDirection(pq1, &dir1);
-							//_trace("Dirs: " << dir0 << ", " << dir1);
-							if(std::abs(std::abs(dir0) - std::abs(dir1)) > PI * 0.75) {
+							//g_trace("Dirs: " << dir0 << ", " << dir1);
+							if(std::abs(std::abs(dir0) - std::abs(dir1)) > G_PI * 0.75) {
 								dumpQueue(pq0, w, 31);
 								dumpQueue(pq1, w, 31);
-								//_trace("Flip " << dir0 << "," << dir1 << ": " << (int) pq1.front()->GetClassification().GetClass());
+								//g_trace("Flip " << dir0 << "," << dir1 << ": " << (int) pq1.front()->GetClassification().GetClass());
 							} else {
 								w.WritePoint(pq1.front());
 								pq1.pop_front();
@@ -256,14 +256,14 @@ namespace geotools {
 		void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<int, int> &mappings) {
 
 			if(mappings.size() == 0)
-				_argerr("At least one mapping is required.");
-			_trace("Mappings:");
+				g_argerr("At least one mapping is required.");
+			g_trace("Mappings:");
 			for(std::map<int, int>::iterator it = mappings.begin(); it != mappings.end(); ++it)
-				_trace(" " << it->first << " > " << it->second);
+				g_trace(" " << it->first << " > " << it->second);
 			if(outfile.size() == 0) 
-				_argerr("An output directory (-o) is required.");
+				g_argerr("An output directory (-o) is required.");
 			if(files.size() == 0)
-				_argerr("At least one input file is required.");
+				g_argerr("At least one input file is required.");
 
 			using namespace geotools::las::util;
 
@@ -276,7 +276,7 @@ namespace geotools {
 				std::string base = path.substr(path.find_last_of("/") + 1);
 				std::string newpath = outfile + "/" + base;
 				
-				_trace("Saving " << path << " to " << newpath);
+				g_trace("Saving " << path << " to " << newpath);
 				
 				std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
@@ -306,11 +306,11 @@ namespace geotools {
 		void recoverFlightlines(std::vector<std::string> &files, std::string &outfile, double timeGap, bool exportLas) {
 
 			if(outfile.size() == 0) 
-				_argerr("An output directory is required.");
+				g_argerr("An output directory is required.");
 			if(files.size() == 0)
-				_argerr("At least one input file is required.");
+				g_argerr("At least one input file is required.");
 			if(timeGap <= 0)
-				_argerr("Time gap must be larger than zero.");
+				g_argerr("Time gap must be larger than zero.");
 
 			using namespace geotools::las::util;
 
@@ -326,7 +326,7 @@ namespace geotools {
 			for(unsigned int i = 0; i < files.size(); ++i) {
 				std::string path = files[i];
 
-				_trace("Checking " << path);
+				g_trace("Checking " << path);
 				
 				std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
@@ -343,7 +343,7 @@ namespace geotools {
 						double gap = time - endTime;
 						if(gap < 0.0 || gap > timeGap) { // One what?
 							flightLines.push_back(new Seg(startTime, endTime));
-							_trace("Time gap. Flightline: " << gap << "; " << startTime << " > " << endTime);
+							g_trace("Time gap. Flightline: " << gap << "; " << startTime << " > " << endTime);
 							startTime = time;
 						}
 						endTime = time;
@@ -352,7 +352,7 @@ namespace geotools {
 
 				if(endTime != startTime) { // TODO: What is the time scale?)
 					flightLines.push_back(new Seg(startTime, endTime));
-					_trace("Time gap. Flightline: " << startTime << " > " << endTime);
+					g_trace("Time gap. Flightline: " << startTime << " > " << endTime);
 				}
 		  		in.close();
 		  	}
@@ -367,7 +367,7 @@ namespace geotools {
 
 				std::string path = files[i];
 				
-				_trace("Processing " << path);
+				g_trace("Processing " << path);
 				
 				std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
@@ -403,9 +403,9 @@ namespace geotools {
 		void recoverEdgesWEdgeMarker(std::vector<std::string> &files, std::string &outfile) { 
 
 			if(outfile.size() == 0) 
-				_argerr("An output directory is required.");
+				g_argerr("An output directory is required.");
 			if(files.size() == 0)
-				_argerr("At least one input file is required.");
+				g_argerr("At least one input file is required.");
 
 			using namespace geotools::las::util;
 
@@ -418,7 +418,7 @@ namespace geotools {
 				std::string base = path.substr(path.find_last_of("/") + 1);
 				std::string newpath = outfile + "/" + base;
 				
-				_trace("Saving " << path << " to " << newpath);
+				g_trace("Saving " << path << " to " << newpath);
 				
 				std::ifstream in(path.c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
@@ -433,7 +433,7 @@ namespace geotools {
 				int limit = 20;
 
 				while(r.ReadNextPoint()) {
-					//_trace("Q0: " << pq0.size() << "; Q1: " << pq1.size());
+					//g_trace("Q0: " << pq0.size() << "; Q1: " << pq1.size());
 					liblas::Point pt = r.GetPoint();
 					//_print("time " << pt.GetTime());
 					pq0.push_back(pt);
@@ -512,7 +512,7 @@ int main(int argc, char ** argv) {
 		} else if(arg == "-e") {
 			edges = true;
 		} else if(arg == "-v") {
-			_loglevel(1);
+			g_loglevel(1);
 		} else {
 			files.push_back(std::string(argv[i]));
 		}
@@ -535,7 +535,7 @@ int main(int argc, char ** argv) {
 			geotools::las::recoverEdgesWEdgeMarker(files, outfile);
 
 		} else {
-			_argerr("No command given.");
+			g_argerr("No command given.");
 		}
 
 	} catch(const std::exception &e) {

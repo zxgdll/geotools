@@ -80,8 +80,8 @@ namespace geotools {
 
 				bool m_sorted;
 				double m_sum;
-				double m_min;
-				double m_max;
+				double mg_min;
+				double mg_max;
 				double m_mean;
 				double m_median;
 				double m_stddev;
@@ -92,8 +92,8 @@ namespace geotools {
 					if(m_reset) {
 						m_sorted = false;
 						m_sum = nan("");
-						m_min = nan("");
-						m_max = nan("");
+						mg_min = nan("");
+						mg_max = nan("");
 						m_mean = nan("");
 						m_median = nan("");
 						m_stddev = nan("");
@@ -186,21 +186,21 @@ namespace geotools {
 				}
 
 				double min() {
-					if(std::isnan(m_min) && count() > 0) {
+					if(std::isnan(mg_min) && count() > 0) {
 						m_reset = true;
 						sort();
-						m_min = m_values[0];
+						mg_min = m_values[0];
 					}
-					return m_min;
+					return mg_min;
 				}
 
 				double max() {
-					if(std::isnan(m_max) && count() > 0) {
+					if(std::isnan(mg_max) && count() > 0) {
 						m_reset = true;
 						sort();
-						m_max = m_values[m_values.size() - 1];
+						mg_max = m_values[m_values.size() - 1];
 					}
-					return m_max;
+					return mg_max;
 				}
 
 				/**
@@ -255,7 +255,7 @@ namespace geotools {
 						double m = mean();
 						double s = 0.0;
 						for(auto it = m_values.begin(); it != m_values.end(); ++it)
-							s += _sq((*it) - m);
+							s += g_sq((*it) - m);
 						m_variance = s / (count() - 1.0);
 					}
 					return m_variance;
@@ -281,7 +281,7 @@ namespace geotools {
 				 */
 				void quantiles(std::vector<double> &q, int num) {
 					if(num < 1)
-						_argerr("Less than one quantile doesn't make sense.");
+						g_argerr("Less than one quantile doesn't make sense.");
 					int cnt = count();
 					m_reset = true;
 					for(int i = 0; i < num + 2; ++i) {
@@ -320,14 +320,14 @@ namespace geotools {
 			const geom::CoordinateSequenceFactory *cf = gf->getCoordinateSequenceFactory();
 			std::vector<Stat> stats;
 
-			_trace("Opening " << shapefile);
+			g_trace("Opening " << shapefile);
 
 		 	OGRRegisterAll();
 
 			// Load the shapefile and get the polygons from it.
 			OGRDataSource *srcDs = OGRSFDriverRegistrar::Open(shapefile.c_str(), FALSE);
 			if(srcDs == nullptr)
-				_runerr("Couldn't open shapefile.");
+				g_runerr("Couldn't open shapefile.");
 
 			OGRLayer *layer;
 			if(layername.empty()) {
@@ -336,11 +336,11 @@ namespace geotools {
 				layer = srcDs->GetLayerByName(layername.c_str());
 			}
 			if(layer == nullptr)
-				_runerr("Couldn't get layer.");
+				g_runerr("Couldn't get layer.");
 
 			OGRwkbGeometryType type = layer->GetGeomType();
 			if(type != wkbPolygon)
-				_runerr("Geometry must be polygon.");
+				g_runerr("Geometry must be polygon.");
 
 			// For each polygon, create a Stat instance.
 			// Also create a unified geometry representing the bounds of
@@ -364,18 +364,18 @@ namespace geotools {
 
 			// If there are no geometries, just quit.
 			if(stats.size() == 0)
-				_runerr("No geometries were found.");
+				g_runerr("No geometries were found.");
 
 			// Iterate over LAS files, process each one.
 			liblas::ReaderFactory rf;
-			_trace("Processing files.");
+			g_trace("Processing files.");
 			for(unsigned int i = 0; i < files.size(); ++i) {
 
 				std::ifstream in(files[i].c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 
-				_trace("Processing file " << files[i]);
+				g_trace("Processing file " << files[i]);
 
 				// Build the boundary polygon.
 				std::vector<geom::Coordinate> coords = {
@@ -391,7 +391,7 @@ namespace geotools {
 
 				// If the boundary intersectes the region of interest..
 				if(roi->intersects(bounds)) {
-					_trace("...file intersects.");
+					g_trace("...file intersects.");
 					while(r.ReadNextPoint()) {
 						liblas::Point pt = r.GetPoint();
 						// ... and this point has a class of interest.
@@ -414,52 +414,52 @@ namespace geotools {
 			}
 
 			// Start building the output shapefile.
-			_trace("Updating shapefile.");
+			g_trace("Updating shapefile.");
 			OGRRegisterAll();
 			OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName("ESRI Shapefile");
 			if(drv == nullptr)
-				_runerr("Shapefile driver is not available.");
+				g_runerr("Shapefile driver is not available.");
 
 			OGRDataSource *dstDs = drv->CreateDataSource(outfile.c_str(), nullptr);
 			if(dstDs == nullptr)
-				_runerr("Couldn't create shapefile.");
+				g_runerr("Couldn't create shapefile.");
 
 			layer = dstDs->CreateLayer("stats", nullptr, wkbPolygon, nullptr);
 			if(layer == nullptr)
-				_runerr("Couldn't create layer.");
+				g_runerr("Couldn't create layer.");
 
 			// Copy the field definitions from the original layer.
 			for(int i = 0; i < featDefn->GetFieldCount(); ++i) {
 				if(layer->CreateField(featDefn->GetFieldDefn(i)) != OGRERR_NONE)
-					_runerr("Failed to create field.");
+					g_runerr("Failed to create field.");
 			}
 
 			// Copy new stats fields to the shapefile.
 			OGRFieldDefn fstddev("stddev", OFTReal);
 			if(layer->CreateField(&fstddev) != OGRERR_NONE)
-				_runerr("Failed to create stddev field.");
+				g_runerr("Failed to create stddev field.");
 
 			OGRFieldDefn fmean("mean", OFTReal);
 			if(layer->CreateField(&fmean) != OGRERR_NONE)
-				_runerr("Failed to create mean field.");
+				g_runerr("Failed to create mean field.");
 
 			OGRFieldDefn fmedian("median", OFTReal);
 			if(layer->CreateField(&fmedian) != OGRERR_NONE)
-				_runerr("Failed to create median field.");
+				g_runerr("Failed to create median field.");
 
 			OGRFieldDefn fcount("count", OFTInteger);
 			if(layer->CreateField(&fcount) != OGRERR_NONE)
-				_runerr("Failed to create count field.");
+				g_runerr("Failed to create count field.");
 
 			OGRFieldDefn fsum("sum", OFTReal);
 			if(layer->CreateField(&fsum) != OGRERR_NONE)
-				_runerr("Failed to create sum field.");
+				g_runerr("Failed to create sum field.");
 
 			if(numQuantiles > 0) {
 				for(int qt = 0; qt < numQuantiles + 2; ++qt) {
 					OGRFieldDefn fqt(("qt" + std::to_string(qt)).c_str(), OFTReal);
 					if(layer->CreateField(&fqt) != OGRERR_NONE)
-						_runerr("Failed to create quantile field.");
+						g_runerr("Failed to create quantile field.");
 				}
 			}
 
@@ -484,7 +484,7 @@ namespace geotools {
 				OGRPolygon *poly = (OGRPolygon *) OGRGeometryFactory::createFromGEOS(gctx, (GEOSGeom) stat->geom());
 				feat->SetGeometry(poly);
 				if(layer->CreateFeature(feat) != OGRERR_NONE)
-					_runerr("Failed to create feature.");
+					g_runerr("Failed to create feature.");
 				OGRFeature::DestroyFeature(feat);
 			}
 
@@ -498,11 +498,11 @@ namespace geotools {
 
 			GDALDataset *ds = (GDALDataset *) GDALOpen(raster.c_str(), GA_ReadOnly);
 			if(ds == nullptr)
-				_runerr("Failed to open raster.");
+				g_runerr("Failed to open raster.");
 
 			GDALRasterBand *b = ds->GetRasterBand(band);
 			if(b == nullptr)
-				_runerr("Failed to load band.");
+				g_runerr("Failed to load band.");
 
 			int cols = ds->GetRasterXSize();
 			int rows = ds->GetRasterYSize();
@@ -520,18 +520,18 @@ namespace geotools {
 			MemRaster<char> dg(cols, rows);
 
 			if(0 != b->RasterIO(GF_Read, 0, 0, cols, rows, dg.grid(), cols, rows, GDT_Byte, 0, 0))
-				_runerr("Failed to read from classification raster.");
+				g_runerr("Failed to read from classification raster.");
 
 			// Iterate over LAS files, process each one.
 			liblas::ReaderFactory rf;
-			_trace("Processing files.");
+			g_trace("Processing files.");
 			for(unsigned int i = 0; i < files.size(); ++i) {
 
 				std::ifstream in(files[i].c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 
-				_trace("Processing file " << files[i]);
+				g_trace("Processing file " << files[i]);
 
 				int cls;
 				while(r.ReadNextPoint()) {
@@ -624,15 +624,15 @@ namespace geotools {
 						for(int b = 0; b < numBands; ++b) {
 							band = dst->GetRasterBand((c * numBands) + (b + 1));
 							if(band == nullptr)
-								_runerr("Failed to retrieve raster band.");
+								g_runerr("Failed to retrieve raster band.");
 							if(0 != band->RasterIO(GF_Read, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0))
-								_runerr("Failed to read band raster.");
+								g_runerr("Failed to read band raster.");
 							for(int i = 0; i < rows * cols; ++i) {
 								if(id == dg[i])
 									fg[i] = values[b];
 							}
 							if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0))
-								_runerr("Failed to write band raster.");
+								g_runerr("Failed to write band raster.");
 						}
 						delete st;
 					}
@@ -689,7 +689,7 @@ int main(int argc, char ** argv) {
 		} else if(arg == "-r") {
 			infile.assign(argv[++i]);
 			if(inType != 0)
-				_argerr("Raster and vector are mutually exclusive.");
+				g_argerr("Raster and vector are mutually exclusive.");
 			inType = RASTER;
 		} else if(arg == "-b") {
 			band = atoi(argv[++i]);
@@ -713,26 +713,26 @@ int main(int argc, char ** argv) {
 	} else if(alg::ends_with(tmpout, ".tif")) {
 		outType = RASTER;
 	} else {
-		_argerr("There are three allowed output types: .shp, .tif and .csv.")
+		g_argerr("There are three allowed output types: .shp, .tif and .csv.")
 	}
 
 	if(outfile.empty())
-		_argerr("An output file (-o) is required.");
+		g_argerr("An output file (-o) is required.");
 
 	if((inType != RASTER && inType != VECTOR) || infile.empty()) 
-		_argerr("A shape file (-s) or raster (-r) is required, but not both.");
+		g_argerr("A shape file (-s) or raster (-r) is required, but not both.");
 
 	if(files.size() == 0)
-		_argerr("At least one input file is required.");
+		g_argerr("At least one input file is required.");
 
 	if(classes.size() == 0)
-		_argerr("No classes specified.");
+		g_argerr("No classes specified.");
 
 	if(band < 1)
-		_argerr("A band >= 1 is required.");
+		g_argerr("A band >= 1 is required.");
 
 	if(numQuantiles < 2) 
-		_argerr("The number of quantiles must be at least 2.");
+		g_argerr("The number of quantiles must be at least 2.");
 
 	// We want the number of *dividers*.
 	numQuantiles--;

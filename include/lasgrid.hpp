@@ -6,6 +6,8 @@
 #include <set>
 #include <map>
 
+#include "geotools.h"
+#include "Raster.hpp"
 #include "Util.hpp"
 
 #define TYPE_MIN 1
@@ -34,7 +36,7 @@ namespace geotools {
 			extern double defaultResolution();
 			extern double defaultRadius();
 			extern bool defaultSnapToGrid();
-			extern int defaultType;
+			extern int defaultType();
 			extern std::set<int> defaultClasses();
 			extern std::map<std::string, int> types();
 			extern std::map<std::string, int> attributes();
@@ -54,8 +56,8 @@ namespace geotools {
 		}
 
 		void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
-							int crs, int attribute, int type, double radius,
-							double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill);
+			int crs, int attribute, int type, double radius,
+			double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill, bool snap = true);
 
 	} // las
 	
