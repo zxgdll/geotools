@@ -156,6 +156,15 @@ namespace geotools {
 			if(angleLimit <= 0)
 				g_argerr("Angle limit must be greater than zero.");
 
+			g_trace("Radius: " << radius);
+			g_trace("Resolution: " << resolution);
+			g_trace("Files: " << files.size());
+			g_trace("Destination: " << dstFile);
+			g_trace("Attribute: " << attribute);
+			g_trace("Type: " << type);
+			g_trace("Classes: " << classes.size());
+			g_trace("Angle Limit: " << angleLimit);
+			
 			using namespace geotools::las::lasgrid_util;
 
 			MemRaster<double> grid1;
@@ -164,7 +173,9 @@ namespace geotools {
 
 			liblas::ReaderFactory rf;
 			std::vector<unsigned int> indices;
-
+			Bounds bounds1;
+			bounds1.collapse();
+			
 			for(unsigned int i=0; i<files.size(); ++i) {
 				g_trace("Checking file " << files[i]);
 				std::ifstream in(files[i].c_str(), std::ios::in|std::ios::binary);
@@ -173,11 +184,17 @@ namespace geotools {
 				Bounds bounds0;
 				if(!Util::computeLasBounds(h, bounds0, 2))
 					Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
+				g_trace("Bounds " << files[i] << ": " << bounds0.print());
 				in.close();
-				if(bounds.intersects(bounds0, 2))
+				if(bounds.intersects(bounds0, 2)) {
 					indices.push_back(i);
+					bounds1.extend(bounds0);
+				}
 			}
 
+			bounds.collapse();
+			bounds.extend(bounds1);
+			
 			if(snap)
 				bounds.snap(resolution);
 			

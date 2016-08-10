@@ -44,7 +44,7 @@ target_link_libraries (treetops-app treetops gdal las)
 
 
 
-add_library(lasgrid SHARED src/lasgrid.cpp src/Util.cpp)
+add_library(lasgrid SHARED src/lasgrid.cpp src/Util.cpp src/geotools.cpp)
 target_link_libraries (lasgrid las gdal las laszip boost_system boost_filesystem)
 add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp)
 target_link_libraries (lasgrid-app PUBLIC lasgrid Qt4::QtGui)

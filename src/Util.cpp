@@ -25,11 +25,11 @@ Bounds::Bounds(double minx, double miny, double maxx, double maxy, double minz, 
 }
 
 bool Bounds::contains(double x, double y) {
-	return x >= m_minx && x <= m_maxx && y >= m_miny && y <= m_miny;
+	return x >= m_minx && x <= m_maxx && y >= m_miny && y <= m_maxy;
 }
 
 bool Bounds::contains(double x, double y, double z) {
-	return contains(x, y) && z >= m_minz && z <= m_minz;
+	return contains(x, y) && z >= m_minz && z <= m_maxz;
 }
 
 bool Bounds::contains(Bounds &b) {
@@ -38,12 +38,14 @@ bool Bounds::contains(Bounds &b) {
 
 bool Bounds::intersects(Bounds &b, int dims) {
 	if(dims == 3) {
-		return contains(b.minx(), b.miny(), b.minz()) || contains(b.minx(), b.maxy(), b.minz()) || 
+		return b.contains(*this) || 
+			contains(b.minx(), b.miny(), b.minz()) || contains(b.minx(), b.maxy(), b.minz()) || 
 			contains(b.maxx(), b.miny(), b.minz()) || contains(b.maxx(), b.maxy(), b.minz()) ||
 			contains(b.minx(), b.miny(), b.maxz()) || contains(b.minx(), b.maxy(), b.maxz()) || 
 			contains(b.maxx(), b.miny(), b.maxz()) || contains(b.maxx(), b.maxy(), b.maxz());
 	} else {
-		return contains(b.minx(), b.miny()) || contains(b.minx(), b.maxy()) || 
+		return b.contains(*this) ||
+			contains(b.minx(), b.miny()) || contains(b.minx(), b.maxy()) || 
 			contains(b.maxx(), b.miny()) || contains(b.maxx(), b.maxy());
 	}
 }
