@@ -11,6 +11,7 @@
 
 #include <omp.h>
 
+#include "geotools.h"
 #include "Util.hpp"
 #include "Raster.hpp"
 
@@ -231,12 +232,14 @@ namespace geotools {
 } // geotools
 
 void usage() {
-	std::cout << "Usage: mosaic [options] -o <output file> <file [file [file [...]]]>" << std::endl;
-	std::cout << "    -o <file>     -- The output file." << std::endl;
-	std::cout << "    -d <distance> -- The feather distance in map units (default 100.)" << std::endl;
-	std::cout << "    <file [...]>  -- A list of files. The first is used as the background " << std::endl;
-	std::cout << "                     and determines the size of the output. Subsequent " << std::endl;
-	std::cout << "                     images are layered on top and feathered." << std::endl;
+	std::cerr << "Usage: mosaic [options] -o <output file> <file [file [file [...]]]>\n"
+		<< "    -o <file>        The output file.\n"
+		<< "    -d <distance>    The feather distance in map units (default 100.)\n"
+		<< "    <file [...]>     A list of files. The first is used as the background\n"
+		<< "                     and determines the size of the output. Subsequent\n"
+		<< "                     images are layered on top and feathered.\n"
+		<< "    -v               Verbose messages.\n";
+	
 }
 
 int main(int argc, char **argv) {
