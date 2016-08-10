@@ -256,6 +256,8 @@ int main(int argc, char **argv) {
 	 			distance = atof(argv[++i]);
 	 		} else if(arg == "-o") {
 	 			outfile = argv[++i];
+			} else if(arg == "-v") {
+				g_loglevel(G_LOG_TRACE);
 	 		} else {
 	 			files.push_back(argv[i]);
 	 		}

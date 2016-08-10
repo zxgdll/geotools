@@ -1,14 +1,11 @@
+#ifndef __UTIL_HPP__
+#define __UTIL_HPP__
+
 #include <set>
 #include <list>
-#include <sstream>
-#include <algorithm>
-#include <fstream>
+#include <ostream>
 
 #include <liblas/liblas.hpp>
-
-#include "csv.h"
-
-#include "geotools.h"
 
 namespace geotools {
 
@@ -25,49 +22,49 @@ namespace geotools {
 
 			Bounds(double minx, double miny, double maxx, double maxy, double minz, double maxz);
 
-			bool contains(double x, double y);
+			bool contains(double x, double y) const;
 
-			bool contains(double x, double y, double z);
+			bool contains(double x, double y, double z) const;
 
-			bool contains(geotools::util::Bounds &b);
+			bool contains(const geotools::util::Bounds &b) const;
 
-			bool intersects(Bounds &b, int dims = 2);
+			bool intersects(const geotools::util::Bounds &b, int dims = 2) const;
 
-			double minx();
+			double minx() const;
 
 			void minx(double minx);
 
-			double miny();
+			double miny() const;
 
 			void miny(double miny);
 
-			double minz();
+			double minz() const;
 
 			void minz(double minz);
 
-			double maxx();
+			double maxx() const;
 
 			void maxx(double maxx);
 
-			double maxy();
+			double maxy() const;
 
 			void maxy(double maxy);
 
-			double maxz();
+			double maxz() const;
 
 			void maxz(double maxz);
 
-			double width();
+			double width() const;
 
-			double height();
+			double height() const;
 
-			double depth();
+			double depth() const;
 
-			int cols(double resolution);
+			int cols(double resolution) const;
 
-			int rows(double resolution);
+			int rows(double resolution) const;
 
-			void extend(Bounds &b);
+			void extend(const geotools::util::Bounds &b);
 
 			void extendX(double x);
 			
@@ -81,13 +78,13 @@ namespace geotools {
 
 			void collapse(int dims = 2);
 
-			double operator[](size_t pos);
+			double operator[](size_t pos) const;
 
 			void snap(double resolution);
 	
-			std::string print();
+			std::string print() const;
 
-			void print(std::ostream &str);
+			void print(std::ostream &str) const;
 		
 		};
 
@@ -162,3 +159,5 @@ namespace geotools {
 	} // util
 
 } // geotools
+
+#endif

@@ -24,19 +24,19 @@ Bounds::Bounds(double minx, double miny, double maxx, double maxy, double minz, 
 	m_minz(minz), m_maxz(maxz) {
 }
 
-bool Bounds::contains(double x, double y) {
+bool Bounds::contains(double x, double y) const {
 	return x >= m_minx && x <= m_maxx && y >= m_miny && y <= m_maxy;
 }
 
-bool Bounds::contains(double x, double y, double z) {
+bool Bounds::contains(double x, double y, double z) const {
 	return contains(x, y) && z >= m_minz && z <= m_maxz;
 }
 
-bool Bounds::contains(Bounds &b) {
+bool Bounds::contains(const Bounds &b) const {
 	return contains(b.minx(), b.miny(), b.minz()) && contains(b.maxx(), b.maxy(), b.maxz());
 }
 
-bool Bounds::intersects(Bounds &b, int dims) {
+bool Bounds::intersects(const Bounds &b, int dims) const {
 	if(dims == 3) {
 		return b.contains(*this) || 
 			contains(b.minx(), b.miny(), b.minz()) || contains(b.minx(), b.maxy(), b.minz()) || 
@@ -50,7 +50,7 @@ bool Bounds::intersects(Bounds &b, int dims) {
 	}
 }
 
-double Bounds::minx() {
+double Bounds::minx() const {
 	return m_minx;
 }
 
@@ -58,7 +58,7 @@ void Bounds::minx(double minx) {
 	m_minx = minx;
 }
 
-double Bounds::miny() {
+double Bounds::miny() const {
 	return m_miny;
 }
 
@@ -66,7 +66,7 @@ void Bounds::miny(double miny) {
 	m_miny = miny;
 }
 
-double Bounds::minz() {
+double Bounds::minz() const {
 	return m_minz;
 }
 
@@ -74,7 +74,7 @@ void Bounds::minz(double minz) {
 	m_minz = minz;
 }
 
-double Bounds::maxx() {
+double Bounds::maxx() const {
 	return m_maxx;
 }
 
@@ -82,7 +82,7 @@ void Bounds::maxx(double maxx) {
 	m_maxx = maxx;
 }
 
-double Bounds::maxy() {
+double Bounds::maxy() const {
 	return m_maxy;
 }
 
@@ -90,7 +90,7 @@ void Bounds::maxy(double maxy) {
 	m_maxy = maxy;
 }
 
-double Bounds::maxz() {
+double Bounds::maxz() const {
 	return m_maxz;
 }
 
@@ -98,33 +98,33 @@ void Bounds::maxz(double maxz) {
 	m_maxz = maxz;
 }
 
-double Bounds::width() {
+double Bounds::width() const {
 	return maxx() - minx();
 }
 
-double Bounds::height() {
+double Bounds::height() const {
 	return maxy() - miny();
 }
 
-double Bounds::depth() {
+double Bounds::depth() const {
 	return maxz() - minz();
 }
 
-int Bounds::cols(double resolution) {
-	return (int) (width() / resolution) + 1;
+int Bounds::cols(double resolution) const {
+	return g_max(1, (int) std::ceil(width() / resolution));
 }
 
-int Bounds::rows(double resolution) {
-	return (int) (height() / resolution) + 1;
+int Bounds::rows(double resolution) const {
+	return g_max(1, (int) std::ceil(height() / resolution));
 }
 
-void Bounds::extend(Bounds &b) {
+void Bounds::extend(const Bounds &b) {
 	m_minx = g_min(b.minx(), m_minx);
 	m_maxx = g_max(b.maxx(), m_maxx);
 	m_miny = g_min(b.miny(), m_miny);
 	m_maxy = g_max(b.maxy(), m_maxy);
-	m_minx = g_min(b.minz(), m_minz);
-	m_maxx = g_max(b.maxz(), m_maxz);
+	m_minz = g_min(b.minz(), m_minz);
+	m_maxz = g_max(b.maxz(), m_maxz);
 }
 
 void Bounds::extendX(double x) {
@@ -152,7 +152,7 @@ void Bounds::extend(double x, double y, double z) {
 	extendZ(z);
 }
 
-double Bounds::operator[](size_t pos) {
+double Bounds::operator[](size_t pos) const {
 	switch(pos) {
 	case 0: return m_minx;
 	case 1: return m_miny;
@@ -166,10 +166,10 @@ double Bounds::operator[](size_t pos) {
 }
 
 void Bounds::snap(double resolution) {
-	minx(std::floor(minx() * resolution) / resolution);
-	miny(std::floor(miny() * resolution) / resolution);
-	maxx(std::floor(maxx() * resolution) / resolution);
-	maxy(std::floor(maxy() * resolution) / resolution);
+	minx(std::floor(minx() / resolution) * resolution);
+	miny(std::floor(miny() / resolution) * resolution);
+	maxx(std::floor(maxx() / resolution) * resolution + resolution);
+	maxy(std::floor(maxy() / resolution) * resolution + resolution);
 }
 
 void Bounds::collapse(int dims) {
@@ -183,13 +183,13 @@ void Bounds::collapse(int dims) {
 	}
 }
 	
-std::string Bounds::print() {
+std::string Bounds::print() const {
 	std::stringstream s;
 	print(s);
 	return s.str();
 }
 
-void Bounds::print(std::ostream &str) {
+void Bounds::print(std::ostream &str) const {
 	str << "[Bounds: " << minx() << ", " << miny() << ", " << minz() << "; " << maxx() << ", " << maxy() << ", " << maxz() << "]";
 }
 

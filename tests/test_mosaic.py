@@ -13,7 +13,7 @@ with open('data/mosaic.txt', 'r') as f:
 	checksum1 = f.readline().strip()
 
 print 'Building mosaic.'
-sub.Popen(['../makefiles/mosaic', '-o', 'output/mosaic.tif', '-d', '10', 'data/mosaic_base.tif', 'data/mosaic_shapes.tif']).wait()
+sub.Popen(['../makefiles/mosaic-app', '-v', '-o', 'output/mosaic.tif', '-d', '10', 'data/mosaic_base.tif', 'data/mosaic_shapes.tif']).wait()
 
 print 'Computing checksum.'
 com = sub.Popen(['md5sum', 'output/mosaic.tif'], stderr=sub.PIPE, stdout=sub.PIPE)

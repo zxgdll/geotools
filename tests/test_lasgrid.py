@@ -21,12 +21,24 @@ with open('data/lasgrid.txt', 'r') as f:
 print 'Testing...'
 for arg in args.keys():
 	print 'Testing', arg
-	sub.Popen(['../makefiles/lasgrid-app', '-v', '-o', '/tmp/lasgrid_test.tif', '-t', arg, '-r', '1', '-d', '0.77', '-s', '2956', '/tmp/lasgrid_data.las']).wait()
-	com = sub.Popen(['md5sum', '/tmp/lasgrid_test.tif'], stdout=sub.PIPE, stderr=sub.PIPE)
+	cmd = ['../makefiles/lasgrid-app', '-d', '-1', '-o', '/tmp/lasgrid_test.tif', '-t', arg, '-r', '1', '-s', '2956', '/tmp/lasgrid_data.las']
+	print ' '.join(cmd)
+	com = sub.Popen(cmd, stdout=sub.PIPE, stderr=sub.PIPE)
+	com.wait()
 	print com.stdout.read()
+	print com.stderr.read()
+	if com.returncode !=0:
+		print 'Failed'
+		sys.exit(1)
+	com = sub.Popen(['md5sum', '/tmp/lasgrid_test.tif'], stdout=sub.PIPE, stderr=sub.PIPE)
+	com.wait()
+	stdout = com.stdout.read()
+	stderr = com.stderr.read()
+	print 'Result:', stdout
 	if com.returncode == 0:
-		if args[arg] != com.stdout.read().strip().split()[0].strip():
-			print 'Failed on', arg
+		md5 = stdout.strip().split()[0].strip()
+		if args[arg] != md5:
+			print 'Failed on', arg, md5, 'should be', args[arg]
 			sys.exit(1)
 	else:
 		print 'Failed'

@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
 		lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit, fill);
 
 	} catch(const std::exception &ex) {
-		std::cerr << ex.what() << std::endl;
+		g_error(ex.what());
 		usage();
 		return 1;
 	}

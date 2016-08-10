@@ -32,8 +32,8 @@ target_link_libraries (flood gdal)
 add_executable (rasterstats src/rasterstats.cpp src/geotools.cpp)
 target_link_libraries (rasterstats gdal)
 
-add_executable (mosaic src/mosaic.cpp src/geotools.cpp)
-target_link_libraries (mosaic gdal boost_system boost_filesystem)
+add_executable (mosaic-app src/mosaic.cpp src/geotools.cpp)
+target_link_libraries (mosaic-app gdal boost_system boost_filesystem)
 
 
 
@@ -82,7 +82,7 @@ install (FILES include/treetops.hpp DESTINATION include)
 
 install (TARGETS rasterstats DESTINATION bin)
 
-install (TARGETS mosaic DESTINATION bin)
+install (TARGETS mosaic-app DESTINATION bin)
 
 install (TARGETS lasgrid DESTINATION lib)
 install (TARGETS lasgrid-app DESTINATION bin)

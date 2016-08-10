@@ -19,6 +19,9 @@
 #include <eigen3/Eigen/Core>
 
 #include "geotools.h"
+#include "Util.hpp"
+
+using namespace geotools::util;
 
 namespace geotools {
 
@@ -848,14 +851,14 @@ public:
 	 * Create a new raster for writing with a template.
 	 */
 	template <class D>
-	Raster(const std::string &filename, Raster<D> &tpl) : Raster() {
+	Raster(const std::string &filename, const Raster<D> &tpl) : Raster() {
 		std::string proj;
 		tpl.projection(proj);
 		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
 			tpl.resolutionY(), (T) tpl.nodata(), proj);
 	}
 
-	Raster(const std::string &filename, Raster<T> &tpl) : Raster() {
+	Raster(const std::string &filename, const Raster<T> &tpl) : Raster() {
 		init(filename, tpl);
 	}
 
@@ -863,10 +866,15 @@ public:
 	 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	Raster(const std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolutionX, double resolutionY, double nodata, std::string &proj) : Raster() {
+			double resolutionX, double resolutionY, double nodata, const std::string &proj) : Raster() {
 		init(filename, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
 	}
 
+	Raster(const std::string &filename, Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs) :
+		Raster(filename, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(), 
+			resolutionX, resolutionY, nodata, crs) {
+	}
+	
 	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and SRID.
 	 */
@@ -889,19 +897,28 @@ public:
 	 * another raster as a template. The raster pixel types need not be the same.
 	 */
 	template <class D>
-	void init(const std::string &filename, Raster<D> &tpl) {
+	void init(const std::string &filename, const Raster<D> &tpl) {
+		g_trace("Raster init: " << filename << "; [tpl]");
 		std::string proj;
 		tpl.projection(proj);
 		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
 			tpl.resolutionY(), tpl.nodata(), proj);
 	}
 
+	void init(const std::string &filename, const Bounds &bounds, double resolutionX, double resolutionY,
+		double nodata, const std::string &proj) {
+		init(filename, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(), 
+			resolutionX, resolutionY, nodata, proj);
+	}
+
 	/**
 	 * Initializes the raster with the given filename, bounds, resolution, nodata and projection.
 	 */
 	void init(const std::string &filename, double minx, double miny, double maxx, double maxy,
-			double resolutionX, double resolutionY, double nodata, std::string proj) {
+			double resolutionX, double resolutionY, double nodata, const std::string &proj) {
 		
+		g_trace("Raster init: " << filename << ", " << minx << ", " << miny << ", " << maxx << ", " << maxy << ", " << resolutionX << ", " << resolutionY << ", " << nodata << ", " << proj);
+
 		if(resolutionX == 0 || resolutionY == 0)
 			g_argerr("Resolution must be larger or smaller than 0.");
 		if(maxx < minx)
@@ -1050,12 +1067,13 @@ public:
 	 * Load the contents of a single block into the given Grid instance.
 	 */
 	void readBlock(int col, int row, Grid<T> &grd, int dstCol = 0, int dstRow = 0) {
-
+		if(&grd == this)
+			g_runerr("Recursive call to readBlock.");
 		int cols = g_min(m_cols - col, grd.cols() - dstCol);
 		int rows = g_min(m_rows - row, grd.rows() - dstRow);
+		g_trace("readBlock: " << col << ", " << row << ", [grd]," << dstCol << ", " << dstRow << "; " << cols << ", " << rows);
 		if(cols < 1 || rows < 1)
 			g_argerr("Zero read size.");
-
 		MemRaster<T> mr(cols, rows);
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
 			g_runerr("Failed to read from band.");
@@ -1069,12 +1087,11 @@ public:
 	void writeBlock(int col, int row, Grid<T> &grd, int srcCol = 0, int srcRow = 0) {
 		if(&grd == this)
 			g_runerr("Recursive call to writeBlock.");
-
 		int cols = g_min(m_cols - col, grd.cols() - srcCol);
 		int rows = g_min(m_rows - row, grd.rows() - srcRow);
+		g_trace("writeBlock: " << col << ", " << row << ", [grd]," << srcCol << ", " << srcRow << "; " << cols << ", " << rows);
 		if(cols < 1 || rows < 1)
 			g_argerr("Zero write size.");
-
 		MemRaster<T> mr(cols, rows);
 		grd.readBlock(srcCol, srcRow, mr);
 		if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)

@@ -139,10 +139,12 @@ namespace geotools {
 					int crs, int attribute, int type, double radius,
 					double resolution, Bounds &bounds, unsigned char angleLimit, bool fill, bool snap) {
 
-			if(radius <= 0.0)
-				g_argerr("Radius must be > 0.");
 			if(resolution <= 0.0)
 				g_argerr("Resolution must be > 0.");
+			if(radius <= 0.0) {
+				radius = std::sqrt(g_sq(resolution / 2.0) * 2.0);
+				g_warn("Radius invalid; using " << radius);
+			}
 			if(files.size() == 0)
 				g_argerr("At least one input file is required.");
 			if(dstFile.empty()) 
@@ -175,7 +177,8 @@ namespace geotools {
 			std::vector<unsigned int> indices;
 			Bounds bounds1;
 			bounds1.collapse();
-			
+			g_trace("Total bounds initial: " << bounds1.print());
+	
 			for(unsigned int i=0; i<files.size(); ++i) {
 				g_trace("Checking file " << files[i]);
 				std::ifstream in(files[i].c_str(), std::ios::in|std::ios::binary);
@@ -184,11 +187,12 @@ namespace geotools {
 				Bounds bounds0;
 				if(!Util::computeLasBounds(h, bounds0, 2))
 					Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
-				g_trace("Bounds " << files[i] << ": " << bounds0.print());
+				g_trace("File bounds " << files[i] << ": " << bounds0.print());
 				in.close();
 				if(bounds.intersects(bounds0, 2)) {
 					indices.push_back(i);
 					bounds1.extend(bounds0);
+					g_trace("Total bounds: " << bounds1.print());
 				}
 			}
 
@@ -210,6 +214,7 @@ namespace geotools {
 			if(type != TYPE_COUNT) {
 				grid1.init(cols, rows);
 				grid1.fill(-9999.0);
+				g_trace("Created grid1: " << cols << ", " << rows);
 			}
 
 			// For the median grid.
@@ -220,14 +225,16 @@ namespace geotools {
 			case TYPE_PSTDDEV:
 			case TYPE_QUANTILE:
 			case TYPE_MEDIAN:
-				for(size_t i = 0; i < qGrid.size(); ++i)
-					qGrid.set(i, new std::vector<double>());
 				qGrid.init(cols, rows);
 				qGrid.setDeallocator(&vector_dealloc);
+				for(size_t i = 0; i < qGrid.size(); ++i)
+					qGrid.set(i, new std::vector<double>());
+				g_trace("Created qGrid: " << cols << ", " << rows);
 				break;
 			}
 
 			// Create a grid for maintaining counts.
+			g_trace("Creating counts grid: " << cols << ", " << rows);
 			counts.init(cols, rows);
 			counts.fill(0);
 
@@ -245,18 +252,20 @@ namespace geotools {
 
 				while(reader.ReadNextPoint()) {
 					liblas::Point pt = reader.GetPoint();
-					
+
 					if(g_abs(pt.GetScanAngleRank()) > angleLimit)
 						continue;
 
 					double px = pt.GetX();
 					double py = pt.GetY();
+
 					// Check if in bounds, but only if clipping is desired.
 					if(!bounds.contains(px, py)) 
 						continue;
 					// If this point is not in the class list, skip it.
 					if(!Util::inList(classes, pt.GetClassification().GetClass()))
 						continue;
+
 					// Get either the height or intensity value.
 					double pz;
 					if(attribute == ATT_INTENSITY) {
@@ -264,9 +273,11 @@ namespace geotools {
 					} else { // ATT_HEIGHT
 						pz = pt.GetZ();
 					}
+
 					// Convert x and y, to col and row.
 					int c = (int) ((px - bounds.minx()) / resolution);
 					int r = (int) ((py - bounds.miny()) / resolution);
+
 					// If the radius is > 0, compute the size of the window.
 					int offset = (int) (radius * 2) / resolution;
 					for(int cc = g_max(0, c - offset); cc < g_min(cols, c + offset + 1); ++cc) {
@@ -276,6 +287,7 @@ namespace geotools {
 								continue;
 							// Compute the grid index. The rows are assigned from the bottom.
 							int idx = (rows - rr - 1) * cols + cc;
+							g_trace("idx: " << idx);
 							counts.set(idx, counts.get(idx) + 1);
 
 							switch(type){
@@ -423,12 +435,10 @@ namespace geotools {
 
 			if(type == TYPE_COUNT) {
 				// TODO: Determine resolution sign properly.
-				Raster<int> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
-							resolution, -resolution, -1, crs);
+				Raster<int> rast(dstFile, bounds, resolution, -resolution, -1, crs);
 				rast.writeBlock(counts);
 			} else {
-				Raster<float> rast(dstFile, bounds[0], bounds[1], bounds[2], bounds[3],
-							resolution, -resolution, -9999.0, crs);
+				Raster<float> rast(dstFile, bounds, resolution, -resolution, -9999.0, crs);
 				// Cast the double grid to float for writing.
 				MemRaster<float> tmp;
 				grid1.convert(tmp);
