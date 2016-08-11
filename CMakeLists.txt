@@ -9,10 +9,12 @@ enable_language(C)
 enable_language(CXX)
 
 find_package(OpenMP)
-find_package(Qt4)
+find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets)
 
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
+set (CMAKE_AUTOUIC ON)
+set (CMAKE_AUTOMOC ON)
+set (CMAKE_INCLUDE_CURRENT_DIR ON)
+set (CMAKE_AUTOMOC_OPTIONS "-Iinclude")
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -21,7 +23,7 @@ set (CMAKE_CXX_STANDARD 11)
 project (geotools)
 
 link_directories(/usr/local/lib /usr/lib)
-include_directories(include /usr/local/include /usr/include /usr/include/qt4 /usr/local/include/gdal /usr/local/include/geos /usr/include/gdal /usr/include/geos)
+include_directories(include /usr/local/include /usr/include /usr/include/x86_64-linux-gnu/qt5 /usr/local/include/gdal /usr/local/include/geos /usr/include/gdal /usr/include/geos)
 
 
 add_executable (flood src/flood.cpp src/geotools.cpp)
@@ -47,7 +49,7 @@ target_link_libraries (treetops-app treetops gdal las)
 add_library(lasgrid SHARED src/lasgrid.cpp src/Util.cpp src/geotools.cpp)
 target_link_libraries (lasgrid las gdal las laszip boost_system boost_filesystem)
 add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp)
-target_link_libraries (lasgrid-app PUBLIC lasgrid Qt4::QtGui)
+target_link_libraries (lasgrid-app PUBLIC lasgrid Qt5::Gui Qt5::Core Qt5::Widgets)
 
 add_executable (lasboundary src/lasboundary.cpp src/Util.cpp src/geotools.cpp)
 target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system boost_filesystem)

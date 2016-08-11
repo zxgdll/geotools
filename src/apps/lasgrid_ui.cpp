@@ -1,6 +1,5 @@
-#include <QtGui/QWidget>
-
-#include "ui_lasgrid.h"
+#include <QtWidgets/QWidget>
+#include <QtWidgets/QFileDialog>
 
 #include "lasgrid.hpp"
 #include "lasgrid_ui.hpp"
@@ -8,9 +7,14 @@
 using namespace geotools::ui;
 using namespace geotools::las::lasgrid_config;
 
-void LasgridForm::setupUi(QWidget *Form) {
+LasgridForm::LasgridForm(QWidget *p) : QObject(p) {
+}
 
-	Ui::LasgridForm::setupUi(Form);
+void LasgridForm::setupUi(QWidget *form) {
+
+	Ui::LasgridForm::setupUi(form);
+
+	m_form = form;
 
 	spnResolution->setValue(defaultResolution);
 	spnRadius->setValue(defaultRadius);
@@ -43,5 +47,12 @@ void LasgridForm::setupUi(QWidget *Form) {
 		item->setCheckState(defaultClasses.count(i) > 0 ? Qt::Checked : Qt::Unchecked);
 		lstClasses->addItem(item);
 	}
+
+	connect(btnSelectFiles, SIGNAL(clicked()), this, SLOT(selectFileClicked()));
 }
 
+void LasgridForm::selectFileClicked() {
+	QString file = QFileDialog::getOpenFileName(m_form, QString("LAS File"), QString("/"), QString("LAS Files (*.las)"));
+}
+
+#include "moc_lasgrid_ui.cpp"
