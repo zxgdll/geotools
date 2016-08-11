@@ -48,8 +48,6 @@ namespace geotools {
 				return false;
 			}
 
-
-
 			/**
 			 * Feathers the edges of data regions in a raster grid by setting the alpha
 			 * value for a pixel in proportion to its distance from the nearest null or edge.
@@ -144,6 +142,8 @@ namespace geotools {
 				int cols = output.toCol(posXRes ? maxx : minx) - col;
 				int rows = output.toRow(posYRes ? maxy : miny) - row;
 
+				g_trace("Col: " << col << ", row: " << row << ", cols: " << cols << ", rows: " << rows);
+				
 				float imNodata = input.nodata();
 				float outNodata = output.nodata();
 
@@ -158,6 +158,8 @@ namespace geotools {
 				#pragma omp parallel for
 				for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) {
 
+					g_trace("Bufrow: " << bufRow);
+					
 					// Initialize the grids.
 					MemRaster<float> imGrid(cols, bufRows);
 					MemRaster<float> outGrid(cols, bufRows);
@@ -181,6 +183,7 @@ namespace geotools {
 
 					// The last row might have to be smaller.
 					if(bufRow0 + bufRows0 > rows) {
+						g_trace("Adjusting last row");
 						bufRows0 = rows - bufRow0;
 						rowHeight0 = bufRows0 - rowOffset0;
 					}
@@ -191,34 +194,38 @@ namespace geotools {
 
 					// If the height of the row has changed, reinit the grids.
 					if(bufRows0 < bufRows) {
+						g_trace("Reiniting grids for last line");
 						imGrid.init(cols, bufRows0);
 						outGrid.init(cols, bufRows0);
 						alphaGrid.init(cols, bufRows0);
 					}
 
+					g_trace("Loading overlay");
 					// Load the overlay.
-					#pragma omp critical
+					#pragma omp critical(a)
 					{
 						input.readBlock(0, bufRow0, imGrid);
 					}
 
-					std::cout << "Feathering" << std::endl;
+					g_trace("Feathering");
 					// Feather the overlay
 					feather(imGrid, alphaGrid, cols, bufRows0, distance, imNodata, g_abs(input.resolutionX()));
 
+					g_trace("Reading background");
 					// Read background data.
-					#pragma omp critical 
+					#pragma omp critical(b)
 					{
 						base.readBlock(col, row + bufRow0, outGrid);
 					}
 
-					std::cout << "Blending" << std::endl;
+					g_trace("Blending");
 					// Blend the overlay into the output.
 					blend(imGrid, outGrid, alphaGrid, cols, bufRows0, imNodata, outNodata);
 
+					g_trace("Writing output");
 					// Write back to the output.
 					// We are extracting a slice out of the buffer, not writing the whole thing.
-					#pragma omp critical 
+					#pragma omp critical(c)
 					{
 						output.writeBlock(col, row + bufRow0 + rowOffset0, outGrid, 0, rowOffset0);
 					}
@@ -266,7 +273,7 @@ int main(int argc, char **argv) {
  		geotools::raster::mosaic(files, outfile, distance);
 
  	} catch(const std::exception &e) {
- 		std::cerr << e.what() << std::endl;
+ 		g_error(e.what());
  		usage();
  		return 1;
  	}
