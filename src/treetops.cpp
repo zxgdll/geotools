@@ -48,11 +48,86 @@ namespace trees {
 			return mc == cc && mr == cr;
 		}
 
-	}
+		/**
+		 * Compute the table of Gaussian weights given the size of the table
+		 * and the std. deviation.
+		 */
+		void gaussianWeights(double *weights, int size, double sigma) {
+			if(size % 2 == 0) ++size;
+			for(int r = 0; r < size; ++r) {
+				for(int c = 0; c < size; ++c) {
+					int x = size / 2 - c;
+					int y = size / 2 - r;
+					weights[r * size + c] = (1 / (2 * G_PI * sigma * sigma)) * pow(G_E, -((x * x + y * y) / (2.0 * sigma * sigma)));
+					g_trace("weights " << c << ", " << r << "; " << x << ", " << y << "; " << weights[r * size + c]);
+				}
+			}
+		}
+
+		double interpNodata(Grid<float> &rast, int col, int row) {
+			int size = 1;
+			double nodata = rast.nodata();
+			double v, t;
+			int n;	
+			while(size < 1000) {
+				n = 0;
+				t = 0;
+				for(int c = g_max(0, col - size); c < g_min(rast.cols(), col + size + 1); ++c) {
+					v = rast.get(c, g_max(0, row - size));
+					if(v != nodata) t += v, ++n;
+					v = rast.get(c, g_min(rast.rows() - 1, row + size));
+					if(v != nodata) t += v, ++n;
+				}
+				for(int r = g_max(1, row - size); r < g_min(rast.rows(), row + size + 1); ++r) {
+					v = rast.get(g_max(0, col - size), r);
+					if(v != nodata) t += v, ++n;
+					v = rast.get(g_min(rast.cols() - 1, col + size), r);
+					if(v != nodata) t += v, ++n;
+				}
+				if(n > 0)
+					return t / n;
+				++size;
+			}
+			g_runerr("Couldn't find a pixel to use as fill.");
+		}
+
+		/**
+		 * Smooth the raster and write the smoothed version to the output raster.
+		 */
+		// TODO: No accounting for nodata.
+		// TODO: Move to Raster.
+		void smooth(Grid<float> &raster, Grid<float> &smoothed, double sigma, int size) {
+			double weights[size * size];
+			gaussianWeights(weights, size, sigma);
+			float nodata = raster.nodata();
+			for(int r = size / 2; r < raster.rows() - size / 2; ++r) {
+				for(int c = size / 2; c < raster.cols() - size / 2; ++c) {
+					double t = 0.0;
+					double v;
+					for(int gr = 0; gr < size; ++gr) {
+						for(int gc = 0; gc < size; ++gc) {
+							int rc = c - size / 2 + gc;
+							int rr = r - size / 2 + gr;
+							v = raster.get(rc, rr);
+							if(v != nodata)
+								t += weights[gr * size + gc] * v;
+							else
+								g_trace("nodata " << v << " at " << rc << ", " << rr);	
+								//v = interpNodata(raster, rc, rr);
+
+						}
+					}
+					smoothed.set(c, r, t);
+				}
+			}
+		}
+
+
+	} // util
 
 	/**
 	*/
-	void treetops(std::string &inraster, std::string &outvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, int window) {
+	void treetops(const std::string &inraster, const std::string &outvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, int window, const std::string &smoothed) {
 
 		if(inraster.empty())
 			g_argerr("Input raster cannot be empty.");
@@ -67,7 +142,19 @@ namespace trees {
 
 		using namespace trees::util;
 
-		Raster<float> raster(inraster);
+		std::string rastfile;
+		if(!smoothed.empty()) {
+			g_trace("Smoothing raster: " << inraster << " -> " << smoothed);
+			Raster<float> raster(inraster);
+			Raster<float> sraster(smoothed, 1, raster);
+			smooth(raster, sraster, 0.8, 3);
+			rastfile.assign(smoothed);
+		} else {
+			rastfile.assign(inraster);
+		}
+
+		Raster<float> raster(rastfile);
+
 		size_t n = 0;
 		size_t count = raster.size();
 		int cols = raster.cols();
@@ -200,7 +287,7 @@ namespace trees {
 		std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold) {
 
 		Raster<float> inrast(infile);
-		Raster<unsigned int> outrast(outrfile, inrast);
+		Raster<unsigned int> outrast(outrfile, 1, inrast);
 		outrast.nodata(0);
 		outrast.fill(0);
 

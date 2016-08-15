@@ -12,9 +12,11 @@ void usage() {
 			<< "This program finds tree tops by locating the maximum value in a \n"
 			<< "window as it moves across a raster. The tops are just the maxima at \n"
 			<< "the center of the window.\n"
-			<< " -i -- The input raster; a LiDAR-derived canopy height model.\n"
-			<< " -t -- The treetop vector file. A shapefile.\n"
-			<< " -w -- Window size. Will be bumped up to the next odd value if even given.\n";
+			<< " -i  <filename>     The input raster; a LiDAR-derived canopy height model.\n"
+			<< " -t  <filename>     The treetop vector file. An sqlite file.\n"
+			<< " -w  <size>         Window size. Will be bumped up to the next odd value if even given.\n"
+			<< " -sf <filename>     If the CHM is to be smoothed, enter the filename of the smoothed raster.\n";
+			
 }
 
 int main(int argc, char **argv) {
@@ -24,6 +26,7 @@ int main(int argc, char **argv) {
 		std::string topshp;   // Treetops output.
 		std::string crownrast;
 		std::string crownvect;
+		std::string smoothed;
 		int window = 0;
 		
 		int i = 1;
@@ -41,6 +44,8 @@ int main(int argc, char **argv) {
 				window = atoi(argv[++i]);
 			} else if(arg == "-v") {
 				g_loglevel(G_LOG_TRACE);
+			} else if(arg == "-sf") {
+				smoothed.assign(argv[++i]);
 			} else if(arg == "-threads") {
 				int t = atoi(argv[++i]);
 				if(t <= 0)
@@ -51,7 +56,7 @@ int main(int argc, char **argv) {
 		}
 
 		std::map<size_t, std::unique_ptr<trees::util::Top> > tops;
-		trees::treetops(inraster, topshp, tops, window);
+		trees::treetops(inraster, topshp, tops, window, smoothed);
 		//trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65);
 
 	} catch(const std::exception &e) {

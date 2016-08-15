@@ -34,7 +34,7 @@ namespace trees {
 
 	}
 	
-	void treetops(std::string &inraster, std::string &topshp, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops,  int window);
+	void treetops(const std::string &inraster, const std::string &topsvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops,  int window, const std::string &smoothed);
 
  	void treecrowns(const std::string &infile, const std::string &outrfile, const std::string &outvfile,
                 std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold = 0.65);
