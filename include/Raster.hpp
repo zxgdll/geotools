@@ -693,6 +693,7 @@ public:
 		return m_size;
 	}
  	T* freeOldest() {
+		g_trace("Free oldest.");
 		size_t t = ULONG_MAX;
 		size_t i = 0;
 		for(auto it = m_times.begin(); it != m_times.end(); ++it) {
@@ -707,6 +708,7 @@ public:
 		return blk;
 	}
 	T* freeOne() {
+		g_trace("Free one.");
 		T *blk = nullptr;
 		while(m_blocks.size() >= m_size) {
 			if(blk)
@@ -765,18 +767,18 @@ private:
 		if(!m_inited)
 			g_runerr("Not inited before attempted read.");
 		if(!has(col, row))
-			g_argerr("Row or column out of bounds.");
+			g_argerr("Row or column out of bounds:" << col << ", " << row);
 		int bcol = (int) (col / m_bw);
 		int brow = (int) (row / m_bh);
 		if(bcol >= m_bcols || bcol < 0 || brow >= m_brows || brow < 0)
-			g_argerr("Illegal block column or row.");
+			g_argerr("Illegal block column or row: " << bcol << ", " << brow);
 		if(bcol != m_curcol || brow != m_currow) {
 			flush();
 			T *blk = m_cache.getBlock(col, row);
 			if(!blk)
 				g_runerr("Failed to load block from cache.");
 			std::fill_n(m_block, (size_t) m_bw * m_bh, nodata());
-			std::memcpy(m_block, blk, (size_t) m_bw * m_bh);
+			std::memcpy(m_block, blk, (size_t) m_bw * m_bh * sizeof(T));
 			m_currow = brow;
 			m_curcol = bcol;
 		}
@@ -851,34 +853,34 @@ public:
 	 * Create a new raster for writing with a template.
 	 */
 	template <class D>
-	Raster(const std::string &filename, const Raster<D> &tpl) : Raster() {
+	Raster(const std::string &filename, int band, const Raster<D> &tpl) : Raster() {
 		std::string proj;
 		tpl.projection(proj);
-		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
+		init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
 			tpl.resolutionY(), (T) tpl.nodata(), proj);
 	}
 
-	Raster(const std::string &filename, const Raster<T> &tpl) : Raster() {
-		init(filename, tpl);
+	Raster(const std::string &filename, int band, const Raster<T> &tpl) : Raster() {
+		init(filename, band, tpl);
 	}
 
 	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 	 */
-	Raster(const std::string &filename, double minx, double miny, double maxx, double maxy,
+	Raster(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
 			double resolutionX, double resolutionY, double nodata, const std::string &proj) : Raster() {
-		init(filename, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
+		init(filename,band,  minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
 	}
 
-	Raster(const std::string &filename, Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs) :
-		Raster(filename, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(), 
+	Raster(const std::string &filename, int band, Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs) :
+		Raster(filename, band, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(), 
 			resolutionX, resolutionY, nodata, crs) {
 	}
 	
 	/**
 	 * Build a new raster with the given filename, bounds, resolution, nodata and SRID.
 	 */
-	Raster(const std::string &filename, double minx, double miny, double maxx, double maxy,
+	Raster(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
 			double resolutionX, double resolutionY, double nodata, int crs) : Raster() {
 		std::string proj = epsg2ProjText(crs);
 		init(filename, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
@@ -897,24 +899,24 @@ public:
 	 * another raster as a template. The raster pixel types need not be the same.
 	 */
 	template <class D>
-	void init(const std::string &filename, const Raster<D> &tpl) {
+	void init(const std::string &filename, int band, const Raster<D> &tpl) {
 		g_trace("Raster init: " << filename << "; [tpl]");
 		std::string proj;
 		tpl.projection(proj);
-		init(filename, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
+		init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(), 
 			tpl.resolutionY(), tpl.nodata(), proj);
 	}
 
-	void init(const std::string &filename, const Bounds &bounds, double resolutionX, double resolutionY,
+	void init(const std::string &filename, int band, const Bounds &bounds, double resolutionX, double resolutionY,
 		double nodata, const std::string &proj) {
-		init(filename, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(), 
+		init(filename, band, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(), 
 			resolutionX, resolutionY, nodata, proj);
 	}
 
 	/**
 	 * Initializes the raster with the given filename, bounds, resolution, nodata and projection.
 	 */
-	void init(const std::string &filename, double minx, double miny, double maxx, double maxy,
+	void init(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
 			double resolutionX, double resolutionY, double nodata, const std::string &proj) {
 		
 		g_trace("Raster init: " << filename << ", " << minx << ", " << miny << ", " << maxx << ", " << maxy << ", " << resolutionX << ", " << resolutionY << ", " << nodata << ", " << proj);
@@ -956,15 +958,16 @@ public:
 		// Save some dataset properties.
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
-		m_band = m_ds->GetRasterBand(1);
+		m_band = m_ds->GetRasterBand(band);
 		if(m_band == NULL)
 			g_runerr("Failed to get band.");
+		m_bandn = band;
 		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_band->SetNoDataValue(nodata);
 		m_nodata = m_band->GetNoDataValue();
 		m_bcols = m_cols / m_bw;
 		m_brows = m_rows / m_bh;
-		m_cache.setSize(1);
+		m_cache.setSize(100);
 		m_cache.setRasterBand(m_band);
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
@@ -1001,7 +1004,7 @@ public:
 		m_nodata = m_band->GetNoDataValue();
 		m_bcols = m_cols / m_bw;
 		m_brows = m_rows / m_bh;
-		m_cache.setSize(1);
+		m_cache.setSize(100);
 		m_cache.setRasterBand(m_band);
 		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		if(!m_block)
