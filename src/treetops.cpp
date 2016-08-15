@@ -13,33 +13,15 @@
 #include "Util.hpp"
 #include "trees.hpp"
 
+#include "sqlite.hpp"
+
 using namespace geotools::raster;
 using namespace geotools::util;
+using namespace geotools::db;
 
 namespace trees {
 
 	namespace util {
-
-		/**
-		 * A simple class for maintaining information about a tree top.
-		 */
-		class Top {
-		public:
-			size_t m_id;
-			double m_x;
-			double m_y;
-			double m_z;
-			Top(size_t id, double x, double y, double z) :
-				m_id(id),
-				m_x(x), m_y(y), m_z(z) {
-			}
-			Top(const Top &t) :
-				Top(t.m_id, t.m_x, t.m_y, t.m_z) {
-			}
-			Top() :
-				Top(0, 0, 0, 0) {
-			}
-		};
 
 		/**
 		 * Returns true if the pixel at the center of the given
@@ -70,12 +52,12 @@ namespace trees {
 
 	/**
 	*/
-	void treetops(std::string &inraster, std::string &topshp, int window) {
+	void treetops(std::string &inraster, std::string &outvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, int window) {
 
 		if(inraster.empty())
 			g_argerr("Input raster cannot be empty.");
-		if(topshp.empty())
-			g_argerr("The treetop output name cannot be empty.");
+		if(outvect.empty())
+			g_warn("The treetop output filename is empty; not writing treetops");
 		if(window < 3)
 			g_argerr("A window size less than 3 makes no sense.");
 		if(window % 2 == 0) {
@@ -85,9 +67,6 @@ namespace trees {
 
 		using namespace trees::util;
 
-		// Input raster.
-		std::map<size_t, std::unique_ptr<Top> > tops;
-
 		Raster<float> raster(inraster);
 		size_t n = 0;
 		size_t count = raster.size();
@@ -96,57 +75,145 @@ namespace trees {
 		int offset = window / 2;
 		int row = 0;
 
+		SQLite db(outvect, SQLite::POINT, 26910, {{"id", 1}});
+		
+		// TODO: Set up output raster.
+
+		// This is the size of the cache used by each thread.
+		int cachedRows = 500;
+		int blockHeight = window + cachedRows;
+		int topCount = 0;
+
 		#pragma omp parallel
 		{
 			g_trace("Thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
-			MemRaster<float> blk(cols, window);
-			float max;
+			MemRaster<float> blk(cols, blockHeight);
 			std::map<size_t, std::unique_ptr<Top> > tops0;
-		
-			while(row < rows) {
-				for(int r = row; r < g_min(row + window, rows - window); ++r) { 
+			float max;
+			int topCount0 = 0;
+			int curRow;
+	
+			while(true) {
+				#pragma omp critical(a)
+				{
+					curRow = row;
+					row += cachedRows;
+				}
+				if(curRow >= rows)
+					break;
+				#pragma omp critical(c)
+				{
 					blk.nodata(raster.nodata());
-					#pragma omp critical
-					{
-						raster.readBlock(0, r, blk);
-					}
+					raster.readBlock(0, curRow, blk);
+				}
+				for(int r = 0; r < cachedRows - window; ++r) {
 					for(int c = 0; c < cols - window; ++c) {
-						size_t id = ((size_t) c << 32) | r;
-						if(isMaxCenter(blk, c, 0, window, &max)) {
+						size_t id = ((size_t) c << 32) | (r + curRow);
+						if(isMaxCenter(blk, c, r, window, &max)) {
 							std::unique_ptr<Top> t(new Top(id, 
 								raster.toX(c + offset) + raster.resolutionX() / 2.0, // center of pixel
-								raster.toY(r + offset) + raster.resolutionY() / 2.0, 
-								max
+								raster.toY(r + curRow + offset) + raster.resolutionY() / 2.0, 
+								max,
+								c + offset,
+								r + curRow + offset
 							));
 							tops0[id] = std::move(t);
+							++topCount0;
 						}
 					}
 				}
 
+				Util::status(g_min(row, rows * 2), rows * 2, false);
+	
 				#pragma omp atomic
-				row += window;
-
-				Util::status(row, rows, false);
+				topCount += topCount0;
 			}
 
-			g_trace("Copying tops to output dict.");
-			#pragma omp critical
+			g_trace("Writing " << topCount << " tops.");
+			//std::list<std::unique_ptr<Geom> > geoms;
+			int tc = topCount / 2;
+			#pragma omp critical(b)
 			{
-				for(auto it = tops0.begin(); it != tops0.end(); ++it) 
-					tops[it->first] = std::move(it->second);
+				db.begin();
+				for(auto it = tops0.begin(); it != tops0.end(); ++it) {
+					Top *t = it->second.get();
+					db.addPoint(t->m_x, t->m_y, t->m_z, {{"id", std::to_string(t->m_id)}});
+					if(++tc % 1000000 == 0) {
+						Util::status(tc, topCount, false);
+						db.commit();
+						db.begin();
+					}
+				}
+				db.commit();	
 			}
 		}
 
-		Util::status(rows, rows, true);
-
-		std::stringstream out;
-		out << std::setprecision(12);
-		out << "id,x,y,z" << std::endl;
-		for(auto it = tops.begin(); it != tops.end(); ++it) {
-			Top *t = it->second.get();
-			out << t->m_id << "," << t->m_x << "," << t->m_y << "," << t->m_z << std::endl;
-		}
-		std::cout << out.str();
+		Util::status(1, 1, true);
+		g_trace("Done.");
 	}
+
+	class Node {
+	public:
+		int c, r;
+		Node(int c, int r) {
+			this->c;
+			this->r;
+		}
+	};
+
+	void delineateCrown(Raster<float> &inrast, Raster<unsigned int> &outrast, trees::util::Top *top, double threshold) {
+	
+		std::queue<Node> q;
+		std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
+
+		q.push(Node(top->m_col, top->m_row));
+
+		while(q.size()) {
+
+			Node n = q.front();
+			q.pop();
+
+			visited[(size_t) n.r * inrast.cols() + n.c] = true;
+			
+			for(int r = g_max(0, n.r - 1); r < g_min(inrast.rows(), n.r + 1); ++r) {
+			for(int c = g_max(0, n.c - 1); c < g_min(inrast.cols(), n.c + 1); ++c) {
+		
+				size_t idx = (size_t) r * inrast.cols() + c;
+				if(c != top->m_col && r != top->m_row && !visited[idx]) {
+				
+					double v = inrast.get(c, r);
+					double dif = v - inrast.get(top->m_col, top->m_row);
+					if(dif < 0 && g_abs(dif / top->m_z) <= threshold) {
+						visited[idx] = true;
+						q.push(Node(c, r));
+						outrast.set(c, r, top->m_id);
+					}
+
+				}
+			}
+			}
+		}
+
+	}
+
+	void treecrowns(const std::string &infile, const std::string &outrfile, const std::string &outvfile, 
+		std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold) {
+
+		Raster<float> inrast(infile);
+		Raster<unsigned int> outrast(outrfile, inrast);
+		outrast.nodata(0);
+		outrast.fill(0);
+
+		size_t n = 0;
+		for(auto it = tops.begin(); it != tops.end(); ++it) {
+
+			delineateCrown(inrast, outrast, it->second.get(), threshold);
+			Util::status(n++, tops.size(), false);
+		}
+
+		Util::status(tops.size(), tops.size(), true);
+
+	}
+
 
 }

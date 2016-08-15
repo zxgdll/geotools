@@ -306,7 +306,7 @@ void Util::loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::s
 }
 
 void Util::status(int step, int of, bool end) {
-        #pragma omp critical
+        #pragma omp critical(__status)
         {
                 if(step < 0)  step = 0;
                 if(of <= 0)   of = 1;

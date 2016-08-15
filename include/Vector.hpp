@@ -34,25 +34,24 @@ namespace geotools {
 
 	namespace vector {
 
-		class Vector;
-
 		/**
 		 * Holds information about a newly-added geometry, allowing the
 		 * caller to add attributes or (potentially) modify the 
 		 * geometry before it is committed to a vector layer.
 		 */
 		class Geom {
-		friend class Vector;
 		private:
 			OGRFeature *m_feat;
 			OGRLayer *m_layer;
-
-			Geom(OGRFeature *feat, OGRLayer *layer) {
-				m_feat = feat;
-				m_layer = layer;
-			}
+			bool m_needWrite;
 
 		public:
+			Geom(OGRFeature *feat, OGRLayer *layer) :
+				m_feat(feat), 
+				m_layer(layer),
+				m_needWrite(true) {
+			}
+
 			void setAttribute(const char *name, int value) {
 				m_feat->SetField(name, value);
 			}
@@ -65,9 +64,16 @@ namespace geotools {
 				m_feat->SetField(name, value.c_str());
 			}
 
+			void flush() {
+				if(m_needWrite) {
+					m_layer->CreateFeature(m_feat);
+					OGRFeature::DestroyFeature(m_feat);
+					m_needWrite = false;
+				}
+			}
+
 			~Geom() {
-				m_layer->CreateFeature(m_feat);
-				OGRFeature::DestroyFeature(m_feat);
+				flush();
 			}
 		};
 
@@ -193,45 +199,40 @@ namespace geotools {
 			std::unique_ptr<Geom> addPoint(double x, double y, double z = 0.0) {
 				if(m_type != POINT) throw "This is not a point layer.";
 				OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
-				OGRPoint pt(x, y, z);
-				feat->SetGeometry(&pt);
+				OGRPoint *pt = new OGRPoint(x, y, z);
+				feat->SetGeometryDirectly(pt);
 				std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 				return ret;
 			}
 
-			std::unique_ptr<Geom> addMultiLine(geos::geom::MultiLineString &line) {
+			std::unique_ptr<Geom> addMultiLine(const geos::geom::MultiLineString &line) {
 				if(m_type != MULTILINE) throw "This is not a multiline layer.";
-				//const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
-				
 				std::stringstream buf;
 				geos::io::WKBWriter writer;
 				writer.write(line, buf);
 				OGRGeometry *geom;
 				unsigned char *data = (unsigned char *) buf.str().c_str();
-
 				OGRGeometryFactory::createFromWkb(data, 0, &geom, buf.str().size());
-				//OGRGeometry *geom = OGRGeometryFactory::createFromGEOS(gctx, gline);
 				OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
-				feat->SetGeometry(geom);
+				feat->SetGeometryDirectly(geom);
 				std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 				return ret;
 
 			}
 
-			std::unique_ptr<Geom> addMultiLine(std::vector<std::vector<std::tuple<double, double, double> > > &line) {
+			std::unique_ptr<Geom> addMultiLine(const std::vector<std::vector<std::tuple<double, double, double> > > &line) {
 				if(m_type != MULTILINE) throw "This is not a multiline layer.";
 				OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
-				OGRMultiLineString mline;
-				
+				OGRMultiLineString *mline = new OGRMultiLineString();
 				for(std::vector<std::tuple<double, double, double > > seg:line) {
 					OGRLineString lseg;
 					int i = 0;
 					for(std::tuple<double, double, double> pt:seg)
 						lseg.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
-					mline.addGeometry(&lseg);
+					mline->addGeometry(&lseg);
 				}
 				
-				feat->SetGeometry(&mline);
+				feat->SetGeometryDirectly(mline);
 				std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 				return ret;
 
@@ -242,14 +243,14 @@ namespace geotools {
 			 * containing three doubles, x, y, z.
 			 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 			 */
-			std::unique_ptr<Geom> addLine(std::vector<std::tuple<double, double, double> > &points) {
+			std::unique_ptr<Geom> addLine(const std::vector<std::tuple<double, double, double> > &points) {
 				if(m_type != LINE) throw "This is not a line layer.";
 				OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
-				OGRLineString line;
+				OGRLineString *line = new OGRLineString();
 				int i = 0;
 				for(std::tuple<double, double, double> pt:points)
-					line.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
-				feat->SetGeometry(&line);
+					line->setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
+				feat->SetGeometryDirectly(line);
 				std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 				return ret;
 			}
@@ -260,31 +261,30 @@ namespace geotools {
 			 * lists for holes/islands.
 			 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 			 */
-			std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing, 
-																			 std::vector<std::vector<std::tuple<double, double, double > > > &holes) {
+			std::unique_ptr<Geom> addPolygon(const std::vector<std::tuple<double, double, double> > &extRing, 
+				const std::vector<std::vector<std::tuple<double, double, double > > > &holes) {
 				if(m_type != POLYGON) throw "This is not a polygon layer.";
 				OGRFeature *feat = OGRFeature::CreateFeature(m_layer->GetLayerDefn());
-				OGRPolygon poly;
-				
+				OGRPolygon *poly = new OGRPolygon();
 				{
-					OGRLinearRing ring;
+					OGRLinearRing *ring = new OGRLinearRing();
 					int i = 0;
 					for(std::tuple<double, double, double> pt:extRing)
-						ring.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
-					ring.setPoint(i++, std::get<0>(extRing[0]), std::get<1>(extRing[0]), std::get<2>(extRing[0]));
-					poly.addRing(&ring);
+						ring->setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
+					ring->setPoint(i++, std::get<0>(extRing[0]), std::get<1>(extRing[0]), std::get<2>(extRing[0]));
+					poly->addRing(ring);
 				}
 				
 				for(std::vector<std::tuple<double, double, double > > hole:holes) {
-					OGRLinearRing ring;
+					OGRLinearRing *ring = new OGRLinearRing();
 					int i = 0;
 					for(std::tuple<double, double, double> pt:hole)
-						ring.setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
-					ring.setPoint(i++, std::get<0>(hole[0]), std::get<1>(hole[0]), std::get<2>(hole[0]));
-					poly.addRing(&ring);
+						ring->setPoint(i++, std::get<0>(pt), std::get<1>(pt), std::get<2>(pt));
+					ring->setPoint(i++, std::get<0>(hole[0]), std::get<1>(hole[0]), std::get<2>(hole[0]));
+					poly->addRing(ring);
 				}
 				
-				feat->SetGeometry(&poly);
+				feat->SetGeometryDirectly(poly);
 				std::unique_ptr<Geom> ret(new Geom(feat, m_layer));
 				return ret;
 			}
@@ -294,8 +294,8 @@ namespace geotools {
 			 * containing three doubles, x, y, z for the exterior ring.
 			 * Returns a unique_ptr to the Geom object, to which attributes can be added.
 			 */
-			std::unique_ptr<Geom> addPolygon(std::vector<std::tuple<double, double, double> > &extRing) {
-				std::vector<std::vector<std::tuple<double, double, double > > > holes;
+			std::unique_ptr<Geom> addPolygon(const std::vector<std::tuple<double, double, double> > &extRing) {
+				const std::vector<std::vector<std::tuple<double, double, double > > > holes;
 				return addPolygon(extRing, holes);
 			}
 			

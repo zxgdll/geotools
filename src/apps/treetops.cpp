@@ -1,5 +1,10 @@
-#include "geotools.h"
+#include <string>
+#include <vector>
+#include <map>
 
+#include "omp.h"
+
+#include "geotools.h"
 #include "trees.hpp"
 
 void usage() {
@@ -17,6 +22,8 @@ int main(int argc, char **argv) {
 	try {
 		std::string inraster; // Input raster.
 		std::string topshp;   // Treetops output.
+		std::string crownrast;
+		std::string crownvect;
 		int window = 0;
 		
 		int i = 1;
@@ -26,14 +33,26 @@ int main(int argc, char **argv) {
 				inraster = argv[++i];
 			} else if(arg == "-t") {
 				topshp = argv[++i];
+			} else if(arg == "-cr") {
+				crownrast = argv[++i];
+			} else if(arg == "-cv") {
+				crownvect = argv[++i];
 			} else if(arg == "-w") {
 				window = atoi(argv[++i]);
 			} else if(arg == "-v") {
 				g_loglevel(G_LOG_TRACE);
+			} else if(arg == "-threads") {
+				int t = atoi(argv[++i]);
+				if(t <= 0)
+					g_argerr("Invalid number of threads: " << t);
+				omp_set_dynamic(0);
+				omp_set_num_threads(t);
 			}
 		}
 
-		trees::treetops(inraster, topshp, window);
+		std::map<size_t, std::unique_ptr<trees::util::Top> > tops;
+		trees::treetops(inraster, topshp, tops, window);
+		//trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65);
 
 	} catch(const std::exception &e) {
 		std::cerr << e.what() << std::endl;

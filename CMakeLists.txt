@@ -40,9 +40,9 @@ target_link_libraries (mosaic-app gdal boost_system boost_filesystem)
 
 
 add_library (treetops SHARED src/treetops.cpp src/Util.cpp src/geotools.cpp)
-target_link_libraries (treetops gdal)
+target_link_libraries (treetops gdal sqlite3 spatialite)
 add_executable (treetops-app src/apps/treetops.cpp)
-target_link_libraries (treetops-app treetops gdal las)
+target_link_libraries (treetops-app PUBLIC treetops gdal las)
 
 
 
