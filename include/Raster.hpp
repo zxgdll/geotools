@@ -693,7 +693,6 @@ public:
 		return m_size;
 	}
  	T* freeOldest() {
-		g_trace("Free oldest.");
 		size_t t = ULONG_MAX;
 		size_t i = 0;
 		for(auto it = m_times.begin(); it != m_times.end(); ++it) {
@@ -708,7 +707,6 @@ public:
 		return blk;
 	}
 	T* freeOne() {
-		g_trace("Free one.");
 		T *blk = nullptr;
 		while(m_blocks.size() >= m_size) {
 			if(blk)
