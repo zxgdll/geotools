@@ -435,10 +435,10 @@ namespace geotools {
 
 			if(type == TYPE_COUNT) {
 				// TODO: Determine resolution sign properly.
-				Raster<int> rast(dstFile, bounds, resolution, -resolution, -1, crs);
+				Raster<int> rast(dstFile, 1, bounds, resolution, -resolution, -1, crs);
 				rast.writeBlock(counts);
 			} else {
-				Raster<float> rast(dstFile, bounds, resolution, -resolution, -9999.0, crs);
+				Raster<float> rast(dstFile, 1, bounds, resolution, -resolution, -9999.0, crs);
 				// Cast the double grid to float for writing.
 				MemRaster<float> tmp;
 				grid1.convert(tmp);

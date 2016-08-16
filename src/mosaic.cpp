@@ -117,7 +117,7 @@ namespace geotools {
 			Raster<float> base(files[0]);
 
 			// Create the destination file to modify it.
-			Raster<float> output(outfile, base);
+			Raster<float> output(outfile, 1, base);
 			output.writeBlock(base);
 
 			// Iterate over the files, adding each one to the background.

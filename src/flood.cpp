@@ -311,7 +311,7 @@ namespace geotools {
 				int fillBasins(std::string &filename, float elevation) {
 					g_trace("Filling basins: " << filename << "; " << elevation);
 
-					Raster<unsigned int> basins(filename, m_dem);
+					Raster<unsigned int> basins(filename, 1, m_dem);
 					basins.nodata(0);
 					basins.fill(0);
 					m_basinList.clear();

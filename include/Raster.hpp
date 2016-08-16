@@ -881,7 +881,7 @@ public:
 	Raster(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
 			double resolutionX, double resolutionY, double nodata, int crs) : Raster() {
 		std::string proj = epsg2ProjText(crs);
-		init(filename, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
+		init(filename, band, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
 	}
 
 	/**
