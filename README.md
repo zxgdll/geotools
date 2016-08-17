@@ -1,6 +1,6 @@
 # geotools
 
-[![Build Status](https://travis-ci.org/rskelly/geotools.svg?branch=big_refactor)](https://travis-ci.org/rskelly/geotools)
+[![Build Status](https://travis-ci.org/rskelly/geotools.svg?branch=master)](https://travis-ci.org/rskelly/geotools)
 
 These are tools for working with GIS data, in particular, LiDAR and raster data and geodetic transformation. They're mostly experimental and not presented for production use, though they have been very useful in my work.
 
