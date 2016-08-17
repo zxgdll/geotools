@@ -679,16 +679,22 @@ public:
 		band->GetBlockSize(&m_bw, &m_bh);
 	}
 	size_t toIdx(int col, int row) {
+		g_trace("to idx: " << col << "," << row << " --> " << (((size_t) (col / m_bw) << 32) | (row / m_bh)));
 		return ((size_t) (col / m_bw) << 32) | (row / m_bh);
 	}
 	int toCol(size_t idx) {
+		g_trace("to col: " << idx << " --> " << ((idx >> 32) & 0xffffffff) * m_bw);
 		return ((idx >> 32) & 0xffffffff) * m_bw;
 	}
 	int toRow(size_t idx) {
+		g_trace("to row: " << idx << " --> " << (idx & 0xffffffff) * m_bh);
 		return (idx & 0xffffffff) * m_bh;
 	}
 	bool hasBlock(int col, int row) {
-		return m_blocks.find(toIdx(col, row)) != m_blocks.end();
+		return hasBlock(toIdx(col, row));
+	}
+	bool hasBlock(size_t idx) {
+		return m_blocks.find(idx) != m_blocks.end();
 	}
 	void setSize(size_t size) {
 		while(m_blocks.size() > size)
@@ -707,7 +713,7 @@ public:
 				i = it->first;
 			}
 		}
-		flushBlock(toCol(i), toRow(i));
+		flushBlock(i);
 		T *blk = m_blocks[i];
 		m_blocks.erase(i);
 		m_times.erase(i);
@@ -725,31 +731,32 @@ public:
 	T* getBlock(int col, int row) {
 		size_t t = ++m_time; // TODO: No provision for rollover
 		size_t i = toIdx(col, row);
-		if(!hasBlock(col, row)) {
+		if(!hasBlock(i)) {
+			g_trace("loading block " << col << ", " << row);
 			T *blk = freeOne();
 			if(!blk)
 				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
 			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
 				g_runerr("Failed to read block.");
 			m_blocks[i] = blk;
+		// } else {
+		//	g_trace("returning cached block " << col << ", " << row);
 		}
 		m_times[i] = t;
 		return m_blocks[i];
 	}
-	void flushBlock(int col, int row) {
-		g_trace("writeblock " << col << " " << m_bw << " " << row << " " << m_bh);
-
-		if(hasBlock(col, row) && m_band->GetDataset()->GetAccess() == GA_Update) {
+	void flushBlock(size_t idx) {
+		if(hasBlock(idx) && m_band->GetDataset()->GetAccess() == GA_Update) {
+			g_trace("writeblock " << idx << " " << toCol(idx) << " " << m_bw << " " << toRow(idx) << " " << m_bh);
 			size_t t = ++m_time; // TODO: No provision for rollover
-			size_t i = toIdx(col, row);
-			T *blk = m_blocks[i];
-			if(m_band->WriteBlock(col / m_bw, row / m_bh, blk) != CE_None)
+			T *blk = m_blocks[idx];
+			if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
 				g_runerr("Failed to flush block.");
 		}
 	}
 	void flush() {
 		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it)
-			flushBlock(toCol(it->first), toRow(it->first));
+			flushBlock(it->first);
 	}
 	~BlockCache() {
 		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
