@@ -10,7 +10,7 @@
 #include <omp.h>
 
 #include "Raster.hpp"
-#include "Util.hpp"
+#include "util.hpp"
 #include "trees.hpp"
 
 #include "sqlite.hpp"
@@ -122,7 +122,7 @@ namespace trees {
 		}
 
 
-	} // util
+	} // Util
 
 	/**
 	*/

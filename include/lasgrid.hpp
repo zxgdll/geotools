@@ -8,7 +8,7 @@
 
 #include "geotools.h"
 #include "Raster.hpp"
-#include "Util.hpp"
+#include "util.hpp"
 
 #define TYPE_MIN 1
 #define TYPE_MAX 2

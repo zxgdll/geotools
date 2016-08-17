@@ -17,7 +17,7 @@
 #include <map>
 
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
 #include "Raster.hpp"
 
 using namespace geotools::util;
@@ -164,7 +164,7 @@ namespace geotools {
 
 			};
 
-		} // util
+		} // Util
 
 		/**
 		 * Compute statistics on the pairs of files in the files vector, for

@@ -20,7 +20,7 @@
 #include <CGAL/ch_jarvis.h>
 #include <CGAL/Boolean_set_operations_2.h>
 #include <CGAL/Polygon_2_algorithms.h>
-#include <CGAL/number_utils.h>
+#include <CGAL/number_Utils.h>
 #endif
 
 #include "nanoflann.hpp"
@@ -488,7 +488,7 @@ namespace interp {
 			}
 
 			/**
-			 * This utility method interpolates for a single coordinate, rather than
+			 * This Utility method interpolates for a single coordinate, rather than
 			 * a raster, and returns the interpolated value.
 			 */
 			double interpolate(double x, double y, std::list<interp::InterpPoint > &samples) {

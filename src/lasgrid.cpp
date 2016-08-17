@@ -26,6 +26,8 @@
 #include <liblas/liblas.hpp>
 
 #include "lasgrid.hpp"
+
+#include "lasutil.hpp"
  
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
@@ -185,8 +187,8 @@ namespace geotools {
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 				Bounds bounds0;
-				if(!Util::computeLasBounds(h, bounds0, 2))
-					Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
+				if(!LasUtil::computeLasBounds(h, bounds0, 2))
+					LasUtil::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 				g_trace("File bounds " << files[i] << ": " << bounds0.print());
 				in.close();
 				if(bounds.intersects(bounds0, 2)) {

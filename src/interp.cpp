@@ -14,7 +14,7 @@
 #include "csv.h"
 
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
 #include "Raster.hpp"
 #include "interp/InterpPoint.hpp"
 #include "interp/Interpolator.hpp"

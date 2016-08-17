@@ -34,7 +34,8 @@
 #include <liblas/liblas.hpp>
 
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
+#include "lasutil.hpp"
 #include "Raster.hpp"
 #include "Vector.hpp"
 
@@ -94,7 +95,7 @@ namespace geotools {
 				return true;
 			}
 
-		} // util
+		} // itil
 
 		void lasboundary(std::string &srcDir, std::string &dstFile, int srid, double res, std::set<int> &classes) {
 
@@ -126,7 +127,8 @@ namespace geotools {
 				liblas::Header header = reader.GetHeader();
 				Bounds bounds0;
 				bounds0.collapse();
-				Util::computeLasBounds(header, bounds0, 2);
+				if(!LasUtil::computeLasBounds(header, bounds0, 2))
+					LasUtil::computeLasBounds(reader, bounds0, 2);
 				bounds.extend(bounds0);
 				in.close();
 			}

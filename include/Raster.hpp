@@ -19,7 +19,7 @@
 #include <eigen3/Eigen/Core>
 
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
 
 using namespace geotools::util;
 

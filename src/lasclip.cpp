@@ -34,7 +34,7 @@
 #include <liblas/liblas.hpp>
 
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
 
 namespace gg = geos::geom;
 

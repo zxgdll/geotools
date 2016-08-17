@@ -4,8 +4,7 @@
 #include <set>
 #include <list>
 #include <ostream>
-
-#include <liblas/liblas.hpp>
+#include <vector>
 
 namespace geotools {
 
@@ -93,26 +92,6 @@ namespace geotools {
 		 */
 		class Util {
 		public:
-
-		#ifdef LIBLAS_HPP_INCLUDED
-
-			/**
-			 * Compute the bounds of a LAS file using the Header and a double
-			 * array to contain the result. If the dims argument is 2, the
-			 * horizontal coords are considered and if it's 3, all coords are.
-			 */
-			static bool computeLasBounds(liblas::Header &hdr, geotools::util::Bounds &bounds, int dims = 2);
-
-			/**
-			 * Compute the bounds of a LAS file using the Reader and a double
-			 * array to contain the result. If the dims argument is 2, the
-			 * horizontal coords are considered and if it's 3, all coords are.
-			 * Use this method when the header bounds are bogus (it iterates over all the points.
-			 */
-			static bool computeLasBounds(liblas::Reader &rdr, geotools::util::Bounds &bounds, int dims = 2);
-
-		#endif
-
 			
 			/**
 			 * Split a comma-delimited string into a set of unique integers.

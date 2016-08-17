@@ -32,7 +32,8 @@
 #include <liblas/liblas.hpp>
 
 #include "lasvalidate.hpp"
-#include "Util.hpp"
+#include "util.hpp"
+#include "lasutil.hpp"
 
 namespace geom = geos::geom;
 
@@ -270,8 +271,8 @@ namespace geotools {
 				// Check that this file is relevant.
 				Bounds bounds0;
 				bounds0.collapse(2);
-				if(!Util::computeLasBounds(h, bounds0, 2))
-					Util::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
+				if(!LasUtil::computeLasBounds(h, bounds0, 2))
+					LasUtil::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
 
 				g_trace("LAS bounds: " << bounds0[0] << "," << bounds0[1] << "," << bounds0[2] << "," << bounds0[3]);
 

@@ -4,7 +4,7 @@
 #include <iomanip>
 
 #include "Raster.hpp"
-#include "Util.hpp"
+#include "util.hpp"
 
 int g_min(int a, int b) {
 	return a < b ? a : b;

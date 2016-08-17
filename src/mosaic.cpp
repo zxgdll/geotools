@@ -12,7 +12,7 @@
 #include <omp.h>
 
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
 #include "Raster.hpp"
 
 using namespace geotools::raster;
@@ -92,7 +92,7 @@ namespace geotools {
 				}
 			}
 
-		} // util
+		} // Util
 
 		/**
 		 * Mosaic the given files together using the first as the base. The base file will serve as a clipping

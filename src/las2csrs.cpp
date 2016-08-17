@@ -13,7 +13,7 @@
 #include <cpl_conv.h> // for CPLMalloc()
 
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
 #include "Raster.hpp"
 
 #define LAS2CSRS_DATA "LAS2CSRS_DATA"
@@ -208,7 +208,7 @@ namespace geotools {
 				}
 			};
 
-		} // util
+		} // Util
 
 		using namespace geotools::geodesy::util;
 

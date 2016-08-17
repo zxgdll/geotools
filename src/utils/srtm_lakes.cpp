@@ -9,7 +9,7 @@
 #include <gdal_priv.h>
 
 #include "Raster.hpp"
-#include "Util.hpp"
+#include "util.hpp"
 
 unsigned long _join(int a, int b) {
 	return (unsigned long) a << 32 | b;

@@ -18,7 +18,7 @@
 #include <map>
 #include <algorithm>
 
-#include "Util.hpp"
+#include "util.hpp"
 #include "Raster.hpp"
 #include "interp/InterpPoint.hpp"
 #include "interp/Interpolator.hpp"

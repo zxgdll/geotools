@@ -1,6 +1,6 @@
 #include "lasvalidate.hpp"
 
-#include "Util.hpp"
+#include "util.hpp"
 
 void usage() {
 	std::cerr << "Usage: lasvalidate [options] <lasfiles>\n"

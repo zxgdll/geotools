@@ -250,7 +250,7 @@ namespace geotools {
 			}
 
 
-		} // util
+		} // Util
 
 
 		void mapClasses(std::vector<std::string> &files, std::string &outfile, std::map<int, int> &mappings) {

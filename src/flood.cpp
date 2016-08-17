@@ -436,7 +436,7 @@ namespace geotools {
 				}
 			};
 
-		} // util
+		} // Util
 
 		/**
 		 */

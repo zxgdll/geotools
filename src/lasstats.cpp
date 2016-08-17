@@ -40,7 +40,7 @@
 #include <liblas/liblas.hpp>
  
 #include "geotools.h"
-#include "Util.hpp"
+#include "util.hpp"
 #include "Raster.hpp"
 
 namespace geom = geos::geom;
@@ -308,7 +308,7 @@ namespace geotools {
 
 			};
 
-		} // util	
+		} // Util	
 
 		void doVector(std::string &shapefile, std::string &outfile, std::string &layername,
 				std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType, int scanAngle) {
