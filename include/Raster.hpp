@@ -681,6 +681,12 @@ public:
 	size_t toIdx(int col, int row) {
 		return ((size_t) (col / m_bw) << 32) | (row / m_bh);
 	}
+	int toCol(size_t idx) {
+		return ((idx >> 32) & 0xffffffff) * m_bw;
+	}
+	int toRow(size_t idx) {
+		return (idx & 0xffffffff) * m_bh;
+	}
 	bool hasBlock(int col, int row) {
 		return m_blocks.find(toIdx(col, row)) != m_blocks.end();
 	}
@@ -701,6 +707,7 @@ public:
 				i = it->first;
 			}
 		}
+		flushBlock(toCol(i), toRow(i));
 		T *blk = m_blocks[i];
 		m_blocks.erase(i);
 		m_times.erase(i);
@@ -729,9 +736,24 @@ public:
 		m_times[i] = t;
 		return m_blocks[i];
 	}
+	void flushBlock(int col, int row) {
+		g_trace("writeblock " << col << " " << m_bw << " " << row << " " << m_bh);
+
+		if(hasBlock(col, row) && m_band->GetDataset()->GetAccess() == GA_Update) {
+			size_t t = ++m_time; // TODO: No provision for rollover
+			size_t i = toIdx(col, row);
+			T *blk = m_blocks[i];
+			if(m_band->WriteBlock(col / m_bw, row / m_bh, blk) != CE_None)
+				g_runerr("Failed to flush block.");
+		}
+	}
+	void flush() {
+		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it)
+			flushBlock(toCol(it->first), toRow(it->first));
+	}
 	~BlockCache() {
 		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
-			if(it->second)
+			if(it->second)			
 				free(it->second);
 		}
 	}
@@ -781,6 +803,8 @@ private:
 			m_curcol = bcol;
 		}
 	}
+
+	
 
 	GDALDataType getType(double v) {
 		(void) v;
@@ -1369,6 +1393,7 @@ public:
 	void set(int col, int row, T v) {
 		if(!m_writable)
 			g_runerr("This raster is not writable.");
+		//g_trace("set " << col << ", " << row << ", " << v);
 		loadBlock(col, row);
 		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
 		m_block[idx] = v;
@@ -1378,7 +1403,7 @@ public:
 	void set(size_t idx, T v) {
 		if(idx >= size())
 			g_argerr("Index out of bounds.");
-		set(idx % m_cols, (int) idx / m_rows, v);
+		set(idx % m_cols, (int) idx / m_cols, v);
 	}
 
 	/**
@@ -1415,11 +1440,17 @@ public:
 	 */
 	void flush() {
 		if(m_writable && m_dirty) {
+			m_cache.flush();
+			m_dirty = false;
+		}
+		/*	
+		if(m_writable && m_dirty) {
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
 				g_runerr("Flush error.");
 			m_ds->FlushCache();
 			m_dirty = false;
 		}
+		*/
 	}
 
 	~Raster() {

@@ -59,7 +59,7 @@ namespace trees {
 					int x = size / 2 - c;
 					int y = size / 2 - r;
 					weights[r * size + c] = (1 / (2 * G_PI * sigma * sigma)) * pow(G_E, -((x * x + y * y) / (2.0 * sigma * sigma)));
-					g_trace("weights " << c << ", " << r << "; " << x << ", " << y << "; " << weights[r * size + c]);
+					//g_trace("weights " << c << ", " << r << "; " << x << ", " << y << "; " << weights[r * size + c]);
 				}
 			}
 		}
@@ -109,12 +109,11 @@ namespace trees {
 							int rc = c - size / 2 + gc;
 							int rr = r - size / 2 + gr;
 							v = raster.get(rc, rr);
-							if(v != nodata)
+							if(v != nodata) {
 								t += weights[gr * size + gc] * v;
-							else
-								g_trace("nodata " << v << " at " << rc << ", " << rr);	
-								//v = interpNodata(raster, rc, rr);
-
+							} else {
+								g_runerr("Nodata found at " << rc << ", " << rr);
+							}
 						}
 					}
 					smoothed.set(c, r, t);
@@ -150,6 +149,7 @@ namespace trees {
 			smooth(raster, sraster, 0.8, 3);
 			rastfile.assign(smoothed);
 		} else {
+			g_warn("Using un-smoothed raster.");
 			rastfile.assign(inraster);
 		}
 
@@ -165,8 +165,6 @@ namespace trees {
 
 		SQLite db(outvect, SQLite::POINT, 26910, {{"id", 1}});
 		
-		// TODO: Set up output raster.
-
 		// This is the size of the cache used by each thread.
 		int cachedRows = 500;
 		int blockHeight = window + cachedRows;
@@ -259,31 +257,39 @@ namespace trees {
 	};
 
 
-	void delineateCrowns(Raster<float> &inrast, Raster<unsigned int> &outrast, std::queue<std::unique_ptr<Node> > &q, double threshold) {
+	void delineateCrowns(Raster<float> &inrast, Raster<unsigned int> &outrast, const std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold) {
+
+		std::queue<std::unique_ptr<Node> > q;
+		for(auto it = tops.begin(); it != tops.end(); ++it) {
+			q.push(std::unique_ptr<Node>(new Node(it->second.get())));
+			break;
+		}
 
 		std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
 		size_t idx;
+		double nodata = inrast.nodata();
 
 		while(q.size()) {
 
 			std::unique_ptr<Node> n = std::move(q.front());
 			q.pop();
 
+			g_trace("n " << n->c << ", " << n->r);
 			idx = (size_t) n->r * inrast.cols() + n->c;
-			if(!visited[idx]) {
-				outrast.set(idx, n->id);
-				visited[idx] = true;
-				for(int r = g_max(0, n->r - 1); r < g_min(inrast.rows(), n->r + 2); ++r) {
-					for(int c = g_max(0, n->c - 1); c < g_min(inrast.cols(), n->c + 2); ++c) {
-						idx = (size_t) r * inrast.cols() + c;
-						if(!visited[idx]) {
-							double v = inrast.get(c, r);
-							if((v - n->z) < 0 && (v / n->tz) <= threshold) {
-								q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tz)));
-								outrast.set(idx, n->id);
-								visited[idx] = true;
-							}
-						}
+
+			outrast.set(idx, n->id);
+
+			for(int r = g_max(0, n->r - 1); r < g_min(inrast.rows(), n->r + 2); ++r) {
+				for(int c = g_max(0, n->c - 1); c < g_min(inrast.cols(), n->c + 2); ++c) {
+					g_trace("node " << c << "," << r << "," << n->id);
+					idx = (size_t) r * inrast.cols() + c;
+					if(visited[idx])
+						continue;
+					double v = inrast.get(c, r);
+					if(v != nodata && v < n->z) { // && (v / n->tz) <= threshold) {
+						q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tz)));
+						outrast.set(idx, n->id);
+						visited[idx] = true;
 					}
 				}
 			}
@@ -301,11 +307,7 @@ namespace trees {
 		outrast.nodata(0);
 		outrast.fill(0);
 
-		std::queue<std::unique_ptr<Node> > q;
-		for(auto it = tops.begin(); it != tops.end(); ++it) 
-			q.push(std::unique_ptr<Node>(new Node(it->second.get())));
-
-		delineateCrowns(inrast, outrast, q, threshold);
+		delineateCrowns(inrast, outrast, tops, threshold);
 
 		Util::status(tops.size(), tops.size(), true);
 

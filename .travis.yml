@@ -1,7 +1,7 @@
 sudo: required
 dist: trusty
 language: cpp
-branches: big_refactor
+branches: master
 
 install: 
  - wget https://github.com/LASzip/LASzip/releases/download/v2.2.0/laszip-src-2.2.0.tar.gz
