@@ -86,12 +86,13 @@ namespace trees {
 	 * 		and the columns are "geom" and "id." Geom is a 3D point and ID is the top's unique ID.
 	 * window     - The size of the kernel to use to locate tops. Greater to or equal to 3. Even values
 	 * 		will be rounded up one.
+	 * minHeight - The algorithm will not consider pixels below this height.
 	 * smoothed   - Optional. A filename for the smoothed raster. If not given, inraster is used unchanged. 
 	 * sigma      - Optional. If smoothed is given, the standard deviation for the gaussian kernel.
 	 * kernel     - Optional. If smoothed is given, the kernel size for smoothing. 
 	*/
-	void treetops(const std::string &inraster, const std::string &outvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, int window, 
-		const std::string &smoothed, double sigma, int kernel) {
+	void treetops(const std::string &inraster, const std::string &outvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, 
+		int window, double minHeight, const std::string &smoothed, double sigma, int kernel) {
 
 		if(inraster.empty())
 			g_argerr("Input raster cannot be empty.");
@@ -170,7 +171,7 @@ namespace trees {
 				for(int r = 0; r < cachedRows - window; ++r) {
 					for(int c = 0; c < cols - window; ++c) {
 						size_t id = ((size_t) c << 32) | (r + curRow);
-						if(isMaxCenter(blk, c, r, window, &max)) {
+						if(blk.get(c, r) >= minHeight && isMaxCenter(blk, c, r, window, &max)) {
 							std::unique_ptr<Top> t(new Top(++tid, 
 								raster.toX(c + offset) + raster.resolutionX() / 2.0, // center of pixel
 								raster.toY(r + curRow + offset) + raster.resolutionY() / 2.0, 
@@ -216,57 +217,69 @@ namespace trees {
 
 	class Node {
 	public:
-		int c, r;
+		int c, r, tc, tr;
 		double z, tz;
 		size_t id;
-		Node(size_t _id, int _c, int _r, double _z, double _tz) :
-			id(_id), 
-			c(_c), 
-			r(_r), 
-			z(_z), 
-			tz(_tz) {
+		Node(size_t id, int c, int r, double z, int tc, int tr, double tz) :
+			id(id), 
+			c(c), r(r), z(z), 
+			tc(tc), tr(tr), tz(tz) {
 		}
 		Node(const trees::util::Top *top) :
-			Node(top->m_id, top->m_col, top->m_row, top->m_z, top->m_z) {
+			Node(top->m_id, top->m_col, top->m_row, top->m_z, top->m_col, top->m_row, top->m_z) {
 		}
 	};
 
+	double dist(int tc, int tr, int c, int r, double resolution) {
+		return std::sqrt(g_sq((double) (tc - c)) + g_sq((double) (tr - r))) * resolution;
+	}
 
-	void delineateCrowns(Raster<float> &inrast, Raster<unsigned int> &outrast, const std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold) {
+	void delineateCrowns(Raster<float> &inrast, Raster<unsigned int> &outrast, const std::map<size_t, 
+		std::unique_ptr<trees::util::Top> > &tops, double threshold, double radius) {
 
 		std::queue<std::unique_ptr<Node> > q;
 		for(auto it = tops.begin(); it != tops.end(); ++it)
 			q.push(std::unique_ptr<Node>(new Node(it->second.get())));
 
 		std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
-		size_t idx;
 		double nodata = inrast.nodata();
+		double resolution = inrast.resolutionX();
 
 		while(q.size()) {
 
 			std::unique_ptr<Node> n = std::move(q.front());
 			q.pop();
 
-			//g_trace("n " << n->c << ", " << n->r);
-			idx = (size_t) n->r * inrast.cols() + n->c;
-
+			size_t idx = (size_t) n->r * inrast.cols() + n->c;
 			outrast.set(idx, n->id);
 
 			for(int r = g_max(0, n->r - 1); r < g_min(inrast.rows(), n->r + 2); ++r) {
 				for(int c = g_max(0, n->c - 1); c < g_min(inrast.cols(), n->c + 2); ++c) {
-					//g_trace("node " << c << "," << r << "," << n->id);
+			//std::list<std::pair<int, int> > sites;
+			//sites.push_back(std::pair<int,int>(n->r - 1, n->c));
+			//sites.push_back(std::pair<int,int>(n->r + 1, n->c));
+			//sites.push_back(std::pair<int,int>(n->r, n->c - 1));
+			//sites.push_back(std::pair<int,int>(n->r, n->c + 1));
+
+			// TODO: Option for d4/d8
+
+			//for(auto it = sites.begin(); it != sites.end(); ++it) {
+			//	int r = it->first;
+			//	int c = it->second;
+				if(r < 0 || c < 0 || r >= inrast.rows() || c >= inrast.cols()) continue;
+
 					idx = (size_t) r * inrast.cols() + c;
 					if(visited[idx])
 						continue;
 					double v = inrast.get(c, r);
-					if(v != nodata && v < n->z) { // && (v / n->tz) <= threshold) {
-						q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tz)));
+					if(v != nodata && v < n->z && /*(v / n->tz) >= threshold &&*/ dist(n->tc, n->tr, n->c, n->r, resolution) <= radius) {
+						q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));
 						outrast.set(idx, n->id);
 						visited[idx] = true;
 					}
 				}
+
 			}
-			//g_trace("q " << q.size());
 		}
 
 
@@ -284,16 +297,17 @@ namespace trees {
 	 * 	       which contains information about the tree tops.
 	 * threshold - A pixel is excluded if its height is within a specified proportion of the tree top's
 	 * 	       height. This is a value between 0 and 1.
+	 * radius    - Tree crowns will be clipped to this radius.
 	 */
 	void treecrowns(const std::string &infile, const std::string &outrfile, const std::string &outvfile, 
-		std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold) {
+		std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold, double radius) {
 
 		Raster<float> inrast(infile);
 		Raster<unsigned int> outrast(outrfile, 1, inrast);
 		outrast.nodata(0);
 		outrast.fill(0);
 
-		delineateCrowns(inrast, outrast, tops, threshold);
+		delineateCrowns(inrast, outrast, tops, threshold, radius);
 
 		Util::status(tops.size(), tops.size(), true);
 

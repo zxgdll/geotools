@@ -56,10 +56,10 @@ int main(int argc, char **argv) {
 		}
 
 		std::map<size_t, std::unique_ptr<trees::util::Top> > tops;
-		trees::treetops(inraster, topshp, tops, window, smoothed, 0.8, 3);
+		trees::treetops(inraster, topshp, tops, window, 4, smoothed);
 		if(!smoothed.empty())
 			inraster.assign(smoothed);
-		trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65);
+		trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65, 30);
 
 	} catch(const std::exception &e) {
 		std::cerr << e.what() << std::endl;

@@ -34,11 +34,11 @@ namespace trees {
 
 	}
 	
-	void treetops(const std::string &inraster, const std::string &topsvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops,  int window, 
-		const std::string &smoothed, double sigma = 0.8408964, int size = 3);
+	void treetops(const std::string &inraster, const std::string &topsvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops,  
+		int window, double minHeight, const std::string &smoothed, double sigma = 0.8408964, int size = 3);
 
  	void treecrowns(const std::string &infile, const std::string &outrfile, const std::string &outvfile,
-                std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold = 0.65);
+                std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold, double radius);
 }
 
 #endif
