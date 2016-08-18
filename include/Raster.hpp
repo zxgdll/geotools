@@ -89,7 +89,6 @@ protected:
 				int x = size / 2 - c;
 				int y = size / 2 - r;
 				weights[r * size + c] = (1 / (2 * G_PI * sigma * sigma)) * pow(G_E, -((x * x + y * y) / (2.0 * sigma * sigma)));
-				//g_trace("weights " << c << ", " << r << "; " << x << ", " << y << "; " << weights[r * size + c]);
 			}
 		}
 	}
@@ -333,23 +332,21 @@ public:
 	void smooth(Grid<float> &smoothed, double sigma, int size) {
 		double weights[size * size];
 		gaussianWeights(weights, size, sigma);
-		for(int r = size / 2; r < rows() - size / 2; ++r) {
-			for(int c = size / 2; c < cols() - size / 2; ++c) {
+		for(int r = 0; r < rows() - size; ++r) {
+			for(int c = 0; c < cols() - size; ++c) {
 				double t = 0.0;
 				double v;
 				for(int gr = 0; gr < size; ++gr) {
 					for(int gc = 0; gc < size; ++gc) {
-						int rc = c - size / 2 + gc;
-						int rr = r - size / 2 + gr;
-						v = get(rc, rr);
+						v = get(c + gc, r + gr);
 						if(v != nodata()) {
 							t += weights[gr * size + gc] * v;
 						} else {
-							g_runerr("Nodata found at " << rc << ", " << rr);
+							g_runerr("Nodata found at " << (c + gc) << ", " << (r + gr));
 						}
 					}
 				}
-				smoothed.set(c, r, t);
+				smoothed.set(c + size / 2, r + size / 2, t);
 			}
 		}
 	}
@@ -632,75 +629,6 @@ public:
 
 };
 
-/**
- * This class represents a block of pixels that should correspond
- * to the size of a block used by the underlying library.
- * It can be used to iterate through the blocks in a deterministic
- * way and gives the pixel coordinates of the current block.
- */
-template <class T>
-class Block {
-private:
-	int m_bc, m_br;   // Number of blocks across and down.
-	int m_bw, m_bh;   // The width and height of a block in pixels.
-	int m_col, m_row; // The current block col and row.
-	int m_tc, m_tr;   // The total number of pixels across and down.
-
-public:
-	/**
-	 * Initialize a block with the coordinates for the first valid block.
-	 */
-	Block(int blockCols, int blockRows, int blockWidth, int blockHeight, int totalCols, int totalRows) {
-		m_bc = blockCols;
-		m_br = blockRows;
-		m_bw = blockWidth;
-		m_bh = blockHeight;
-		m_tc = totalCols;
-		m_tr = totalRows;
-		m_col = 0;
-		m_row = 0;
-	}
-
-	/**
-	 * Move the block to the next position.
-	 * Returns true if the next position was valid, false otherwise.
-	 */
-	bool next() {
-		if(++m_col == m_bc) {
-			m_col = 0;
-			++m_row;
-		}
-		return m_col < m_bc && m_row < m_br;
-	}
-	/** Reset to the first position. */
-	void reset() {
-		m_col = m_row = 0;
-	}
-	int blockCol() {
-		return m_col;
-	}
-	int blockRow() {
-		return m_row;
-	}
-	/** The number of pixels down the block. */
-	int pixelRows() {
-		return m_bh;
-	}
-	/** The number of pixels across the block. */
-	int pixelCols() {
-		return m_bw;
-	}
-	/** The index of the current pixel column. */
-	int pixelCol() {
-		return m_col * m_bw;
-	}
-	/** The index of the current pixel row. */
-	int pixelRow() {
-		return m_row * m_bh;
-	}
-	~Block() {}
-};
-
 template <class T>
 class BlockCache {
 private: 
@@ -708,43 +636,50 @@ private:
 	int m_bw;
 	int m_bh;
 	GDALRasterBand *m_band;
-	std::map<size_t, T*> m_blocks;
-	std::map<size_t, size_t> m_times; // idx, time
-	std::map<size_t, bool> m_dirty;
+	std::map<size_t, T*> m_blocks;       // idx, block
+	std::map<size_t, size_t> m_idx_time; // idx, time
+	std::map<size_t, size_t> m_time_idx; // time, idx
+	std::map<size_t, bool> m_dirty;      // idx, bool
 	size_t m_time;
 
 	void flushBlock(size_t idx) {
 		if(hasBlock(idx) && m_band->GetDataset()->GetAccess() == GA_Update) {
-			//g_trace("writeblock " << idx << " " << toCol(idx) << " " << m_bw << " " << toRow(idx) << " " << m_bh);
-			size_t t = ++m_time; // TODO: No provision for rollover
 			T *blk = m_blocks[idx];
 			if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
 				g_runerr("Failed to flush block.");
 			m_dirty[idx] = false;
 		}
 	}
+
 	size_t toIdx(int col, int row) {
 		//g_trace("to idx: " << col << "," << row << " --> " << (((size_t) (col / m_bw) << 32) | (row / m_bh)));
 		return ((size_t) (col / m_bw) << 32) | (row / m_bh);
 	}
+
 	int toCol(size_t idx) {
 		//g_trace("to col: " << idx << " --> " << ((idx >> 32) & 0xffffffff) * m_bw);
 		return ((idx >> 32) & 0xffffffff) * m_bw;
 	}
+
 	int toRow(size_t idx) {
 		//g_trace("to row: " << idx << " --> " << (idx & 0xffffffff) * m_bh);
 		return (idx & 0xffffffff) * m_bh;
 	}
+
  	T* freeOldest() {
-		size_t idx = m_times.begin()->first; // TODO: map keys are ordered; this is NOT the oldest
+		auto it = m_time_idx.rbegin();
+		size_t time = it->first;
+		size_t idx = it->second;
 		if(m_dirty[idx])
 			flushBlock(idx);
 		T *blk = m_blocks[idx];
 		m_blocks.erase(idx);
-		m_times.erase(idx);
+		m_idx_time.erase(idx);
+		m_time_idx.erase(time);
 		m_dirty.erase(idx);
 		return blk;
 	}
+
 	T* freeOne() {
 		T *blk = nullptr;
 		while(m_blocks.size() >= m_size) {
@@ -754,12 +689,25 @@ private:
 		}
 		return blk;
 	}
+
 public:
 	BlockCache() :
 		m_band(nullptr), 
 		m_size(0),
 		m_time(0),
 		m_bw(0), m_bh(0) {
+	}
+
+	int blockWidth() {
+		return m_bw;
+	}
+
+	int blockHeight() {
+		return m_bh;
+	}
+
+	size_t toBlockIdx(int col, int row) {
+		return (row % m_bh) * m_bw + (col % m_bw);
 	}
 
 	void setRasterBand(GDALRasterBand *band) {
@@ -770,23 +718,24 @@ public:
 	bool hasBlock(int col, int row) {
 		return hasBlock(toIdx(col, row));
 	}
+
 	bool hasBlock(size_t idx) {
 		return m_blocks.find(idx) != m_blocks.end();
 	}
+
 	void setSize(size_t size) {
 		while(m_blocks.size() > size)
 			freeOne();
 		m_size = size;
 	}
+
 	size_t getSize() {
 		return m_size;
 	}
 
 	T* getBlock(int col, int row, bool forWrite) {
-		size_t t = ++m_time; // TODO: No provision for rollover
 		size_t idx = toIdx(col, row);
 		if(!hasBlock(idx)) {
-			// g_trace("loading block " << col << ", " << row);
 			T *blk = freeOne();
 			if(!blk)
 				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
@@ -794,19 +743,19 @@ public:
 				g_runerr("Failed to read block.");
 			m_blocks[idx] = blk;
 		}
-		m_times[idx] = t;
+		++m_time; // TODO: No provision for rollover
+		m_time_idx[m_time] = idx;
+		m_idx_time[idx] = m_time;
+		if(forWrite)
+			m_dirty[idx] = true;
 		return m_blocks[idx];
-	}
-
-	void dirty(int col, int row) {
-		size_t idx = toIdx(col, row);
-		m_dirty[idx] = true;
 	}
 
 	void flush() {
 		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it)
 			flushBlock(it->first);
 	}
+
 	void close() {
 		flush();
 		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
@@ -821,10 +770,7 @@ template <class T>
 class Raster : public Grid<T> {
 private:
 	int m_cols, m_rows;		// Raster cols/rows
-	int m_bcols, m_brows;		// Block cols/rows -- not the number of cols/rows in a block
-	int m_curcol, m_currow;		// The current block column
 	int m_bandn;			// The band number
-	int m_bw, m_bh;			// Block width/height in pixels
 	bool m_writable;		// True if the raster is writable
 	T m_nodata;			// Nodata value.
 	T *m_block;			// Block storage
@@ -905,10 +851,7 @@ public:
 	 */
 	Raster() :
 		m_cols(-1), m_rows(-1),
-		m_bcols(-1), m_brows(-1),
-		m_curcol(-1), m_currow(-1),
 		m_bandn(1),
-		m_bw(-1), m_bh(-1),
 		m_writable(false), 
 		m_ds(nullptr), m_band(nullptr), m_block(nullptr),
 		m_type(getType()) {
@@ -1027,16 +970,10 @@ public:
 		if(m_band == NULL)
 			g_runerr("Failed to get band.");
 		m_bandn = band;
-		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_band->SetNoDataValue(nodata);
 		m_nodata = m_band->GetNoDataValue();
-		m_bcols = m_cols / m_bw;
-		m_brows = m_rows / m_bh;
 		m_cache.setSize(100);
 		m_cache.setRasterBand(m_band);
-		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
-		if(!m_block)
-			g_runerr("Failed to allocate memory for raster block.");
 		m_writable = true;
 		m_inited = true;
 	}
@@ -1063,17 +1000,11 @@ public:
 		m_band = m_ds->GetRasterBand(band);
 		if(m_band == nullptr)
 			g_runerr("Failed to get band.");
-		m_band->GetBlockSize(&m_bw, &m_bh);
 		m_rows = m_ds->GetRasterYSize();
 		m_cols = m_ds->GetRasterXSize();
 		m_nodata = m_band->GetNoDataValue();
-		m_bcols = m_cols / m_bw;
-		m_brows = m_rows / m_bh;
 		m_cache.setSize(100);
 		m_cache.setRasterBand(m_band);
-		m_block = (T *) malloc(sizeof(T) * m_bw * m_bh);
-		if(!m_block)
-			g_runerr("Failed to allocate memory for raster block.");
 		m_writable = writable;
 		m_inited = true;
 	}
@@ -1105,30 +1036,14 @@ public:
 	}
 
 	void fill(T value) {
-		Block<T> blk = block();
-		MemRaster<T> grd(blk.pixelCols(), blk.pixelRows());
+		MemRaster<T> grd(m_cache.blockWidth(), m_cache.blockHeight());
 		grd.fill(value);
-		do {
-			if(m_band->WriteBlock(blk.blockCol(), blk.blockRow(), grd.grid()) != CE_None)
-				g_runerr("Flush error.");
-		} while(blk.next());		
-	}
-
-	/**
-	 * Return a "Block" which just stores indices of pixels that
-	 * comprise a block. Calling next on the block adjusts the indices
-	 * to correspond to the next block.
-	 */
-	Block<T> block() {
-		return Block<T>(m_bcols, m_brows, m_bw, m_bh, m_cols, m_rows);
-		// https://en.wikipedia.org/wiki/Return_value_optimization
-	}
-
-	/**
-	 * Return the number of blocks in this raster.
-	 */
-	size_t numBlocks() {
-		return (size_t) m_bcols * m_brows;
+		for(int r = 0; r < rows() / grd.rows(); ++r) {
+			for(int c = 0; c < cols() / grd.cols(); ++c) {
+				if(m_band->WriteBlock(c, r, grd.grid()) != CE_None)
+					g_runerr("Fill error.");
+			}
+		}
 	}
 
 	/**
@@ -1139,14 +1054,12 @@ public:
 			g_runerr("Recursive call to readBlock.");
 		int cols = g_min(m_cols - col, grd.cols() - dstCol);
 		int rows = g_min(m_rows - row, grd.rows() - dstRow);
-		g_trace("readBlock: " << col << ", " << row << ", [grd]," << dstCol << ", " << dstRow << "; " << cols << ", " << rows);
 		if(cols < 1 || rows < 1)
 			g_argerr("Zero read size.");
 		MemRaster<T> mr(cols, rows);
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
 			g_runerr("Failed to read from band.");
 		grd.writeBlock(dstCol, dstRow, mr);
-
 	}
 
 	/**
@@ -1157,7 +1070,6 @@ public:
 			g_runerr("Recursive call to writeBlock.");
 		int cols = g_min(m_cols - col, grd.cols() - srcCol);
 		int rows = g_min(m_rows - row, grd.rows() - srcRow);
-		g_trace("writeBlock: " << col << ", " << row << ", [grd]," << srcCol << ", " << srcRow << "; " << cols << ", " << rows);
 		if(cols < 1 || rows < 1)
 			g_argerr("Zero write size.");
 		MemRaster<T> mr(cols, rows);
@@ -1260,34 +1172,6 @@ public:
 	void nodata(T nodata) {
 		m_band->SetNoDataValue(nodata);
 		m_nodata = nodata;
-	}
-
-	/*
-	 * Returns the row offset in the block for a given y.
-	 */
-	int toBlockRow(double y) const {
-		return toRow(y) % m_brows;
-	}
-
-	/**
-	 * Returns the row offset in the block for a given x.
-	 */
-	int toBlockCol(double x) const {
-		return toCol(x) % m_bcols;
-	}
-
-	/**
-	 * Returns the width of the block (number of cells).
-	 */
-	int blockWidth() const {
-		return m_bw;
-	}
-
-	/**
-	 * Returns the height of the block (number of cells).
-	 */
-	int blockHeight() const {
-		return m_bh;
 	}
 
 	/**
@@ -1413,8 +1297,7 @@ public:
 	 */
 	T &get(int col, int row) {
 		loadBlock(col, row, false);
-		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
-		return m_block[idx];
+		return m_block[m_cache.toBlockIdx(col, row)];
 	}
 
 	T &get(size_t idx) {
@@ -1438,8 +1321,7 @@ public:
 			g_runerr("This raster is not writable.");
 		//g_trace("set " << col << ", " << row << ", " << v);
 		loadBlock(col, row, true);
-		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
-		m_block[idx] = v;
+		m_block[m_cache.toBlockIdx(col, row)] = v;
 	}
 
 	void set(size_t idx, T v) {
