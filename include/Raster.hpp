@@ -720,6 +720,7 @@ private:
 			T *blk = m_blocks[idx];
 			if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
 				g_runerr("Failed to flush block.");
+			m_dirty[idx] = false;
 		}
 	}
 	size_t toIdx(int col, int row) {
@@ -794,7 +795,6 @@ public:
 			m_blocks[idx] = blk;
 		}
 		m_times[idx] = t;
-
 		return m_blocks[idx];
 	}
 
@@ -844,25 +844,10 @@ private:
 			g_runerr("Not inited before attempted read.");
 		if(!has(col, row))
 			g_argerr("Row or column out of bounds:" << col << ", " << row);
-		// Compute the col/row of a natural block.
-		int bcol = (int) (col / m_bw);
-		int brow = (int) (row / m_bh);
-		if(bcol >= m_bcols || bcol < 0 || brow >= m_brows || brow < 0)
-			g_argerr("Illegal block column or row: " << bcol << ", " << brow);
-		if(bcol != m_curcol || brow != m_currow) {
-			// If the current block isn't loaded, get a new one.
-			m_block = m_cache.getBlock(col, row, forWrite);
-			if(!m_block)
-				g_runerr("Failed to load block from cache.");
-			m_currow = brow;
-			m_curcol = bcol;
-		} else if(forWrite) {
-			// The block is already loaded, but now we're writing to it.
-			m_cache.dirty(col, row);
-		}
-	}
-
-	
+		m_block = m_cache.getBlock(col, row, forWrite);
+		if(!m_block)
+			g_runerr("Failed to load block from cache.");
+	}	
 
 	GDALDataType getType(double v) {
 		(void) v;
