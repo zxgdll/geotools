@@ -139,7 +139,7 @@ namespace trees {
 		int row = 0;	
 		size_t tid = 0;
 
-		SQLite db(outvect, SQLite::POINT, 26910, {{"id", 1}});
+		SQLite db(outvect, SQLite::POINT, 26910, {{"id", 1}}, true);
 		
 		// This is the size of the cache used by each thread.
 		int cachedRows = 500;
@@ -235,7 +235,7 @@ namespace trees {
 	}
 
 	void delineateCrowns(Raster<float> &inrast, Raster<unsigned int> &outrast, const std::map<size_t, 
-		std::unique_ptr<trees::util::Top> > &tops, double threshold, double radius) {
+		std::unique_ptr<trees::util::Top> > &tops, double threshold, double radius, double minHeight) {
 
 		std::queue<std::unique_ptr<Node> > q;
 		for(auto it = tops.begin(); it != tops.end(); ++it)
@@ -245,6 +245,14 @@ namespace trees {
 		double nodata = inrast.nodata();
 		double resolution = inrast.resolutionX();
 
+		bool d8 = true;
+		std::vector<std::pair<int, int> > offsets; // pairs of col, row
+		if(d8) {
+			offsets.assign({{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}});
+		} else {
+			offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 0}});
+		}
+
 		while(q.size()) {
 
 			std::unique_ptr<Node> n = std::move(q.front());
@@ -253,8 +261,11 @@ namespace trees {
 			size_t idx = (size_t) n->r * inrast.cols() + n->c;
 			outrast.set(idx, n->id);
 
-			for(int r = g_max(0, n->r - 1); r < g_min(inrast.rows(), n->r + 2); ++r) {
-				for(int c = g_max(0, n->c - 1); c < g_min(inrast.cols(), n->c + 2); ++c) {
+			for(std::pair<int, int> offset : offsets) {
+				int c = n->c + offset.first;
+				int r = n->r + offset.second;
+			//for(int r = g_max(0, n->r - 1); r < g_min(inrast.rows(), n->r + 2); ++r) {
+			//	for(int c = g_max(0, n->c - 1); c < g_min(inrast.cols(), n->c + 2); ++c) {
 			//std::list<std::pair<int, int> > sites;
 			//sites.push_back(std::pair<int,int>(n->r - 1, n->c));
 			//sites.push_back(std::pair<int,int>(n->r + 1, n->c));
@@ -272,14 +283,19 @@ namespace trees {
 					if(visited[idx])
 						continue;
 					double v = inrast.get(c, r);
-					if(v != nodata && v < n->z && /*(v / n->tz) >= threshold &&*/ dist(n->tc, n->tr, n->c, n->r, resolution) <= radius) {
+					if(v != nodata 								// is not nodata
+						&& v < n->z 							// is less than the neighbouring pixel
+						&& v >= minHeight 						// is greater than the min height
+						&& (v / n->tz) >= threshold 					// is greater than the threshold height
+						&& dist(n->tc, n->tr, n->c, n->r, resolution) <= radius		// is within the radius
+					) {
 						q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));
 						outrast.set(idx, n->id);
 						visited[idx] = true;
 					}
 				}
 
-			}
+		//	}
 		}
 
 
@@ -300,14 +316,15 @@ namespace trees {
 	 * radius    - Tree crowns will be clipped to this radius.
 	 */
 	void treecrowns(const std::string &infile, const std::string &outrfile, const std::string &outvfile, 
-		std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold, double radius) {
+		std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, 
+		double threshold, double radius, double minHeight) {
 
 		Raster<float> inrast(infile);
 		Raster<unsigned int> outrast(outrfile, 1, inrast);
 		outrast.nodata(0);
 		outrast.fill(0);
 
-		delineateCrowns(inrast, outrast, tops, threshold, radius);
+		delineateCrowns(inrast, outrast, tops, threshold, radius, minHeight);
 
 		Util::status(tops.size(), tops.size(), true);
 

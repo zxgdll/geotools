@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 		trees::treetops(inraster, topshp, tops, window, 4, smoothed);
 		if(!smoothed.empty())
 			inraster.assign(smoothed);
-		trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65, 30);
+		trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65, 5, 4);
 
 	} catch(const std::exception &e) {
 		std::cerr << e.what() << std::endl;
