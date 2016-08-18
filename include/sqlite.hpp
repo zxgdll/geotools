@@ -35,18 +35,16 @@ namespace geotools {
 			const static int LINESTRING = 2;
 			const static int POLYGON = 3;
 
-			SQLite(const std::string &file, int type, int srid, const std::map<std::string, int> &fields) :
+			SQLite(const std::string &file, int type, int srid, const std::map<std::string, int> &fields, bool clear = false) :
 				m_file(file),
 				m_type(type), 
 				m_srid(srid),
 				m_fields(fields) {
-
-				init();
-
+				init(clear);
 			}
 
-			SQLite(const std::string &file, int type, int srid) :
-				SQLite(file, type, srid, std::map<std::string, int>()) {
+			SQLite(const std::string &file, int type, int srid, bool clear = false) :
+				SQLite(file, type, srid, std::map<std::string, int>(), clear) {
 			}
 			
 			void addPoint(double x, double y, double z, const std::map<std::string, std::string> &fields) {
@@ -102,7 +100,7 @@ namespace geotools {
 			}
 
 			void handleError(const std::string &msg, char *err = 0);
-			void init();
+			void init(bool clear = false);
 
 		};
 
@@ -114,7 +112,7 @@ namespace geotools {
 			g_runerr(msg << msg0);
 		}
 
-		void SQLite::init() {
+		void SQLite::init(bool clear) {
 
 			bool doInit = !exists(m_file);
 
@@ -192,6 +190,11 @@ namespace geotools {
 				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(), NULL, NULL, &err))
 					handleError("Failed to create geometry: ", err);
 
+			}
+
+			if(clear) {
+				if(SQLITE_OK != sqlite3_exec(m_db, "DELETE FROM data", NULL, NULL, &err))
+					handleError("Failed to clear data table: ", err);
 			}
 
 			ss.str(std::string());
