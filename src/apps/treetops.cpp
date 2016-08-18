@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 		}
 
 		std::map<size_t, std::unique_ptr<trees::util::Top> > tops;
-		trees::treetops(inraster, topshp, tops, window, smoothed);
+		trees::treetops(inraster, topshp, tops, window, smoothed, 0.8, 3);
 		if(!smoothed.empty())
 			inraster.assign(smoothed);
 		trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65);

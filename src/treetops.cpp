@@ -48,22 +48,6 @@ namespace trees {
 			return mc == cc && mr == cr;
 		}
 
-		/**
-		 * Compute the table of Gaussian weights given the size of the table
-		 * and the std. deviation.
-		 */
-		void gaussianWeights(double *weights, int size, double sigma) {
-			if(size % 2 == 0) ++size;
-			for(int r = 0; r < size; ++r) {
-				for(int c = 0; c < size; ++c) {
-					int x = size / 2 - c;
-					int y = size / 2 - r;
-					weights[r * size + c] = (1 / (2 * G_PI * sigma * sigma)) * pow(G_E, -((x * x + y * y) / (2.0 * sigma * sigma)));
-					//g_trace("weights " << c << ", " << r << "; " << x << ", " << y << "; " << weights[r * size + c]);
-				}
-			}
-		}
-
 		double interpNodata(Grid<float> &rast, int col, int row) {
 			int size = 1;
 			double nodata = rast.nodata();
@@ -91,42 +75,23 @@ namespace trees {
 			g_runerr("Couldn't find a pixel to use as fill.");
 		}
 
-		/**
-		 * Smooth the raster and write the smoothed version to the output raster.
-		 */
-		// TODO: No accounting for nodata.
-		// TODO: Move to Raster.
-		void smooth(Grid<float> &raster, Grid<float> &smoothed, double sigma, int size) {
-			double weights[size * size];
-			gaussianWeights(weights, size, sigma);
-			float nodata = raster.nodata();
-			for(int r = size / 2; r < raster.rows() - size / 2; ++r) {
-				for(int c = size / 2; c < raster.cols() - size / 2; ++c) {
-					double t = 0.0;
-					double v;
-					for(int gr = 0; gr < size; ++gr) {
-						for(int gc = 0; gc < size; ++gc) {
-							int rc = c - size / 2 + gc;
-							int rr = r - size / 2 + gr;
-							v = raster.get(rc, rr);
-							if(v != nodata) {
-								t += weights[gr * size + gc] * v;
-							} else {
-								g_runerr("Nodata found at " << rc << ", " << rr);
-							}
-						}
-					}
-					smoothed.set(c, r, t);
-				}
-			}
-		}
-
-
 	} // Util
 
 	/**
+	 * Locates tree top points on a canopy height model.
+	 * inraster   - The input raster. If the smoothed parameter is given, it is assumed that the input
+	 * 		raster is not smoothed, and smoothing is performed. Otherwise the raster is used 
+	 * 		as-is.
+	 * outvect    - The name of a vector file (spatialite) to save the tops to. The table name is "data"
+	 * 		and the columns are "geom" and "id." Geom is a 3D point and ID is the top's unique ID.
+	 * window     - The size of the kernel to use to locate tops. Greater to or equal to 3. Even values
+	 * 		will be rounded up one.
+	 * smoothed   - Optional. A filename for the smoothed raster. If not given, inraster is used unchanged. 
+	 * sigma      - Optional. If smoothed is given, the standard deviation for the gaussian kernel.
+	 * kernel     - Optional. If smoothed is given, the kernel size for smoothing. 
 	*/
-	void treetops(const std::string &inraster, const std::string &outvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, int window, const std::string &smoothed) {
+	void treetops(const std::string &inraster, const std::string &outvect, std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, int window, 
+		const std::string &smoothed, double sigma, int kernel) {
 
 		if(inraster.empty())
 			g_argerr("Input raster cannot be empty.");
@@ -134,9 +99,19 @@ namespace trees {
 			g_warn("The treetop output filename is empty; not writing treetops");
 		if(window < 3)
 			g_argerr("A window size less than 3 makes no sense.");
+		if(!smoothed.empty()) {
+			if(sigma <= 0)
+				g_argerr("Sigma must be >0 for smoothing.");
+			if(kernel < 3)
+				g_argerr("Smoothing kernel must be 3 or larger.");
+			if(kernel % 2 == 0) {
+				++kernel;
+				g_warn("Smoothing kernel must be an odd integer. Bumping up to " << kernel);
+			}
+		}
 		if(window % 2 == 0) {
-			g_warn("Window is " << window << ". Bumping up to " << (window + 1));
 			window++;
+			g_warn("Window is " << window << ". Bumping up to " << window);
 		}
 
 		using namespace trees::util;
@@ -146,7 +121,7 @@ namespace trees {
 			g_trace("Smoothing raster: " << inraster << " -> " << smoothed);
 			Raster<float> raster(inraster);
 			Raster<float> sraster(smoothed, 1, raster);
-			smooth(raster, sraster, 0.8, 3);
+			raster.smooth(sraster, sigma, kernel);
 			rastfile.assign(smoothed);
 		} else {
 			g_warn("Using un-smoothed raster.");
@@ -260,10 +235,8 @@ namespace trees {
 	void delineateCrowns(Raster<float> &inrast, Raster<unsigned int> &outrast, const std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold) {
 
 		std::queue<std::unique_ptr<Node> > q;
-		for(auto it = tops.begin(); it != tops.end(); ++it) {
+		for(auto it = tops.begin(); it != tops.end(); ++it)
 			q.push(std::unique_ptr<Node>(new Node(it->second.get())));
-			break;
-		}
 
 		std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
 		size_t idx;
@@ -274,14 +247,14 @@ namespace trees {
 			std::unique_ptr<Node> n = std::move(q.front());
 			q.pop();
 
-			g_trace("n " << n->c << ", " << n->r);
+			//g_trace("n " << n->c << ", " << n->r);
 			idx = (size_t) n->r * inrast.cols() + n->c;
 
 			outrast.set(idx, n->id);
 
 			for(int r = g_max(0, n->r - 1); r < g_min(inrast.rows(), n->r + 2); ++r) {
 				for(int c = g_max(0, n->c - 1); c < g_min(inrast.cols(), n->c + 2); ++c) {
-					g_trace("node " << c << "," << r << "," << n->id);
+					//g_trace("node " << c << "," << r << "," << n->id);
 					idx = (size_t) r * inrast.cols() + c;
 					if(visited[idx])
 						continue;
@@ -293,12 +266,25 @@ namespace trees {
 					}
 				}
 			}
-			g_trace("q " << q.size());
+			//g_trace("q " << q.size());
 		}
 
 
 	}
 
+	/**
+	 * infile    - The input raster file. This should be the same one used to delineate the 
+	 *             treetop points; if a smooth raster was used for tops, it should be used for crowns.
+	 * outrfile  - The output raster file. This file is the primary output, so not specifying it
+	 *	       saves no resources. The output is an integer raster containing the IDs of the 
+	 *	       treetop points which seed the algorithm.
+	 * outvfile  - A vector file representing the crowns; extracted from the same raster as outrfile.
+	 *	       This is an sqlite file; shapefiles have a size restriction.
+	 * tops      - This is a map where the keys are a unique ID and the values are instances of Top, 
+	 * 	       which contains information about the tree tops.
+	 * threshold - A pixel is excluded if its height is within a specified proportion of the tree top's
+	 * 	       height. This is a value between 0 and 1.
+	 */
 	void treecrowns(const std::string &infile, const std::string &outrfile, const std::string &outvfile, 
 		std::map<size_t, std::unique_ptr<trees::util::Top> > &tops, double threshold) {
 

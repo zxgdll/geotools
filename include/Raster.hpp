@@ -78,6 +78,22 @@ protected:
 	int m_count = 0;
 	bool m_stats = false;
 
+	/**
+	 * Compute the table of Gaussian weights given the size of the table
+	 * and the std. deviation.
+	 */
+	void gaussianWeights(double *weights, int size, double sigma) {
+		if(size % 2 == 0) ++size;
+		for(int r = 0; r < size; ++r) {
+			for(int c = 0; c < size; ++c) {
+				int x = size / 2 - c;
+				int y = size / 2 - r;
+				weights[r * size + c] = (1 / (2 * G_PI * sigma * sigma)) * pow(G_E, -((x * x + y * y) / (2.0 * sigma * sigma)));
+				//g_trace("weights " << c << ", " << r << "; " << x << ", " << y << "; " << weights[r * size + c]);
+			}
+		}
+	}
+
 public:
 	
 	virtual int rows() const =0;
@@ -307,6 +323,35 @@ public:
 
 	std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill) {
 		return floodFill(col, row, op, *this, fill);
+	}
+
+
+	/**
+	 * Smooth the raster and write the smoothed version to the output raster.
+	 */
+	// TODO: No accounting for nodata.
+	void smooth(Grid<float> &smoothed, double sigma, int size) {
+		double weights[size * size];
+		gaussianWeights(weights, size, sigma);
+		for(int r = size / 2; r < rows() - size / 2; ++r) {
+			for(int c = size / 2; c < cols() - size / 2; ++c) {
+				double t = 0.0;
+				double v;
+				for(int gr = 0; gr < size; ++gr) {
+					for(int gc = 0; gc < size; ++gc) {
+						int rc = c - size / 2 + gc;
+						int rr = r - size / 2 + gr;
+						v = get(rc, rr);
+						if(v != nodata()) {
+							t += weights[gr * size + gc] * v;
+						} else {
+							g_runerr("Nodata found at " << rc << ", " << rr);
+						}
+					}
+				}
+				smoothed.set(c, r, t);
+			}
+		}
 	}
 	
 	/**
@@ -665,8 +710,49 @@ private:
 	GDALRasterBand *m_band;
 	std::map<size_t, T*> m_blocks;
 	std::map<size_t, size_t> m_times; // idx, time
+	std::map<size_t, bool> m_dirty;
 	size_t m_time;
 
+	void flushBlock(size_t idx) {
+		if(hasBlock(idx) && m_band->GetDataset()->GetAccess() == GA_Update) {
+			//g_trace("writeblock " << idx << " " << toCol(idx) << " " << m_bw << " " << toRow(idx) << " " << m_bh);
+			size_t t = ++m_time; // TODO: No provision for rollover
+			T *blk = m_blocks[idx];
+			if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
+				g_runerr("Failed to flush block.");
+		}
+	}
+	size_t toIdx(int col, int row) {
+		//g_trace("to idx: " << col << "," << row << " --> " << (((size_t) (col / m_bw) << 32) | (row / m_bh)));
+		return ((size_t) (col / m_bw) << 32) | (row / m_bh);
+	}
+	int toCol(size_t idx) {
+		//g_trace("to col: " << idx << " --> " << ((idx >> 32) & 0xffffffff) * m_bw);
+		return ((idx >> 32) & 0xffffffff) * m_bw;
+	}
+	int toRow(size_t idx) {
+		//g_trace("to row: " << idx << " --> " << (idx & 0xffffffff) * m_bh);
+		return (idx & 0xffffffff) * m_bh;
+	}
+ 	T* freeOldest() {
+		size_t idx = m_times.begin()->first; // TODO: map keys are ordered; this is NOT the oldest
+		if(m_dirty[idx])
+			flushBlock(idx);
+		T *blk = m_blocks[idx];
+		m_blocks.erase(idx);
+		m_times.erase(idx);
+		m_dirty.erase(idx);
+		return blk;
+	}
+	T* freeOne() {
+		T *blk = nullptr;
+		while(m_blocks.size() >= m_size) {
+			if(blk)
+				free(blk);
+			blk = freeOldest();
+		}
+		return blk;
+	}
 public:
 	BlockCache() :
 		m_band(nullptr), 
@@ -674,22 +760,12 @@ public:
 		m_time(0),
 		m_bw(0), m_bh(0) {
 	}
+
 	void setRasterBand(GDALRasterBand *band) {
 		m_band = band;
 		band->GetBlockSize(&m_bw, &m_bh);
 	}
-	size_t toIdx(int col, int row) {
-		g_trace("to idx: " << col << "," << row << " --> " << (((size_t) (col / m_bw) << 32) | (row / m_bh)));
-		return ((size_t) (col / m_bw) << 32) | (row / m_bh);
-	}
-	int toCol(size_t idx) {
-		g_trace("to col: " << idx << " --> " << ((idx >> 32) & 0xffffffff) * m_bw);
-		return ((idx >> 32) & 0xffffffff) * m_bw;
-	}
-	int toRow(size_t idx) {
-		g_trace("to row: " << idx << " --> " << (idx & 0xffffffff) * m_bh);
-		return (idx & 0xffffffff) * m_bh;
-	}
+
 	bool hasBlock(int col, int row) {
 		return hasBlock(toIdx(col, row));
 	}
@@ -704,61 +780,35 @@ public:
 	size_t getSize() {
 		return m_size;
 	}
- 	T* freeOldest() {
-		size_t t = ULONG_MAX;
-		size_t i = 0;
-		for(auto it = m_times.begin(); it != m_times.end(); ++it) {
-			if(it->second < t) { 
-				t = it->second;
-				i = it->first;
-			}
-		}
-		flushBlock(i);
-		T *blk = m_blocks[i];
-		m_blocks.erase(i);
-		m_times.erase(i);
-		return blk;
-	}
-	T* freeOne() {
-		T *blk = nullptr;
-		while(m_blocks.size() >= m_size) {
-			if(blk)
-				free(blk);
-			blk = freeOldest();
-		}
-		return blk;
-	}
-	T* getBlock(int col, int row) {
+
+	T* getBlock(int col, int row, bool forWrite) {
 		size_t t = ++m_time; // TODO: No provision for rollover
-		size_t i = toIdx(col, row);
-		if(!hasBlock(i)) {
-			g_trace("loading block " << col << ", " << row);
+		size_t idx = toIdx(col, row);
+		if(!hasBlock(idx)) {
+			// g_trace("loading block " << col << ", " << row);
 			T *blk = freeOne();
 			if(!blk)
 				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
 			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
 				g_runerr("Failed to read block.");
-			m_blocks[i] = blk;
-		// } else {
-		//	g_trace("returning cached block " << col << ", " << row);
+			m_blocks[idx] = blk;
 		}
-		m_times[i] = t;
-		return m_blocks[i];
+		m_times[idx] = t;
+
+		return m_blocks[idx];
 	}
-	void flushBlock(size_t idx) {
-		if(hasBlock(idx) && m_band->GetDataset()->GetAccess() == GA_Update) {
-			g_trace("writeblock " << idx << " " << toCol(idx) << " " << m_bw << " " << toRow(idx) << " " << m_bh);
-			size_t t = ++m_time; // TODO: No provision for rollover
-			T *blk = m_blocks[idx];
-			if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
-				g_runerr("Failed to flush block.");
-		}
+
+	void dirty(int col, int row) {
+		size_t idx = toIdx(col, row);
+		m_dirty[idx] = true;
 	}
+
 	void flush() {
 		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it)
 			flushBlock(it->first);
 	}
-	~BlockCache() {
+	void close() {
+		flush();
 		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
 			if(it->second)			
 				free(it->second);
@@ -776,7 +826,6 @@ private:
 	int m_bandn;			// The band number
 	int m_bw, m_bh;			// Block width/height in pixels
 	bool m_writable;		// True if the raster is writable
-	bool m_dirty;			// True if there is a modification that should be flushed.
 	T m_nodata;			// Nodata value.
 	T *m_block;			// Block storage
 	GDALDataset *m_ds;		// GDAL dataset
@@ -790,24 +839,26 @@ private:
 	/**
 	 * Loads the block that contains the given row and column.
 	 */
-	void loadBlock(int col, int row) {
+	void loadBlock(int col, int row, bool forWrite) {
 		if(!m_inited)
 			g_runerr("Not inited before attempted read.");
 		if(!has(col, row))
 			g_argerr("Row or column out of bounds:" << col << ", " << row);
+		// Compute the col/row of a natural block.
 		int bcol = (int) (col / m_bw);
 		int brow = (int) (row / m_bh);
 		if(bcol >= m_bcols || bcol < 0 || brow >= m_brows || brow < 0)
 			g_argerr("Illegal block column or row: " << bcol << ", " << brow);
 		if(bcol != m_curcol || brow != m_currow) {
-			flush();
-			T *blk = m_cache.getBlock(col, row);
-			if(!blk)
+			// If the current block isn't loaded, get a new one.
+			m_block = m_cache.getBlock(col, row, forWrite);
+			if(!m_block)
 				g_runerr("Failed to load block from cache.");
-			std::fill_n(m_block, (size_t) m_bw * m_bh, nodata());
-			std::memcpy(m_block, blk, (size_t) m_bw * m_bh * sizeof(T));
 			m_currow = brow;
 			m_curcol = bcol;
+		} else if(forWrite) {
+			// The block is already loaded, but now we're writing to it.
+			m_cache.dirty(col, row);
 		}
 	}
 
@@ -873,7 +924,7 @@ public:
 		m_curcol(-1), m_currow(-1),
 		m_bandn(1),
 		m_bw(-1), m_bh(-1),
-		m_writable(false), m_dirty(false),
+		m_writable(false), 
 		m_ds(nullptr), m_band(nullptr), m_block(nullptr),
 		m_type(getType()) {
 	}
@@ -1376,7 +1427,7 @@ public:
 	 * Returns the pixel value at the give row/column.
 	 */
 	T &get(int col, int row) {
-		loadBlock(col, row);
+		loadBlock(col, row, false);
 		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
 		return m_block[idx];
 	}
@@ -1401,10 +1452,9 @@ public:
 		if(!m_writable)
 			g_runerr("This raster is not writable.");
 		//g_trace("set " << col << ", " << row << ", " << v);
-		loadBlock(col, row);
+		loadBlock(col, row, true);
 		size_t idx = (size_t) (row % m_bh) * m_bw + (col % m_bw);
 		m_block[idx] = v;
-		m_dirty = true;
 	}
 
 	void set(size_t idx, T v) {
@@ -1446,10 +1496,8 @@ public:
 	 * Flush the current block to the dataset.
 	 */
 	void flush() {
-		if(m_writable && m_dirty) {
+		if(m_writable)
 			m_cache.flush();
-			m_dirty = false;
-		}
 		/*	
 		if(m_writable && m_dirty) {
 			if(m_band->WriteBlock(m_curcol, m_currow, m_block) != CE_None)
@@ -1461,7 +1509,7 @@ public:
 	}
 
 	~Raster() {
-		flush();
+		m_cache.close();
 		if(m_ds) // Probably not necessary.
 			GDALClose(m_ds);
 	}
