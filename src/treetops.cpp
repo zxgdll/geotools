@@ -306,7 +306,6 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::vector<std::un
 				&& dist(n->tc, n->tr, n->c, n->r, resolution) <= radius		// is within the radius
 			) {
 				q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));
-				outrast.set(idx, n->id);
 				visited[idx] = true;
 			}
 		}
