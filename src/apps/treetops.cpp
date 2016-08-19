@@ -21,21 +21,28 @@ void usage() {
 
 int main(int argc, char **argv) {
 
+	using namespace geotools::trees;
+	using namespace geotools::trees::util;
+
 	try {
-		std::string inraster; // Input raster.
-		std::string topshp;   // Treetops output.
+		std::string inraster;  // Input raster.
+		std::string topsvect;  // Treetops output.
 		std::string crownrast;
 		std::string crownvect;
 		std::string smoothed;
-		int window = 0;
-		
+		int window = 3;
+		double tminHeight = 4;
+		double threshold = 0.65;
+		double radius = 5;
+		double cminHeight = 4;
+
 		int i = 1;
 		for(; i < argc; ++i) {
 			std::string arg = argv[i];
 			if(arg == "-i") {
 				inraster = argv[++i];
 			} else if(arg == "-t") {
-				topshp = argv[++i];
+				topsvect = argv[++i];
 			} else if(arg == "-cr") {
 				crownrast = argv[++i];
 			} else if(arg == "-cv") {
@@ -55,11 +62,31 @@ int main(int argc, char **argv) {
 			}
 		}
 
-		std::map<size_t, std::unique_ptr<trees::util::Top> > tops;
-		trees::treetops(inraster, topshp, tops, window, 4, smoothed);
-		if(!smoothed.empty())
+		bool crowns = true;
+		if(crownrast.empty()) {
+			g_warn("A crown raster file is required for producing crowns. Crowns will not be computed.");
+			crowns = false;
+		}
+
+		TreeUtil tu;
+
+		// Create a smoothed raster.
+		if(!smoothed.empty()) {
+			tu.smooth(inraster, smoothed);
 			inraster.assign(smoothed);
-		trees::treecrowns(inraster, crownrast, crownvect, tops, 0.65, 5, 4);
+		}
+
+		// Create tree tops.
+		std::vector<std::unique_ptr<Top> > tops;
+		tu.treetops(inraster, topsvect, window, tminHeight, crowns ? &tops : nullptr);
+
+		// Create crowns if desired.
+		if(crowns)
+			tu.treecrowns(inraster, tops, crownrast, crownvect, threshold, radius, cminHeight);
+
+void treecrowns(const std::string &inraster, const std::vector<std::unique_ptr<geotools::trees::util::Top> > &tops, 
+                                const std::string &crownsrast, const std::string &crownsvect, double threshold, double radius, 
+                                double minHeight, bool d8 = false);
 
 	} catch(const std::exception &e) {
 		std::cerr << e.what() << std::endl;
