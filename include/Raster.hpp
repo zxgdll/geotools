@@ -330,6 +330,14 @@ public:
 	 */
 	// TODO: No accounting for nodata.
 	void smooth(Grid<float> &smoothed, double sigma, int size) {
+		if(sigma <= 0)
+			g_argerr("Sigma must be > 0.");
+		if(size < 3)
+			g_argerr("Kernel size must be 3 or larger.");
+		if(size % 2 == 0) {
+			g_warn("Kernel size must be odd. Rounding up.");
+			size++;
+		}
 		double weights[size * size];
 		gaussianWeights(weights, size, sigma);
 		for(int r = 0; r < rows() - size; ++r) {
