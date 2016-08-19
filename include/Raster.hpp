@@ -344,17 +344,21 @@ public:
 			for(int c = 0; c < cols() - size; ++c) {
 				double t = 0.0;
 				double v;
+				bool foundNodata = false;
 				for(int gr = 0; gr < size; ++gr) {
 					for(int gc = 0; gc < size; ++gc) {
 						v = get(c + gc, r + gr);
-						if(v != nodata()) {
-							t += weights[gr * size + gc] * v;
-						} else {
-							g_runerr("Nodata found at " << (c + gc) << ", " << (r + gr));
+						if(v == nodata()) {
+							foundNodata = true;
+							break;
 						}
+						t += weights[gr * size + gc] * v;
 					}
+					if(foundNodata)
+						break;
 				}
-				smoothed.set(c + size / 2, r + size / 2, t);
+				if(!foundNodata)
+					smoothed.set(c + size / 2, r + size / 2, t);
 			}
 		}
 	}
