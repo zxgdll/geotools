@@ -77,6 +77,25 @@ namespace geotools {
 					handleError("Failed to insert row: ");
 			}
 
+			void getPoints(std::vector<std::unique_ptr<Point> > &points, const Bounds &bounds) {
+				/*
+				std::stringstream ss;
+				ss << "SELECT X(geom), Y(geom), Z(geom)";
+				for(auto it = m_fields.begin(); it != m_fields.end(); ++it)
+					ss << ", " << m_fields->first;
+				ss << " FROM data WHERE Within(geom, GeomFromText('POLYGON((";
+				ss << bounds.minx() << " " << bounds.miny() << ",";
+				ss << bounds.maxx() << " " << bounds.miny() << ",";
+				ss << bounds.maxx() << " " << bounds.maxy() << ",";
+				ss << bounds.minx() << " " << bounds.maxy() << ",";
+				ss << bounds.minx() << " " << bounds.miny();
+				ss << "))', SRID(geom)))";
+				std::string q = ss.str();
+				if(SQLITE_OK != sqlite3_exec(m_db, q.str(), q.size(), NULL, NULL, &err))
+					handleError("Failed to execute query.");
+				*/ 
+			}
+
 			void begin() {
 				m_trans = true;
 				char *err;
