@@ -11,6 +11,7 @@
 #include <queue>
 #include <stdexcept>
 #include <map>
+#include <unordered_map>
 #include <vector>
 #include <cstring>
 
@@ -648,10 +649,10 @@ private:
 	int m_bw;
 	int m_bh;
 	GDALRasterBand *m_band;
-	std::map<size_t, T*> m_blocks;       // idx, block
-	std::map<size_t, size_t> m_idx_time; // idx, time
-	std::map<size_t, size_t> m_time_idx; // time, idx
-	std::map<size_t, bool> m_dirty;      // idx, bool
+	std::unordered_map<size_t, T*> m_blocks;       // idx, block
+	std::unordered_map<size_t, size_t> m_idx_time; // idx, time
+	std::unordered_map<size_t, bool> m_dirty;      // idx, bool
+	std::map<size_t, size_t> m_time_idx;           // time, idx
 	size_t m_time;
 
 	void flushBlock(size_t idx) {
@@ -756,6 +757,7 @@ public:
 			m_blocks[idx] = blk;
 		}
 		++m_time; // TODO: No provision for rollover
+		m_time_idx.erase(m_idx_time[idx]);
 		m_time_idx[m_time] = idx;
 		m_idx_time[idx] = m_time;
 		if(forWrite)
