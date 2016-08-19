@@ -276,7 +276,7 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::vector<std::un
 	if(d8) {
 		offsets.assign({{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}});
 	} else {
-		offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 0}});
+		offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 1}});
 	}
 
 	// Run through the queue.
