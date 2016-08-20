@@ -5,10 +5,17 @@
 #include <list>
 #include <ostream>
 #include <vector>
+#include <map>
 
 namespace geotools {
 
 	namespace util {
+
+		class Point {
+                public:
+			double x, y, z;
+                        std::map<std::string, std::string> fields;
+                };
 
 		class Bounds {
 		private:
