@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
 
 		// Create crowns if desired.
 		if(crowns)
-			tu.treecrowns(inraster, tops, crownrast, crownvect, threshold, radius, cminHeight, d8);
+			tu.treecrowns(inraster, topsvect, crownrast, crownvect, threshold, radius, cminHeight, d8);
 
 	} catch(const std::exception &e) {
 		std::cerr << e.what() << std::endl;

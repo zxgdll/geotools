@@ -250,22 +250,26 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 	const std::string &crownsrast, const std::string &crownsvect, 
 	double threshold, double radius, double minHeight, bool d8) {
 
-	// TODO: Load tops from sqlite file.
-}
-
-void TreeUtil::treecrowns(const std::string &inraster, const std::vector<std::unique_ptr<Top> > &tops, 
-	const std::string &crownsrast, const std::string &crownsvect, 
-	double threshold, double radius, double minHeight, bool d8) {
-
 	Raster<float> inrast(inraster);
 	Raster<unsigned int> outrast(crownsrast, 1, inrast);
 	outrast.nodata(0);
 	outrast.fill(0);
 
+	SQLite db(topsvect);
+	Bounds bounds; // (inrast.minx(), inrast.miny(), inrast.maxx(), inrast.miny() + 50);
+
+	std::vector<std::unique_ptr<Point> > tops;
+	db.getPoints(tops, bounds);
+
 	// Convert the Tops to Nodes.
 	std::queue<std::unique_ptr<Node> > q;
-	for(auto it = tops.begin(); it != tops.end(); ++it)
-		q.push(std::unique_ptr<Node>(new Node(it->get())));
+	for(auto it = tops.begin(); it != tops.end(); ++it) {
+		Point *t = it->get();
+		int col = inrast.toCol(t->x);
+		int row = inrast.toRow(t->y);
+		int id = atoi(t->fields["id"].c_str());
+		q.push(std::unique_ptr<Node>(new Node(id, col, row, t->z, col, row, t->z)));
+	}
 
 	std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
 	double nodata = inrast.nodata();

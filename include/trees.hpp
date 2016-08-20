@@ -76,9 +76,11 @@ namespace geotools {
 			 * minHeight  - Heights below this value will not be considered.
 			 * d8         - Use D8 search rather than D4.
 			 */
+			/*
 			void treecrowns(const std::string &inraster, const std::vector<std::unique_ptr<geotools::trees::util::Top> > &tops, 
 				const std::string &crownsrast, const std::string &crownsvect, double threshold, double radius, 
 				double minHeight, bool d8 = false);
+			*/
 
 			/**
 			 * Performs tree crown delineation using a (preferrably smoothed) input raster and a
