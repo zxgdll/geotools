@@ -113,8 +113,7 @@ int main(int argc, char **argv) {
 		}
 
 		// Create tree tops.
-		std::vector<std::unique_ptr<Top> > tops;
-		tu.treetops(inraster, topsvect, window, tminHeight, crowns ? &tops : nullptr);
+		tu.treetops(inraster, topsvect, window, tminHeight);
 
 		// Create crowns if desired.
 		if(crowns)

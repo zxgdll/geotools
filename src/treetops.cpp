@@ -255,67 +255,90 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 	outrast.nodata(0);
 	outrast.fill(0);
 
+	// Initialize the database.
 	SQLite db(topsvect);
-	Bounds bounds; // (inrast.minx(), inrast.miny(), inrast.maxx(), inrast.miny() + 50);
+	// Create a bounds object for the first strip of treetops.
 
-	std::vector<std::unique_ptr<Point> > tops;
-	db.getPoints(tops, bounds);
 
-	// Convert the Tops to Nodes.
-	std::queue<std::unique_ptr<Node> > q;
-	for(auto it = tops.begin(); it != tops.end(); ++it) {
-		Point *t = it->get();
-		int col = inrast.toCol(t->x);
-		int row = inrast.toRow(t->y);
-		int id = atoi(t->fields["id"].c_str());
-		q.push(std::unique_ptr<Node>(new Node(id, col, row, t->z, col, row, t->z)));
-	}
+	int bufRows = (int) std::ceil(g_abs(radius / inrast.resolutionY()));
+	int rowStep = g_abs(100 / inrast.resolutionY());
+	int rowHeight = rowStep + bufRows * 2;
+	MemRaster<unsigned int> blk(inrast.cols(), rowHeight);
 
-	std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
-	double nodata = inrast.nodata();
-	double resolution = inrast.resolutionX();
+	for(int row = 0; row < inrast.rows(); row += rowStep) {
 
-	// Build the list of offsets for D8 or D4 search.
-	std::vector<std::pair<int, int> > offsets; // pairs of col, row
-	if(d8) {
-		offsets.assign({{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}});
-	} else {
-		offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 1}});
-	}
+		g_trace("row " << row << " of " << inrast.rows());
+		blk.fill(0);
 
-	// Run through the queue.
-	while(q.size()) {
+		// Load the tree tops for the first strip.
+		Bounds bounds(inrast.toX(0), inrast.toY(row - bufRows), inrast.toX(inrast.cols()), inrast.toY(row + rowStep + bufRows));
+		std::vector<std::unique_ptr<Point> > tops;
+		db.getPoints(tops, bounds);
 
-		std::unique_ptr<Node> n = std::move(q.front());
-		q.pop();
+		// Convert the Tops to Nodes.
+		std::queue<std::unique_ptr<Node> > q;
+		for(auto it = tops.begin(); it != tops.end(); ++it) {
+			Point *t = it->get();
+			int col = inrast.toCol(t->x);
+			int row = inrast.toRow(t->y);
+			int id = atoi(t->fields["id"].c_str());
+			q.push(std::unique_ptr<Node>(new Node(id, col, row, t->z, col, row, t->z)));
+		}
 
-		size_t idx = (size_t) n->r * inrast.cols() + n->c;
-		outrast.set(idx, n->id);
+		std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
+		double nodata = inrast.nodata();
+		double resolution = inrast.resolutionX();
 
-		for(std::pair<int, int> offset : offsets) {
-			int c = n->c + offset.first;
-			int r = n->r + offset.second;
-			
-			if(r < 0 || c < 0 || r >= inrast.rows() || c >= inrast.cols()) continue;
+		// Build the list of offsets for D8 or D4 search.
+		std::vector<std::pair<int, int> > offsets; // pairs of col, row
+		if(d8) {
+			offsets.assign({{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}});
+		} else {
+			offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 1}});
+		}
 
-			idx = (size_t) r * inrast.cols() + c;
-			if(visited[idx])
-				continue;
+		// Run through the queue.
+		while(q.size()) {
 
-			double v = inrast.get(c, r);
-			if(v != nodata 								// is not nodata
-				&& v < n->z 							// is less than the neighbouring pixel
-				&& v >= minHeight 						// is greater than the min height
-				&& (v / n->tz) >= threshold 					// is greater than the threshold height
-				&& dist(n->tc, n->tr, n->c, n->r, resolution) <= radius		// is within the radius
-			) {
-				q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));
-				visited[idx] = true;
+			std::unique_ptr<Node> n = std::move(q.front());
+			q.pop();
+
+			//g_trace("coords " << n->c << ", " << (n->r - row) << "; " << blk.cols() << ", " << blk.rows());
+
+			if(n->c >= 0 && n->c < blk.cols() && (n->r - row) >= 0 && (n->r - row) < blk.rows())
+				blk.set(n->c, n->r - row, n->id);
+
+			for(std::pair<int, int> offset : offsets) {
+				int c = n->c + offset.first;
+				int r = n->r + offset.second;
+				
+				if(r < 0 || c < 0 || r >= inrast.rows() || c >= inrast.cols()) continue;
+
+				size_t idx = (size_t) r * inrast.cols() + c;
+				if(visited[idx])
+					continue;
+
+				double v = inrast.get(c, r);
+				if(v != nodata 								// is not nodata
+					&& v < n->z 							// is less than the neighbouring pixel
+					&& v >= minHeight 						// is greater than the min height
+					&& (v / n->tz) >= threshold 					// is greater than the threshold height
+					&& dist(n->tc, n->tr, n->c, n->r, resolution) <= radius		// is within the radius
+				) {
+					q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));
+					visited[idx] = true;
+				}
 			}
 		}
+
+		MemRaster<unsigned int> tmp(blk.cols(), rowStep);
+		blk.readBlock(0, bufRows, tmp);
+		outrast.writeBlock(0, row + bufRows, tmp);
+
+		Util::status(tops.size(), tops.size(), true);
+
 	}
 
 
-	Util::status(tops.size(), tops.size(), true);
 
 }
