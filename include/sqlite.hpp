@@ -1,9 +1,15 @@
 #ifndef __SQLITE_HPP__
 #define __SQLITE_HPP__
 
+#include <sstream>
+#include <iomanip>
+#include <vector>
+
 #include <sqlite3.h>
 #include <spatialite/gaiageo.h>
 #include <spatialite.h>
+
+#include "util.hpp"
 
 namespace geotools {
 
@@ -30,12 +36,14 @@ namespace geotools {
 			const static int INTEGER = 1;
 			const static int DOUBLE = 2;
 			const static int STRING = 3;
+			const static int BLOB = 4;
 			
 			const static int POINT = 1;
 			const static int LINESTRING = 2;
 			const static int POLYGON = 3;
 
-			SQLite(const std::string &file, int type, int srid, const std::map<std::string, int> &fields, bool clear = false) :
+			SQLite(const std::string &file, int type, int srid, 
+				const std::map<std::string, int> &fields, bool clear = false) :
 				m_file(file),
 				m_type(type), 
 				m_srid(srid),
@@ -46,7 +54,12 @@ namespace geotools {
 			SQLite(const std::string &file, int type, int srid, bool clear = false) :
 				SQLite(file, type, srid, std::map<std::string, int>(), clear) {
 			}
+		
+			SQLite(const std::string &file) :
+				SQLite(file, -1, -1, std::map<std::string, int>(), false) {
 			
+			}
+	
 			void addPoint(double x, double y, double z, const std::map<std::string, std::string> &fields) {
 
 				std::stringstream ss;
@@ -77,12 +90,35 @@ namespace geotools {
 					handleError("Failed to insert row: ");
 			}
 
-			void getPoints(std::vector<std::unique_ptr<Point> > &points, const Bounds &bounds) {
-				/*
+			static int getPointsCallback(void *resultPtr, int cols, char **values, char **colnames) {
+				using namespace geotools::util;
+				std::vector<std::unique_ptr<Point> > *result = (std::vector<std::unique_ptr<Point> > *) resultPtr;
+				Point *pt = new Point();
+				for(int i = 0; i < cols; ++i) {
+					std::string colname(colnames[i]);
+					if(colname == "geomx") {
+						pt->x = atof(values[i]);
+					} else if(colname == "geomy") {
+						pt->y = atof(values[i]);
+					} else if(colname == "geomz") {
+						pt->z = atof(values[i]);
+					} else {
+						pt->fields[colname] = std::string(values[i]);
+					}
+				}
+				result->push_back(std::unique_ptr<Point>(pt));
+				return 0;
+			}
+
+			void getPoints(std::vector<std::unique_ptr<geotools::util::Point> > &points, 
+				const geotools::util::Bounds &bounds) {
+				
+				begin();
 				std::stringstream ss;
-				ss << "SELECT X(geom), Y(geom), Z(geom)";
+				ss << std::setprecision(12);
+				ss << "SELECT X(geom) AS geomx, Y(geom) AS geomy, Z(geom) AS geomz";
 				for(auto it = m_fields.begin(); it != m_fields.end(); ++it)
-					ss << ", " << m_fields->first;
+					ss << ", " << it->first;
 				ss << " FROM data WHERE Within(geom, GeomFromText('POLYGON((";
 				ss << bounds.minx() << " " << bounds.miny() << ",";
 				ss << bounds.maxx() << " " << bounds.miny() << ",";
@@ -90,10 +126,14 @@ namespace geotools {
 				ss << bounds.minx() << " " << bounds.maxy() << ",";
 				ss << bounds.minx() << " " << bounds.miny();
 				ss << "))', SRID(geom)))";
+
 				std::string q = ss.str();
-				if(SQLITE_OK != sqlite3_exec(m_db, q.str(), q.size(), NULL, NULL, &err))
-					handleError("Failed to execute query.");
-				*/ 
+				g_trace("getPoints: " << q);
+				char *err;	
+				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(),  
+					geotools::db::SQLite::getPointsCallback, &points, &err))
+					handleError("Failed to execute query.", err);
+				rollback();
 			}
 
 			void begin() {
@@ -101,6 +141,15 @@ namespace geotools {
 				char *err;
 				if(SQLITE_OK != sqlite3_exec(m_db, "BEGIN TRANSACTION", NULL, NULL, &err))
 					handleError("Failed to start transaction: ", err);
+			}
+
+			void rollback() {
+				if(m_trans) {
+					m_trans = false;
+					char *err;
+					if(SQLITE_OK != sqlite3_exec(m_db, "ROLLBACK TRANSACTION", NULL, NULL, &err))
+						handleError("Failed to start transaction: ", err);
+				}
 			}
 
 			void commit() {
@@ -131,19 +180,69 @@ namespace geotools {
 			g_runerr(msg << msg0);
 		}
 
+		static int strToType(const std::string &type) {
+
+		}
+			
+		static int tableInfoCallback(void *resultPtr, int cols, char **values, char **colnames) {
+			std::map<std::string, int> *fields = (std::map<std::string, int> *) resultPtr;
+			std::pair<std::string, int> kv;
+			for(int i = 0; i < cols; ++i) {
+				std::string name(colnames[i]);
+				if(name == "name") {
+					kv.first = std::string(values[i]);
+				} else if(name == "type") {
+					const std::string type(values[i]);
+					if(type == "REAL") {
+						kv.second = SQLite::DOUBLE;
+					} else if(type == "TEXT") {
+						kv.second = SQLite::STRING;
+					} else if(type == "BLOB") {
+						kv.second = SQLite::BLOB;
+					} else if(type == "INTEGER") {
+						kv.second = SQLite::INTEGER;
+					} else {
+						kv.second = 0;
+					}
+				}
+			}
+			if(kv.first != "geom") {
+				g_trace("Field: " << kv.first << ", " << kv.second);
+				fields->insert(kv);
+			}
+			return 0;
+		}
+
+		static int sridCallback(void *resultPtr, int cols, char **values, char **colnames) {
+			int *srid = (int *) resultPtr;
+			*srid = atoi(values[0]);
+			return 0;
+		}
+
 		void SQLite::init(bool clear) {
-
-			bool doInit = !exists(m_file);
-
+			bool dbExists = exists(m_file);
+			g_trace("Initializing sqlite with clear: " << clear << ", and exists: " << dbExists);
+			
 			char *err;
 
+			g_trace("Opening...");
 			if(SQLITE_OK != sqlite3_open_v2(m_file.c_str(), &m_db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL))
 				handleError("Failed to open DB: ");
 			
 			m_cache = spatialite_alloc_connection();
 			spatialite_init_ex(m_db, m_cache, 0);
 
-			if(doInit) {
+			if(dbExists) {
+				g_trace("DB exists so collecting metadata.");
+				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA table_info('data')", 
+					tableInfoCallback, &m_fields, &err))
+					handleError("Failed to read table info from database. Formatted incorrectly? ", err);
+				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT SRID(geom) AS geomsrid FROM data", 
+					sridCallback, &m_srid, &err))
+					handleError("Failed to read table info from database. Formatted incorrectly? ", err);
+				g_trace("SRID: " << m_srid);
+			} else {
+				g_trace("Table is new, so initializing as spatial.");
 				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT InitSpatialMetadata(1)", NULL, NULL, &err))
 					handleError("Failed to initialize DB: ", err);
 			}
@@ -157,9 +256,9 @@ namespace geotools {
 			bool com = false;
 			for(auto it = m_fields.begin(); it != m_fields.end(); ++it) {
 				if(com) {
-					ss << ",";
-					fn << ",";
-					fp << ",";
+					ss << ", ";
+					fn << ", ";
+					fp << ", ";
 				} else {
 					com = true;
 				}
@@ -184,14 +283,14 @@ namespace geotools {
 
 			std::string q;
 
-			if(doInit) {
+			if(!dbExists) {
 				q.assign(ss.str());
+				g_trace("Creating table: " << q);
 				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(), NULL, NULL, &err)) 
 					handleError("Failed to create table: ", err);
-
 				ss.str(std::string());
 				ss.clear();
-				ss << "SELECT AddGeometryColumn('data', 'Geometry', " << m_srid << ", '";
+				ss << "SELECT AddGeometryColumn('data', 'geom', " << m_srid << ", '";
 				switch(m_type) {
 				case POINT:
 					ss << "POINT";
@@ -204,23 +303,26 @@ namespace geotools {
 					break;
 				}
 				ss << "', 'XYZ')";
-			
 				q.assign(ss.str());
+
+				g_trace("Creating geometry column: " << q);
 				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(), NULL, NULL, &err))
 					handleError("Failed to create geometry: ", err);
-
 			}
 
 			if(clear) {
+				g_trace("Deleting existing records.");
 				if(SQLITE_OK != sqlite3_exec(m_db, "DELETE FROM data", NULL, NULL, &err))
 					handleError("Failed to clear data table: ", err);
 			}
 
 			ss.str(std::string());
 			ss.clear();
-			ss << "INSERT INTO data (Geometry, " << fn.str() << ") VALUES (GeomFromText(?, " << m_srid << "), " << fp.str() << ")";
+			ss << "INSERT INTO data (geom, " << fn.str() << ") VALUES (GeomFromText(?, " 
+				<< m_srid << "), " << fp.str() << ")";
 
 			q.assign(ss.str());
+			g_trace("Preparing insert query: " << q);
 			if(SQLITE_OK != sqlite3_prepare_v2(m_db, q.c_str(), q.size(), &m_stmt, NULL))
 				handleError("Failed to prepare insert statement: ");
 
