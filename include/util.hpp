@@ -15,6 +15,9 @@ namespace geotools {
                 public:
 			double x, y, z;
                         std::map<std::string, std::string> fields;
+			Point();
+			Point(double x, double y, double z = 0);
+			Point(double x, double y, double z, const std::map<std::string, std::string> &fields);
                 };
 
 		class Bounds {

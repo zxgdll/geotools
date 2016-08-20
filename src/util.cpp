@@ -3,6 +3,7 @@
 #include <sstream>
 #include <algorithm>
 #include <fstream>
+#include <map>
 
 #include "csv.h"
 
@@ -10,6 +11,20 @@
 #include "util.hpp"
 
 using namespace geotools::util;
+
+Point::Point(double x, double y, double z) :
+	x(x), y(y), z(y) {
+}
+
+Point::Point(double x, double y, double z, const std::map<std::string, std::string> &fields) :
+	Point(x, y, z) {
+	for(auto it : fields)
+		this->fields[it.first] = it.second;
+}
+
+Point::Point() : 
+	Point(0, 0, 0) {
+}
 
 Bounds::Bounds() : Bounds(G_DBL_MAX_NEG, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS) {
 }
