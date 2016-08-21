@@ -254,24 +254,35 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 	Raster<unsigned int> outrast(crownsrast, 1, inrast);
 	outrast.nodata(0);
 	outrast.fill(0);
+	double nodata = inrast.nodata();
+	double resolution = inrast.resolutionX();
 
 	// Initialize the database.
 	SQLite db(topsvect);
-	// Create a bounds object for the first strip of treetops.
 
-
+	// The number of extra rows above and below the buffer.
 	int bufRows = (int) std::ceil(g_abs(radius / inrast.resolutionY()));
+	// The height of the row, not including disposable buffer.
 	int rowStep = g_abs(100 / inrast.resolutionY());
+	// The totoal height of the buffer
 	int rowHeight = rowStep + bufRows * 2;
 	MemRaster<unsigned int> blk(inrast.cols(), rowHeight);
+
+	// Build the list of offsets for D8 or D4 search.
+	std::vector<std::pair<int, int> > offsets; // pairs of col, row
+	if(d8) {
+		offsets.assign({{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}});
+	} else {
+		offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 1}});
+	}
 
 	for(int row = 0; row < inrast.rows(); row += rowStep) {
 
 		g_trace("row " << row << " of " << inrast.rows());
 		blk.fill(0);
 
-		// Load the tree tops for the first strip.
-		Bounds bounds(inrast.toX(0), inrast.toY(row - bufRows), inrast.toX(inrast.cols()), inrast.toY(row + rowStep + bufRows));
+		// Load the tree tops for the strip.
+		Bounds bounds(inrast.toX(0), inrast.toY(row - bufRows), inrast.toX(inrast.cols()), inrast.toY(row + rowStep + bufRows * 2));
 		std::vector<std::unique_ptr<Point> > tops;
 		db.getPoints(tops, bounds);
 
@@ -285,17 +296,8 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 			q.push(std::unique_ptr<Node>(new Node(id, col, row, t->z, col, row, t->z)));
 		}
 
+		// To keep track of visited cells.
 		std::vector<bool> visited((size_t) inrast.cols() * inrast.rows());
-		double nodata = inrast.nodata();
-		double resolution = inrast.resolutionX();
-
-		// Build the list of offsets for D8 or D4 search.
-		std::vector<std::pair<int, int> > offsets; // pairs of col, row
-		if(d8) {
-			offsets.assign({{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}});
-		} else {
-			offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 1}});
-		}
 
 		// Run through the queue.
 		while(q.size()) {
@@ -331,9 +333,15 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 			}
 		}
 
-		MemRaster<unsigned int> tmp(blk.cols(), rowStep);
-		blk.readBlock(0, bufRows, tmp);
-		outrast.writeBlock(0, row + bufRows, tmp);
+		if(row == 0) {
+			MemRaster<unsigned int> tmp(blk.cols(), rowStep + bufRows);
+			blk.readBlock(0, 0, tmp);
+			outrast.writeBlock(0, row, tmp);
+		} else {
+			MemRaster<unsigned int> tmp(blk.cols(), rowStep);
+			blk.readBlock(0, bufRows, tmp);
+			outrast.writeBlock(0, row + bufRows, tmp);
+		}
 
 		Util::status(tops.size(), tops.size(), true);
 
