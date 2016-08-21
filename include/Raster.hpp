@@ -329,41 +329,8 @@ public:
 	/**
 	 * Smooth the raster and write the smoothed version to the output raster.
 	 */
-	// TODO: No accounting for nodata.
-	void smooth(Grid<float> &smoothed, double sigma, int size) {
-		if(sigma <= 0)
-			g_argerr("Sigma must be > 0.");
-		if(size < 3)
-			g_argerr("Kernel size must be 3 or larger.");
-		if(size % 2 == 0) {
-			g_warn("Kernel size must be odd. Rounding up.");
-			size++;
-		}
-		double weights[size * size];
-		gaussianWeights(weights, size, sigma);
-		for(int r = 0; r < rows() - size; ++r) {
-			for(int c = 0; c < cols() - size; ++c) {
-				double t = 0.0;
-				double v;
-				bool foundNodata = false;
-				for(int gr = 0; gr < size; ++gr) {
-					for(int gc = 0; gc < size; ++gc) {
-						v = get(c + gc, r + gr);
-						if(v == nodata()) {
-							foundNodata = true;
-							break;
-						}
-						t += weights[gr * size + gc] * v;
-					}
-					if(foundNodata)
-						break;
-				}
-				if(!foundNodata)
-					smoothed.set(c + size / 2, r + size / 2, t);
-			}
-		}
-	}
-	
+	void smooth(Grid<T> &smoothed, double sigma, int size);
+
 	/**
 	 * The radius is given with cells as the unit, but
 	 * can be rational. When determining which cells to
@@ -1463,6 +1430,53 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 	}
 
 	writeBlock(tmp);
+}
+
+template <class T>
+void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
+	if(sigma <= 0)
+		g_argerr("Sigma must be > 0.");
+	if(size < 3)
+		g_argerr("Kernel size must be 3 or larger.");
+	if(size % 2 == 0) {
+		g_warn("Kernel size must be odd. Rounding up.");
+		size++;
+	}
+	double nd = nodata();
+	#pragma omp parallel for
+	for(int strip = 0; strip < rows(); strip += 50) {
+		double weights[size * size];
+		gaussianWeights(weights, size, sigma);
+		MemRaster<T> buf(size, size); // TODO: It might be better to use double?
+		for(int r = strip; r < g_min(strip + 50, rows() - size); ++r) {
+			for(int c = 0; c < cols() - size; ++c) {
+				double v, t = 0.0;
+				bool foundNodata = false;
+				#pragma omp critical
+				{
+					readBlock(c, r, buf);
+				}
+				for(int gr = 0; gr < size; ++gr) {
+					for(int gc = 0; gc < size; ++gc) {
+						v = buf.get(gc, gr);
+						if(v == nd) {
+							foundNodata = true;
+							break;
+						}
+						t += weights[gr * size + gc] * v;
+					}
+					if(foundNodata)
+						break;
+				}
+				if(!foundNodata) {
+					#pragma omp critical
+					{
+						smoothed.set(c + size / 2, r + size / 2, t);
+					}
+				}
+			}
+		}
+	}
 }
 
 
