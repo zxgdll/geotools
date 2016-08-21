@@ -163,7 +163,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 	size_t tid = 0;
 
 	//  TODO: Get SRID from raster.
-	SQLite db(outvect, SQLite::POINT, 26910, {{"id", 1}}, true);
+	SQLite db(outvect, SQLite::POINT, 0, {{"id", 1}}, true);
 	
 	// This is the size of the cache used by each thread. TODO: Make configurable.
 	int cachedRows = 500;
