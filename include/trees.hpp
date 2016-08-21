@@ -55,10 +55,11 @@ namespace geotools {
 			 *              and the columns are "geom" and "id." Geom is a 3D point and ID is the top's unique ID.
 			 * window     - The size of the kernel.
 			 * minHeight  - The minimum height of a treetop.
+			 * srid       - The SRID of the tops database. Optional (default 0).
 			 * tops       - If not null, this vector is populated with objects representing the tree tops.
 			 */
 			void treetops(const std::string &inraster, const std::string &topsvect, int window, double minHeight, 
-				std::vector<std::unique_ptr<geotools::trees::util::Top> > *tops = nullptr);
+				int srid = 0, std::vector<std::unique_ptr<geotools::trees::util::Top> > *tops = nullptr);
 
 			/**
 			 * Performs tree crown delineation using a (preferrably smoothed) input raster and a

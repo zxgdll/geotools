@@ -38,7 +38,8 @@ void usage() {
 			<< "                    tree top. Default 4.\n"
 			<< " -d8                Use D8 search for delineating crowns, rather than D4, which \n"
 			<< "                    is the default.\n"
-			<< " -threads           The number of threads to used for processing. Default 1.\n";
+			<< " -threads           The number of threads to used for processing. Default 1.\n"
+			<< " -s			The SRID of the treetops output dataset.\n";
 			
 }
 
@@ -60,6 +61,7 @@ int main(int argc, char **argv) {
 		double cminHeight = 4;
 		bool d8 = false;
 		int threads = 1;
+		int srid = 0;
 
 		int i = 1;
 		for(; i < argc; ++i) {
@@ -68,6 +70,8 @@ int main(int argc, char **argv) {
 				inraster = argv[++i];
 			} else if(arg == "-t") {
 				topsvect = argv[++i];
+			} else if(arg == "-s") {
+				srid = atoi(argv[++i]);
 			} else if(arg == "-cr") {
 				crownrast = argv[++i];
 			} else if(arg == "-cv") {
@@ -113,7 +117,7 @@ int main(int argc, char **argv) {
 		}
 
 		// Create tree tops.
-		tu.treetops(inraster, topsvect, window, tminHeight);
+		tu.treetops(inraster, topsvect, window, tminHeight, srid);
 
 		// Create crowns if desired.
 		if(crowns)

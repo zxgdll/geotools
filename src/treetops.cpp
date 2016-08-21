@@ -140,7 +140,7 @@ void TreeUtil::smooth(const std::string &inraster, const std::string &outraster,
 }
 
 void TreeUtil::treetops(const std::string &inraster, const std::string &outvect, int window, double minHeight,
-	std::vector<std::unique_ptr<trees::util::Top> > *tops) {
+	int srid, std::vector<std::unique_ptr<trees::util::Top> > *tops) {
 
 	if(inraster.empty())
 		g_argerr("Input raster cannot be empty.");
@@ -163,7 +163,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 	size_t tid = 0;
 
 	//  TODO: Get SRID from raster.
-	SQLite db(outvect, SQLite::POINT, 0, {{"id", 1}}, true);
+	SQLite db(outvect, SQLite::POINT, srid, {{"id", 1}}, true);
 	
 	// This is the size of the cache used by each thread. TODO: Make configurable.
 	int cachedRows = 500;
