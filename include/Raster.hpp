@@ -1442,20 +1442,32 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
 		g_warn("Kernel size must be odd. Rounding up.");
 		size++;
 	}
+	smoothed.fill(smoothed.nodata());
+	// Guess at a good number of rows for each strip. Say 64MB each
+	int bufRows = g_max(1, g_min(rows(), (64 * 1024 * 1024) / sizeof(T) / cols()));
+	g_trace("Smooth buffer rows: " << bufRows);
 	double nd = nodata();
+	int offset = (size / 2) * 2;
 	#pragma omp parallel for
-	for(int strip = 0; strip < rows(); strip += 50) {
+	for(int row = 0; row < rows(); row += bufRows - size / 2) {
 		double weights[size * size];
 		gaussianWeights(weights, size, sigma);
+		MemRaster<T> strip(cols(), g_min(bufRows, rows() - row));
+		MemRaster<T> smooth(cols() - offset, bufRows - offset);
 		MemRaster<T> buf(size, size); // TODO: It might be better to use double?
-		for(int r = strip; r < g_min(strip + 50, rows() - size); ++r) {
-			for(int c = 0; c < cols() - size; ++c) {
+		strip.nodata(nd);
+		strip.fill(nd);
+		smooth.nodata(nd);
+		smooth.fill(nd);
+		#pragma omp critical
+		{
+			readBlock(0, row, strip);
+		}
+		for(int r = 0; r < strip.rows() - size; ++r) {
+			for(int c = 0; c < strip.cols() - size; ++c) {
 				double v, t = 0.0;
 				bool foundNodata = false;
-				#pragma omp critical
-				{
-					readBlock(c, r, buf);
-				}
+				strip.readBlock(c, r, buf);
 				for(int gr = 0; gr < size; ++gr) {
 					for(int gc = 0; gc < size; ++gc) {
 						v = buf.get(gc, gr);
@@ -1468,13 +1480,13 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
 					if(foundNodata)
 						break;
 				}
-				if(!foundNodata) {
-					#pragma omp critical
-					{
-						smoothed.set(c + size / 2, r + size / 2, t);
-					}
-				}
+				if(!foundNodata) 
+					smooth.set(c, r, t);
 			}
+		}
+		#pragma omp critical
+		{
+			smoothed.writeBlock(size / 2, row + size / 2, smooth);
 		}
 	}
 }
