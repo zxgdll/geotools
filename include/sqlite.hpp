@@ -136,6 +136,20 @@ namespace geotools {
 				rollback();
 			}
 
+			static int countCallback(void *resultPtr, int cols, char **values, char **colnames) {
+				int *result = (int *) resultPtr;
+				*result = atoi(values[0]);
+			}
+
+			void getGeomCount(int count) {
+				char *err;
+				begin();
+				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT COUNT(*) FROM data", 
+					SQLite::countCallback, &count, &err))
+					handleError("Failed to retrieve record count: ", err);
+				rollback();
+			}
+
 			void begin() {
 				m_trans = true;
 				char *err;
