@@ -90,6 +90,65 @@ namespace geotools {
 					handleError("Failed to insert row: ");
 			}
 
+
+			/*
+			void addPoints(std::vector<Point> &points) {
+
+				std::stringstream ss;
+				std::stringstream ss0;
+				ss << "INSERT INTO data (geom";
+				ss0 << "(GeomFromText(?, " << m_srid << ")";
+				for(auto it : m_fields) {
+					ss << "," << it.first;
+					ss0 << ",?";
+				}
+				ss << ") VALUES ";
+				ss0 << ")";
+				std::string vals = ss0.str();
+				bool first = true;
+				for(auto it : points) {
+					ss << vals;
+					if(!first)
+						ss << ",";
+					first = false;
+				}
+
+				std::string q = ss.str();
+				sqlite3_stmt *stmt;
+				if(SQLITE_OK != sqlite3_prepare_v2(m_db, q.c_str(), q.size(), &stmt, NULL))
+					handleError("Failed to prepare insert statement: ");
+				
+				for(auto it : points) {
+					ss.str(std::string());
+					ss << std::setprecision(12) << "POINTZ(" << it.x << " " << it.y << " " << it.z << ")";
+					std::string pt = ss.str();
+
+					sqlite3_reset(stmt);
+					sqlite3_clear_bindings(stmt);
+					sqlite3_bind_text(stmt, 1, pt.c_str(), pt.size(), SQLITE_STATIC);
+					int i = 1;
+					for(auto it0 : pt.fields) {
+						++i;
+						switch(m_fields[it0.first]) {
+						case SQLite::INTEGER:
+							sqlite3_bind_int(stmt, i, atoi(it0.second.c_str()));
+							break;
+						case SQLite::DOUBLE:
+							sqlite3_bind_double(stmt, i, atof(it0.second.c_str()));
+							break;
+						case SQLite::STRING:
+							sqlite3_bind_text(stmt, i, it0.second.c_str(), it0.second.size(), SQLITE_STATIC);
+							break;
+						}
+					}
+				}
+
+				int ret = sqlite3_step(stmt);
+				if(!(ret == SQLITE_DONE || ret == SQLITE_ROW))
+					handleError("Failed to insert row: ");
+			}
+			*/
+
 			static int getPointsCallback(void *resultPtr, int cols, char **values, char **colnames) {
 				using namespace geotools::util;
 				std::vector<std::unique_ptr<Point> > *result = (std::vector<std::unique_ptr<Point> > *) resultPtr;
@@ -137,11 +196,12 @@ namespace geotools {
 			}
 
 			static int countCallback(void *resultPtr, int cols, char **values, char **colnames) {
-				int *result = (int *) resultPtr;
+				size_t *result = (size_t *) resultPtr;
 				*result = atoi(values[0]);
+				return 0;
 			}
 
-			void getGeomCount(int count) {
+			void getGeomCount(size_t *count) {
 				char *err;
 				begin();
 				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT COUNT(*) FROM data", 
