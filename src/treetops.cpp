@@ -174,7 +174,8 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 	// This is the size of the cache used by each thread. TODO: Make configurable.
 	int cachedRows = 500;
 	int blockHeight = window + cachedRows;
-	size_t tc, topCount = 0;
+	size_t tc = 0;
+	size_t topCount = 0;
 
 	#pragma omp parallel
 	{
@@ -216,44 +217,40 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 			}
 
 			Util::status(row / 2, rows, "Locating tops...");
-	
-			#pragma omp atomic
-			topCount += topCount0;
 		}
 
+		#pragma omp atomic
+		topCount += topCount0; // TODO: Doesn't work for status because there's no barrier here.
+		
 		g_trace("Writing " << topCount << " tops.");
 
 		Util::status(1, 2, "Locating tops...");
 
-		size_t tc0 = 0;
+		size_t b = 0;
 		size_t batch = db.maxAddPointCount();
 
 		std::vector<std::unique_ptr<Point> > points;
-		auto it = tops0.begin();
-		for(size_t b = 0; b < topCount0; b += batch) {
-			for(size_t b0 = 0; b0 < batch && it != tops0.end(); ++it, ++b0) {
-				Top *t = it->second.get();
-				Point *pt = new Point(t->x, t->y, t->z, {{"id", std::to_string(t->id)}});
-				points.push_back(std::unique_ptr<Point>(pt));
-				// Only add the result if the output vector is defined.
-				if(tops)
-					tops->push_back(std::move(it->second));
-				++tc0;
-			}
+		for(auto it = tops0.begin(); it != tops0.end(); ++it) {
+			Top *t = it->second.get();
+			Point *pt = new Point(t->x, t->y, t->z, {{"id", std::to_string(t->id)}});
+			points.push_back(std::unique_ptr<Point>(pt));
+			// Only add the result if the output vector is defined.
+			if(tops)
+				tops->push_back(std::move(it->second));
 
-			#pragma omp atomic
-			tc += tc0;
-			Util::status(tc, topCount, "Locating tops...");
-
-			#pragma omp critical(b)
-			{
-				g_trace("inserting " << points.size() << " points");
-				db.begin();	
-				// Add to the file.
-				db.addPoints(points);
-				db.commit();
+			if(++b % batch == 0 || b == topCount0) {	
+				#pragma omp critical(b)
+				{
+					tc += points.size();
+					g_trace("inserting " << points.size() << " points");
+					db.begin();	
+					// Add to the file.
+					db.addPoints(points);
+					db.commit();
+				}
+				points.clear();
+				Util::status(tc, topCount, "Locating tops...");
 			}
-			points.clear();
 		}
 	}
 
