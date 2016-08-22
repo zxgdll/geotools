@@ -43,23 +43,25 @@ namespace geotools {
 			const static int POLYGON = 3;
 
 			SQLite(const std::string &file, int type, int srid, 
-				const std::map<std::string, int> &fields, bool clear = false) :
+				const std::map<std::string, int> &fields) :
 				m_file(file),
 				m_type(type), 
 				m_srid(srid),
 				m_fields(fields) {
-				init(clear);
+				init();
 			}
 
-			SQLite(const std::string &file, int type, int srid, bool clear = false) :
-				SQLite(file, type, srid, std::map<std::string, int>(), clear) {
+			SQLite(const std::string &file, int type, int srid) :
+				SQLite(file, type, srid, std::map<std::string, int>()) {
 			}
 		
 			SQLite(const std::string &file) :
-				SQLite(file, -1, -1, std::map<std::string, int>(), false) {
+				SQLite(file, -1, -1, std::map<std::string, int>()) {
 			
 			}
 	
+			void clear();
+
 			void addPoint(double x, double y, double z, const std::map<std::string, std::string> &fields) {
 
 				std::stringstream ss;
@@ -90,64 +92,58 @@ namespace geotools {
 					handleError("Failed to insert row: ");
 			}
 
-
-			/*
-			void addPoints(std::vector<Point> &points) {
-
-				std::stringstream ss;
-				std::stringstream ss0;
-				ss << "INSERT INTO data (geom";
-				ss0 << "(GeomFromText(?, " << m_srid << ")";
-				for(auto it : m_fields) {
-					ss << "," << it.first;
-					ss0 << ",?";
-				}
-				ss << ") VALUES ";
-				ss0 << ")";
-				std::string vals = ss0.str();
-				bool first = true;
-				for(auto it : points) {
-					ss << vals;
-					if(!first)
-						ss << ",";
-					first = false;
-				}
-
-				std::string q = ss.str();
-				sqlite3_stmt *stmt;
-				if(SQLITE_OK != sqlite3_prepare_v2(m_db, q.c_str(), q.size(), &stmt, NULL))
-					handleError("Failed to prepare insert statement: ");
-				
-				for(auto it : points) {
-					ss.str(std::string());
-					ss << std::setprecision(12) << "POINTZ(" << it.x << " " << it.y << " " << it.z << ")";
-					std::string pt = ss.str();
-
-					sqlite3_reset(stmt);
-					sqlite3_clear_bindings(stmt);
-					sqlite3_bind_text(stmt, 1, pt.c_str(), pt.size(), SQLITE_STATIC);
-					int i = 1;
-					for(auto it0 : pt.fields) {
-						++i;
-						switch(m_fields[it0.first]) {
-						case SQLite::INTEGER:
-							sqlite3_bind_int(stmt, i, atoi(it0.second.c_str()));
-							break;
-						case SQLite::DOUBLE:
-							sqlite3_bind_double(stmt, i, atof(it0.second.c_str()));
-							break;
-						case SQLite::STRING:
-							sqlite3_bind_text(stmt, i, it0.second.c_str(), it0.second.size(), SQLITE_STATIC);
-							break;
-						}
-					}
-				}
-
-				int ret = sqlite3_step(stmt);
-				if(!(ret == SQLITE_DONE || ret == SQLITE_ROW))
-					handleError("Failed to insert row: ");
+			/**
+			 * Returns the number of points that can be added at one time by 
+			 * addPoints. This is computed from the parameter limit and the 
+			 * number of fields.
+			 */
+			size_t maxAddPointCount() {
+				size_t c = (size_t) (sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1) / (m_fields.size() + 1));
+				g_trace("max point count: " << c << ", " << sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1));
+				return c;
 			}
-			*/
+
+			void makeFast() {
+				char *err;
+				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA synchronous = OFF", NULL, NULL, &err))
+					handleError("Failed to set synchronous: ", err);
+				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA journal_mode = MEMORY", NULL, NULL, &err))
+					handleError("Failed to set journal mode: ", err);
+			}
+
+			void makeSlow() {
+				char *err;
+				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA synchronous = ON", NULL, NULL, &err))
+					handleError("Failed to set synchronous: ", err);
+				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA journal_mode = DELETE", NULL, NULL, &err))
+					handleError("Failed to set journal mode: ", err);
+			}
+
+			void setCacheSize(size_t size) {
+				char *err;
+				std::stringstream ss;
+				ss << "PRAGMA cache_size = " << size;
+				if(SQLITE_OK != sqlite3_exec(m_db, ss.str().c_str(), NULL, NULL, &err))
+					handleError("Failed to set cache size: ", err);
+			}
+
+			void addPoints(std::vector<std::unique_ptr<Point> > &points) {
+				for(const std::unique_ptr<Point> &pt : points)
+					addPoint(pt->x, pt->y, pt->z, pt->fields);
+			}
+				
+			void dropGeomIndex() {
+				char *err;
+				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT DisableSpatialIndex('data', 'geom')", NULL, NULL, &err))
+					handleError("Failed to drop geometry index: ", err);
+			}
+
+			void createGeomIndex() {
+				char *err;
+				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT CreateSpatialIndex('data', 'geom')", NULL, NULL, &err))
+					handleError("Failed to drop geometry index: ", err);
+			}
+
 
 			static int getPointsCallback(void *resultPtr, int cols, char **values, char **colnames) {
 				using namespace geotools::util;
@@ -242,7 +238,7 @@ namespace geotools {
 			}
 
 			void handleError(const std::string &msg, char *err = 0);
-			void init(bool clear = false);
+			void init();
 
 		};
 
@@ -293,9 +289,9 @@ namespace geotools {
 			return 0;
 		}
 
-		void SQLite::init(bool clear) {
+		void SQLite::init() {
 			bool dbExists = exists(m_file);
-			g_trace("Initializing sqlite with clear: " << clear << ", and exists: " << dbExists);
+			g_trace("Initializing sqlite with exists: " << dbExists);
 			
 			char *err;
 
@@ -384,12 +380,6 @@ namespace geotools {
 					handleError("Failed to create geometry: ", err);
 			}
 
-			if(clear) {
-				g_trace("Deleting existing records.");
-				if(SQLITE_OK != sqlite3_exec(m_db, "DELETE FROM data", NULL, NULL, &err))
-					handleError("Failed to clear data table: ", err);
-			}
-
 			ss.str(std::string());
 			ss.clear();
 			ss << "INSERT INTO data (geom, " << fn.str() << ") VALUES (GeomFromText(?, " 
@@ -401,6 +391,14 @@ namespace geotools {
 				handleError("Failed to prepare insert statement: ");
 
 		}
+
+		void SQLite::clear() {
+			g_trace("Deleting existing records.");
+			char *err;
+			if(SQLITE_OK != sqlite3_exec(m_db, "DELETE FROM data", NULL, NULL, &err))
+				handleError("Failed to clear data table: ", err);
+		}
+
 
 	} // db
 
