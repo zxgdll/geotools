@@ -39,7 +39,7 @@ void usage() {
 			<< " -d8                Use D8 search for delineating crowns, rather than D4, which \n"
 			<< "                    is the default.\n"
 			<< " -threads           The number of threads to used for processing. Default 1.\n"
-			<< " -s			The SRID of the treetops output dataset.\n";
+			<< " -s                 The SRID of the treetops output dataset.\n";
 			
 }
 
