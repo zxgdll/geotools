@@ -141,7 +141,7 @@ namespace geotools {
 
 			static void loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::string, double, double, double> > &samples);
 
-			static void status(int step, int of, bool end = false);
+			static void status(int step, int of, const std::string &message = "", bool end = false);
 
 		};
 

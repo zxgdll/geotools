@@ -275,7 +275,7 @@ void Util::loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::s
 		samples.push_back(std::make_tuple(id, x, y, z));
 }
 
-void Util::status(int step, int of, bool end) {
+void Util::status(int step, int of, const std::string &message, bool end) {
         #pragma omp critical(__status)
         {
                 if(step < 0)  step = 0;
@@ -283,7 +283,7 @@ void Util::status(int step, int of, bool end) {
                 if(step > of) of = step;
                 float status = (float) (step * 100) / of;
                 std::stringstream out;
-                out << "Status: " << std::fixed << std::setprecision(2) << status << "%\r";
+                out << "Status: " << std::fixed << std::setprecision(2) << status << "% " << message << "\r";
                 if(end) out << std::endl;
                 std::cerr << out.str();
                 std::cerr.flush();
