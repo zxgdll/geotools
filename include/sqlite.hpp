@@ -140,7 +140,7 @@ namespace geotools {
 
 			void createGeomIndex() {
 				char *err;
-				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT CreateSpatialIndex('data', 'geom')", NULL, NULL, &err))
+				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT CreateSpatialIndex('data', 'geom'); VACUUM data", NULL, NULL, &err))
 					handleError("Failed to drop geometry index: ", err);
 			}
 
@@ -168,7 +168,6 @@ namespace geotools {
 			void getPoints(std::vector<std::unique_ptr<geotools::util::Point> > &points, 
 				const geotools::util::Bounds &bounds) {
 				
-				begin();
 				std::stringstream ss;
 				ss << std::setprecision(12);
 				ss << "SELECT X(geom) AS geomx, Y(geom) AS geomy, Z(geom) AS geomz";
@@ -185,9 +184,12 @@ namespace geotools {
 				std::string q = ss.str();
 				g_trace("getPoints: " << q);
 				char *err;	
+				begin();
 				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(),  
-					geotools::db::SQLite::getPointsCallback, &points, &err))
+					geotools::db::SQLite::getPointsCallback, &points, &err)) {
+					rollback();
 					handleError("Failed to execute query.", err);
+				}
 				rollback();
 			}
 
@@ -201,8 +203,10 @@ namespace geotools {
 				char *err;
 				begin();
 				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT COUNT(*) FROM data", 
-					SQLite::countCallback, &count, &err))
+					SQLite::countCallback, &count, &err)) {
+					rollback();
 					handleError("Failed to retrieve record count: ", err);
+				}
 				rollback();
 			}
 
@@ -250,10 +254,6 @@ namespace geotools {
 			g_runerr(msg << msg0);
 		}
 
-		static int strToType(const std::string &type) {
-
-		}
-			
 		static int tableInfoCallback(void *resultPtr, int cols, char **values, char **colnames) {
 			std::map<std::string, int> *fields = (std::map<std::string, int> *) resultPtr;
 			std::pair<std::string, int> kv;
@@ -276,7 +276,7 @@ namespace geotools {
 					}
 				}
 			}
-			if(kv.first != "geom") {
+			if(kv.first != "geom" && kv.first != "gid") {
 				g_trace("Field: " << kv.first << ", " << kv.second);
 				fields->insert(kv);
 			}
@@ -322,13 +322,13 @@ namespace geotools {
 			std::stringstream fn;
 			std::stringstream fp;
 
-			ss << "CREATE TABLE data(";
+			ss << "CREATE TABLE data(gid INTEGER PRIMARY KEY,";
 			bool com = false;
 			for(auto it = m_fields.begin(); it != m_fields.end(); ++it) {
 				if(com) {
-					ss << ", ";
-					fn << ", ";
-					fp << ", ";
+					ss << ",";
+					fn << ",";
+					fp << ",";
 				} else {
 					com = true;
 				}
@@ -395,8 +395,13 @@ namespace geotools {
 		void SQLite::clear() {
 			g_trace("Deleting existing records.");
 			char *err;
-			if(SQLITE_OK != sqlite3_exec(m_db, "DELETE FROM data", NULL, NULL, &err))
+			begin();
+			dropGeomIndex();
+			if(SQLITE_OK != sqlite3_exec(m_db, "DELETE FROM data", NULL, NULL, &err)) {
+				rollback();
 				handleError("Failed to clear data table: ", err);
+			}
+			commit();
 		}
 
 
