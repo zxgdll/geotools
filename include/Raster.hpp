@@ -1434,6 +1434,8 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 
 template <class T>
 void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
+	g_trace("Smoothing grid...");
+	Util::status(0, 1, "Smoothing grid...");
 	if(sigma <= 0)
 		g_argerr("Sigma must be > 0.");
 	if(size < 3)
@@ -1442,53 +1444,61 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
 		g_warn("Kernel size must be odd. Rounding up.");
 		size++;
 	}
-	smoothed.fill(smoothed.nodata());
+
 	// Guess at a good number of rows for each strip. Say 64MB each
 	int bufRows = g_max(1, g_min(rows(), (64 * 1024 * 1024) / sizeof(T) / cols()));
-	g_trace("Smooth buffer rows: " << bufRows);
+	g_trace(" - buffer rows: " << bufRows);
+
 	double nd = nodata();
-	int offset = (size / 2) * 2;
+	size_t completed = 0;
+
 	#pragma omp parallel for
-	for(int row = 0; row < rows(); row += bufRows - size / 2) {
+	for(int row = 0; row < rows(); row += bufRows - size) {
 		double weights[size * size];
 		gaussianWeights(weights, size, sigma);
 		MemRaster<T> strip(cols(), g_min(bufRows, rows() - row));
-		MemRaster<T> smooth(cols() - offset, bufRows - offset);
-		MemRaster<T> buf(size, size); // TODO: It might be better to use double?
+		MemRaster<T> smooth(cols(), g_min(bufRows, rows() - row));
+		MemRaster<T> buf(size, size);
 		strip.nodata(nd);
 		strip.fill(nd);
 		smooth.nodata(nd);
 		smooth.fill(nd);
-		#pragma omp critical
+		#pragma omp critical(a)
 		{
-			readBlock(0, row, strip);
+			// On the first loop, read from the first row and write to size/2 down
+			// On the other loops, read from row-size/2, and write to 0 down.
+			readBlock(0, row == 0 ? row : row - size / 2, strip, 0, row == 0 ? size / 2 : 0);
 		}
 		for(int r = 0; r < strip.rows() - size; ++r) {
 			for(int c = 0; c < strip.cols() - size; ++c) {
 				double v, t = 0.0;
 				bool foundNodata = false;
 				strip.readBlock(c, r, buf);
-				for(int gr = 0; gr < size; ++gr) {
-					for(int gc = 0; gc < size; ++gc) {
+				for(int gr = 0; !foundNodata && gr < size; ++gr) {
+					for(int gc = 0; !foundNodata && gc < size; ++gc) {
 						v = buf.get(gc, gr);
 						if(v == nd) {
 							foundNodata = true;
-							break;
+						} else {
+							t += weights[gr * size + gc] * v;
 						}
-						t += weights[gr * size + gc] * v;
 					}
-					if(foundNodata)
-						break;
 				}
 				if(!foundNodata) 
-					smooth.set(c, r, t);
+					smooth.set(c + size / 2, r + size / 2, t);
 			}
+			#pragma omp atomic
+			++completed;
+			Util::status(completed, rows(), "Smoothing grid...");
 		}
-		#pragma omp critical
+		#pragma omp critical(b)
 		{
-			smoothed.writeBlock(size / 2, row + size / 2, smooth);
+			// The blur buffer is always written size/2 down, so read from there.
+			smoothed.writeBlock(0, row, smooth, 0, size / 2);
 		}
 	}
+	Util::status(1, 1, "Smoothing grid... Done.", true);
+
 }
 
 
