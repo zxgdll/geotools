@@ -141,7 +141,9 @@ void TreeUtil::smooth(const std::string &inraster, const std::string &outraster,
 
 void TreeUtil::treetops(const std::string &inraster, const std::string &outvect, int window, double minHeight,
 	int srid, std::vector<std::unique_ptr<trees::util::Top> > *tops) {
-
+	
+	Util::status(0, 1, "Locating tops...");
+	
 	if(inraster.empty())
 		g_argerr("Input raster cannot be empty.");
 	if(outvect.empty())
@@ -163,12 +165,16 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 	size_t tid = 0;
 
 	//  TODO: Get SRID from raster.
-	SQLite db(outvect, SQLite::POINT, srid, {{"id", 1}}, true);
+	SQLite db(outvect, SQLite::POINT, srid, {{"id", 1}});
+	db.makeFast();
+	db.dropGeomIndex();
+	db.setCacheSize(1024 * 1024);
+	db.clear();
 	
 	// This is the size of the cache used by each thread. TODO: Make configurable.
 	int cachedRows = 500;
 	int blockHeight = window + cachedRows;
-	int topCount = 0;
+	size_t tc, topCount = 0;
 
 	#pragma omp parallel
 	{
@@ -176,7 +182,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 		MemRaster<float> blk(cols, blockHeight);
 		std::map<size_t, std::unique_ptr<Top> > tops0;
 		double max;
-		int topCount0 = 0;
+		size_t topCount0 = 0;
 		int curRow;
 
 		while(true) {
@@ -209,7 +215,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 				}
 			}
 
-			Util::status(g_min(row, rows * 2), rows * 2, false);
+			Util::status(row / 2, rows, "Locating tops...");
 	
 			#pragma omp atomic
 			topCount += topCount0;
@@ -217,31 +223,44 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 
 		g_trace("Writing " << topCount << " tops.");
 
-		int tc = topCount / 2;
-		#pragma omp critical(b)
-		{
-			db.begin();
-			for(auto it = tops0.begin(); it != tops0.end(); ++it) {
-				Top *t = it->second.get();
+		Util::status(1, 2, "Locating tops...");
 
-				// Add to the file.
-				db.addPoint(t->x, t->y, t->z, {{"id", std::to_string(t->id)}});
-	
+		size_t tc0, batch = db.maxAddPointCount();
+
+		std::vector<std::unique_ptr<Point> > points;
+		auto it = tops0.begin();
+		for(size_t b = 0; b < topCount0; b += batch) {
+			for(size_t b0 = 0; b0 < batch && it != tops0.end(); ++it, ++b0) {
+				Top *t = it->second.get();
+				Point *pt = new Point(t->x, t->y, t->z, {{"id", std::to_string(t->id)}});
+				points.push_back(std::unique_ptr<Point>(pt));
 				// Only add the result if the output vector is defined.
 				if(tops)
 					tops->push_back(std::move(it->second));
-	
-				if(++tc % 1000000 == 0) {
-					Util::status(tc, topCount, false);
-					db.commit();
-					db.begin();
-				}
+				++tc0;
 			}
-			db.commit();	
+
+			#pragma omp atomic
+			tc += tc0;
+			Util::status(tc, topCount, "Locating tops...");
+
+			#pragma omp critical(b)
+			{
+				g_trace("inserting " << points.size() << " points");
+				db.begin();	
+				// Add to the file.
+				db.addPoints(points);
+				db.commit();
+			}
+			points.clear();
 		}
 	}
 
-	Util::status(1, 1, true);
+	db.makeSlow();
+	db.setCacheSize(1024);
+	db.createGeomIndex();
+
+	Util::status(1, 1, "Locating tops... Done.", true);
 	g_trace("Done.");
 
 }
@@ -250,6 +269,8 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 	const std::string &crownsrast, const std::string &crownsvect, 
 	double threshold, double radius, double minHeight, bool d8) {
 
+	Util::status(0, 1, "Delineating crowns...");
+
 	Raster<float> inrast(inraster);
 	Raster<unsigned int> outrast(crownsrast, 1, inrast);
 	outrast.nodata(0);
@@ -257,16 +278,21 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 	double nodata = inrast.nodata();
 	double resolution = inrast.resolutionX();
 
+	Util::status(0, 1, "Delineating crowns...");
+
 	// Initialize the database.
 	SQLite db(topsvect);
+	size_t geomCount;
+	db.getGeomCount(&geomCount);
+	g_trace("Processing " << geomCount << " tree tops.");
 
 	// The number of extra rows above and below the buffer.
 	int bufRows = (int) std::ceil(g_abs(radius / inrast.resolutionY()));
 	// The height of the row, not including disposable buffer.
-	int rowStep = g_abs(100 / inrast.resolutionY());
+	int rowStep = (int) g_abs(std::ceil(100000.0 / geomCount * inrast.rows()) / inrast.resolutionY());
+	//int rowStep = g_abs((geomCount / 100000) / inrast.resolutionY());
 	// The totoal height of the buffer
 	int rowHeight = rowStep + bufRows * 2;
-	MemRaster<unsigned int> blk(inrast.cols(), rowHeight);
 
 	// Build the list of offsets for D8 or D4 search.
 	std::vector<std::pair<int, int> > offsets; // pairs of col, row
@@ -276,15 +302,22 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 		offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 1}});
 	}
 
+	#pragma omp parallel for
 	for(int row = 0; row < inrast.rows(); row += rowStep) {
 
-		g_trace("row " << row << " of " << inrast.rows());
+		g_trace("Processing 100,000 of " << geomCount << " points.");
+		g_trace(" - row " << row << " of " << inrast.rows());
+
+		MemRaster<unsigned int> blk(inrast.cols(), rowHeight);
 		blk.fill(0);
 
 		// Load the tree tops for the strip.
 		Bounds bounds(inrast.toX(0), inrast.toY(row - bufRows), inrast.toX(inrast.cols()), inrast.toY(row + rowStep + bufRows * 2));
 		std::vector<std::unique_ptr<Point> > tops;
-		db.getPoints(tops, bounds);
+		#pragma omp critical(a)
+		{
+			db.getPoints(tops, bounds);
+		}
 
 		// Convert the Tops to Nodes.
 		std::queue<std::unique_ptr<Node> > q;
@@ -304,8 +337,6 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 
 			std::unique_ptr<Node> n = std::move(q.front());
 			q.pop();
-
-			//g_trace("coords " << n->c << ", " << (n->r - row) << "; " << blk.cols() << ", " << blk.rows());
 
 			if(n->c >= 0 && n->c < blk.cols() && (n->r - row) >= 0 && (n->r - row) < blk.rows())
 				blk.set(n->c, n->r - row, n->id);
@@ -336,17 +367,24 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 		if(row == 0) {
 			MemRaster<unsigned int> tmp(blk.cols(), rowStep + bufRows);
 			blk.readBlock(0, 0, tmp);
-			outrast.writeBlock(0, row, tmp);
+			#pragma omp critical(b)
+			{
+				outrast.writeBlock(0, row, tmp);
+			}
 		} else {
 			MemRaster<unsigned int> tmp(blk.cols(), rowStep);
 			blk.readBlock(0, bufRows, tmp);
-			outrast.writeBlock(0, row + bufRows, tmp);
+			#pragma omp critical(c)
+			{
+				outrast.writeBlock(0, row + bufRows, tmp);
+			}
 		}
 
-		Util::status(tops.size(), tops.size(), true);
+		Util::status(g_min(row, inrast.rows()), inrast.rows(), "Delineating crowns...");
 
 	}
 
+	Util::status(1, 1, "Delineating crowns... Done", true);
 
 
 }
