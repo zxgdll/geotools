@@ -225,7 +225,8 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 
 		Util::status(1, 2, "Locating tops...");
 
-		size_t tc0, batch = db.maxAddPointCount();
+		size_t tc0 = 0;
+		size_t batch = db.maxAddPointCount();
 
 		std::vector<std::unique_ptr<Point> > points;
 		auto it = tops0.begin();
