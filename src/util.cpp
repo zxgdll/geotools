@@ -13,7 +13,7 @@
 using namespace geotools::util;
 
 Point::Point(double x, double y, double z) :
-	x(x), y(y), z(y) {
+	x(x), y(y), z(z) {
 }
 
 Point::Point(double x, double y, double z, const std::map<std::string, std::string> &fields) :
@@ -283,9 +283,12 @@ void Util::status(int step, int of, const std::string &message, bool end) {
                 if(step > of) of = step;
                 float status = (float) (step * 100) / of;
                 std::stringstream out;
-                out << "Status: " << std::fixed << std::setprecision(2) << status << "% " << message << "\r";
-                if(end) out << std::endl;
-                std::cerr << out.str();
+                out << "Status: " << std::fixed << std::setprecision(2) << status << "% " << message << std::right << std::setw(100) << std::setfill(' ');
+                if(end) 
+			out << std::endl;
+		else
+			out << '\r';
+		std::cerr << out.str();
                 std::cerr.flush();
         }
 }
