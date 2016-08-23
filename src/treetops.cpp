@@ -9,10 +9,9 @@
 #include <iostream>
 #include <omp.h>
 
-#include "Raster.hpp"
+#include "raster.hpp"
 #include "util.hpp"
 #include "trees.hpp"
-
 #include "sqlite.hpp"
 
 using namespace geotools::raster;
