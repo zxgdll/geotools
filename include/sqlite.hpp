@@ -203,7 +203,7 @@ namespace geotools {
 				char *err;
 				begin();
 				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT COUNT(*) FROM data", 
-					SQLite::countCallback, &count, &err)) {
+					SQLite::countCallback, count, &err)) {
 					rollback();
 					handleError("Failed to retrieve record count: ", err);
 				}
