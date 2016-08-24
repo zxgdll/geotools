@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 
 if (${APPLE})
+	set (Qt5_DIR /usr/local/Cellar/qt5/5.6.1-1/lib/cmake/Qt5)
 	set (CMAKE_C_COMPILER /usr/local/bin/gcc-6 CACHE STRING "C compiler" FORCE)
 	set (CMAKE_CXX_COMPILER /usr/local/bin/g++-6 CACHE STRING "C++ compiler" FORCE)
 endif()
