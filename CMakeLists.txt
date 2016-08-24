@@ -23,8 +23,8 @@ set (CMAKE_CXX_STANDARD 11)
 
 project (geotools)
 
-link_directories(/usr/local/lib /usr/lib)
-include_directories(include /usr/local/include /usr/include /usr/include/x86_64-linux-gnu/qt5 /usr/local/include/gdal /usr/local/include/geos /usr/include/gdal /usr/include/geos)
+link_directories(/usr/local/opt/sqlite/lib /usr/local/lib /usr/lib)
+include_directories(/usr/local/opt/sqlite/include include /usr/local/include /usr/include /usr/include/x86_64-linux-gnu/qt5 /usr/local/include/gdal /usr/local/include/geos /usr/include/gdal /usr/include/geos)
 
 
 add_executable (flood src/flood.cpp src/geotools.cpp)
