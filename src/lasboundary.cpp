@@ -36,7 +36,7 @@
 #include "geotools.h"
 #include "util.hpp"
 #include "lasutil.hpp"
-#include "Raster.hpp"
+#include "raster.hpp"
 #include "Vector.hpp"
 
 #define LAS_EXT ".las"
@@ -44,6 +44,10 @@
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
 namespace geom = geos::geom;
+
+
+#include "raster.cpp"
+
 
 using namespace geotools::util;
 using namespace geotools::raster;

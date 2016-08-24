@@ -41,7 +41,7 @@
  
 #include "geotools.h"
 #include "util.hpp"
-#include "Raster.hpp"
+#include "raster.hpp"
 
 namespace geom = geos::geom;
 namespace alg = boost::algorithm;
@@ -49,6 +49,10 @@ namespace alg = boost::algorithm;
 #define RASTER 1
 #define VECTOR 2
 #define CSV 3
+
+
+#include "raster.cpp"
+
 
 using namespace geotools::util;
 using namespace geotools::raster;

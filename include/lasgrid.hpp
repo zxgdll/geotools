@@ -7,7 +7,7 @@
 #include <map>
 
 #include "geotools.h"
-#include "Raster.hpp"
+#include "raster.hpp"
 #include "util.hpp"
 
 #define TYPE_MIN 1

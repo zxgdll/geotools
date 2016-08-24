@@ -20,7 +20,11 @@
 #include <iomanip>
 #include <sstream>
 
-#include "Raster.hpp"
+#include "raster.hpp"
+
+
+#include "raster.cpp"
+
 
 using namespace geotools::raster;
 

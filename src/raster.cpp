@@ -1,7 +1,10 @@
+#include <queue>
+
 #include "raster.hpp"
 
 using namespace geotools::util;
 using namespace geotools::raster;
+
 
 // Implementations for Cell
 Cell::Cell(int col, int row) :
@@ -109,14 +112,17 @@ T Grid<T>::variance() {
 	return m_variance;
 }
 
-template <class T, class U>
+template <class T>
+template <class U>
 std::vector<int> Grid<T>::floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U fill) {
+
 	int minc = cols() + 1;
 	int minr = rows() + 1;
 	int maxc = -1;
 	int maxr = -1;
 	int area = 0;
 
+	std::queue<std::unique_ptr<Cell> > q;
 	q.push(std::unique_ptr<Cell>(new Cell(col, row)));
 
 	std::vector<bool> visited(size(), false); // Tracks visited pixels.
@@ -342,7 +348,8 @@ MemRaster<T>::MemRaster(int cols, int rows) : MemRaster() {
 	init(cols, rows);
 }
 
-template <class T, class U>
+template <class T>
+template <class U>
 MemRaster<T>::MemRaster(Grid<U> &tpl) : MemRaster() {
 	init(tpl.cols(), tpl.rows());
 }
@@ -372,7 +379,8 @@ bool MemRaster<T>::hasGrid() const {
 	return true;
 }
 
-template <class T, class U>
+template <class T>
+template <class U>
 void MemRaster<T>::convert(MemRaster<U> &g) {
 	g.init(cols(), rows());
 	for(size_t i = 0; i < size(); ++i)
@@ -394,7 +402,21 @@ size_t MemRaster<T>::size() const {
 	return (size_t) m_rows * m_cols;
 }
 
-template <class T, class U>
+template <class T>
+void MemRaster<T>::init(int cols, int rows) {
+	if(cols <= 0 || rows <= 0)
+		g_argerr("Invalid row or column count.");
+	if(cols != m_cols || rows != m_rows) {
+		m_cols = cols;
+		m_rows = rows;
+		if(m_grid != nullptr)
+			free(m_grid);
+		m_grid = (T *) malloc(sizeof(T) * cols * rows);
+	}
+}
+
+template <class T>
+template <class U>
 void MemRaster<T>::init(Grid<U> &tpl) {
 	init(tpl.cols(), tpl.rows());
 }
@@ -709,6 +731,12 @@ void Raster<T>::loadBlock(int col, int row, bool forWrite) {
 }
 
 template <class T>
+GDALDataType Raster<T>::getType(unsigned long v) {
+	(void) v;
+	g_runerr("Raster with 64 bit integral type requested. Not implemented.");
+}
+
+template <class T>
 GDALDataType Raster<T>::getType(double v) {
 	(void) v;
 	return GDT_Float64;
@@ -760,9 +788,9 @@ T Raster<T>::getDefaultNodata() {
 	switch(getType()) {
 	case GDT_Float32:
 	case GDT_Float64:
-		return -9999.0;
+		return (T) -9999.0; // Hides the implicit overflow for unsigned types. (Compiler error.)
 	default:
-		return 0;
+		return (T) 0;
 	}
 }
 
@@ -775,18 +803,19 @@ Raster<T>::Raster() :
 	m_type(getType()) {
 }
 
-template <class T, class D>
-Raster<T>::Raster(const std::string &filename, int band, const Raster<D> &tpl) : Raster() {
+template <class T>
+template <class U>
+Raster<T>::Raster(const std::string &filename, int band, const Raster<U> &tpl) : Raster() {
 	std::string proj;
 	tpl.projection(proj);
 	init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(),
 		tpl.resolutionY(), (T) tpl.nodata(), proj);
 }
 
-template <class T>
-Raster<T>::Raster(const std::string &filename, int band, const Raster<T> &tpl) : Raster() {
-	init(filename, band, tpl);
-}
+//template <class T>
+//Raster<T>::Raster(const std::string &filename, int band, const Raster<T> &tpl) : Raster() {
+//	init(filename, band, tpl);
+//}
 
 template <class T>
 Raster<T>::Raster(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
@@ -812,8 +841,9 @@ Raster<T>::Raster(const std::string &filename, int band, bool writable) : Raster
 	init(filename, band, writable);
 }
 
-template <class T, class D>
-void Raster<T>::init(const std::string &filename, int band, const Raster<D> &tpl) {
+template <class T>
+template <class U>
+void Raster<T>::init(const std::string &filename, int band, const Raster<U> &tpl) {
 	g_trace("Raster init: " << filename << "; [tpl]");
 	std::string proj;
 	tpl.projection(proj);
@@ -923,7 +953,7 @@ std::string Raster<T>::filename() const {
 }
 
 template <class T>
-std::string Raster<T>::epsg2ProjText(int crs) {
+std::string Raster<T>::epsg2ProjText(int crs) const {
 	OGRSpatialReference ref;
 	char *wkt;
 	ref.importFromEPSG(crs);
@@ -1212,4 +1242,3 @@ Raster<T>::~Raster() {
 }
 
 
-template class Grid<int>;

@@ -537,6 +537,8 @@ namespace geotools {
 
 			GDALDataType getType(unsigned int v);
 
+			GDALDataType getType(unsigned long v);
+			
 			GDALDataType getType(int v);
 
 			GDALDataType getType(unsigned short v);
@@ -565,13 +567,13 @@ namespace geotools {
 			/**
 			 * Create a new raster for writing with a template of a different type.
 			 */
-			template <class D>
-			Raster(const std::string &filename, int band, const Raster<D> &tpl);
+			template <class U>
+			Raster(const std::string &filename, int band, const Raster<U> &tpl);
 
 			/**
 			 * Create a new raster for writing with a template of a different type.
 			 */
-			Raster(const std::string &filename, int band, const Raster<T> &tpl);
+			//Raster(const std::string &filename, int band, const Raster<T> &tpl);
 
 			/**
 			 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
@@ -600,8 +602,8 @@ namespace geotools {
 			 * Initialize the raster using the given file (which may not exist) using
 			 * another raster as a template. The raster pixel types need not be the same.
 			 */
-			template <class D>
-			void init(const std::string &filename, int band, const Raster<D> &tpl);
+			template <class U>
+			void init(const std::string &filename, int band, const Raster<U> &tpl);
 
 			void init(const std::string &filename, int band, const Bounds &bounds, double resolutionX, double resolutionY,
 				double nodata, const std::string &proj);
@@ -800,5 +802,6 @@ namespace geotools {
 	} // raster
 
 } // geotools
+
 
 #endif

@@ -14,9 +14,12 @@
 
 #include "geotools.h"
 #include "util.hpp"
-#include "Raster.hpp"
+#include "raster.hpp"
 
 #define LAS2CSRS_DATA "LAS2CSRS_DATA"
+
+
+#include "raster.cpp"
 
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
