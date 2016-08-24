@@ -18,6 +18,9 @@ using namespace geotools::raster;
 using namespace geotools::util;
 using namespace geotools::db;
 
+// Include, rather than link to ensure that template instantiations occur.
+#include "raster.cpp"
+
 namespace geotools {
 
 	namespace trees {
@@ -178,7 +181,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 
 	#pragma omp parallel
 	{
-		g_trace("Thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
+		g_debug("Thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
 		MemRaster<float> blk(cols, blockHeight);
 		std::map<size_t, std::unique_ptr<Top> > tops0;
 		double max;
@@ -226,7 +229,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 		#pragma omp atomic
 		topCount += topCount0; // TODO: Doesn't work for status because there's no barrier here.
 		
-		g_trace("Writing " << topCount << " tops.");
+		g_debug("Writing " << topCount << " tops.");
 
 		Util::status(1, 2, "Locating tops... [Saving to database.]");
 
@@ -246,7 +249,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 				#pragma omp critical(b)
 				{
 					tc += points.size();
-					g_trace("inserting " << points.size() << " points");
+					g_debug("inserting " << points.size() << " points");
 					db.begin();	
 					// Add to the file.
 					db.addPoints(points);
@@ -263,7 +266,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 	//db.createGeomIndex();
 
 	Util::status(1, 1, "Locating tops... Done.", true);
-	g_trace("Done.");
+	g_debug("Done.");
 
 }
 
@@ -291,13 +294,13 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 	SQLite db(topsvect);
 	size_t geomCount;
 	db.getGeomCount(&geomCount);
-	g_trace("Processing " << geomCount << " tree tops.");
+	g_debug("Processing " << geomCount << " tree tops.");
 
 	// The number of extra rows above and below the buffer.
 	int bufRows = (int) std::ceil(g_abs(radius / inrast.resolutionY()));
-	// The height of the row, not including disposable buffer.
-	g_trace(batchSize << " " << geomCount << " " << inrast.rows() << " " <<  g_abs(std::ceil((double) batchSize / geomCount * inrast.rows()) / inrast.resolutionY()));
-	int rowStep = (int) g_abs(std::ceil((double) batchSize / geomCount * inrast.rows()) / inrast.resolutionY());
+	// The height of the row, not including disposable buffer. Use bufRows as lower bound to
+	// avoid read error later (keeps min row index to >=0)
+	int rowStep = g_max(bufRows, (int) g_abs(std::ceil((double) batchSize / geomCount * inrast.rows()) / inrast.resolutionY()));
 	// The totoal height of the buffer
 	int rowHeight = rowStep + bufRows * 2;
 	int rowCompleted = 0;
@@ -313,8 +316,8 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 	#pragma omp parallel for
 	for(int row = 0; row < inrast.rows(); row += rowStep) {
 
-		g_trace("Processing " << batchSize << " of " << geomCount << " points.");
-		g_trace(" - row " << row << " of " << inrast.rows());
+		g_debug("Processing " << batchSize << " of " << geomCount << " points.");
+		g_debug(" - row " << row << " of " << inrast.rows() << "; step: " << rowStep);
 
 		Util::status(rowCompleted, inrast.rows(), "Delineating crowns...");
 		
@@ -332,6 +335,7 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 		{
 			db.getPoints(tops, bounds);
 		}
+		g_debug(" - reading from source: " << 0 << ", " << (row == 0 ? row : row - bufRows) << ", [buf], " << 0 << ", " << (row == 0 ? bufRows : 0));
 		#pragma omp critical(crowns_readbuf) 
 		{
 			inrast.readBlock(0, row == 0 ? row : row - bufRows, buf, 0, row == 0 ? bufRows : 0);
@@ -379,7 +383,7 @@ void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsve
 		}
 
 		Util::status(rowCompleted, inrast.rows(), "Delineating crowns... [Writing to raster.]");
-		g_trace(" - tmp block: cols: " << blk.cols() << ", rows: " <<  (row == 0 ? rowStep + bufRows : rowStep));
+		g_debug(" - tmp block: cols: " << blk.cols() << ", rows: " <<  (row == 0 ? rowStep + bufRows : rowStep));
 		if(row > 0 && (row + bufRows) >= inrast.rows())
 			continue;
 		#pragma omp critical(b)
