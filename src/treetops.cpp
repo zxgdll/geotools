@@ -115,6 +115,7 @@ namespace geotools {
 
 using namespace geotools::trees;
 using namespace geotools::trees::util;
+using namespace geotools::trees::config;
 
 Top::Top(size_t id, double x, double y, double z, int col, int row) :
 	id(id),
@@ -131,7 +132,7 @@ Top::Top() :
 }
 
 
-void TreeUtil::smooth(const std::string &inraster, const std::string &outraster, double sigma, double window) {
+void Trees::smooth(const std::string &inraster, const std::string &outraster, double sigma, double window) {
 	if(inraster.empty())
 		g_argerr("Input raster must be given.");
 	if(outraster.empty())
@@ -141,24 +142,25 @@ void TreeUtil::smooth(const std::string &inraster, const std::string &outraster,
 	in.smooth(out, sigma, window);
 }
 
-void TreeUtil::treetops(const std::string &inraster, const std::string &outvect, int window, double minHeight,
-	int srid, std::vector<std::unique_ptr<trees::util::Top> > *tops) {
+void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<trees::util::Top> > *tops) {
+	
+	config.check();
 	
 	Util::status(0, 1, "Locating tops...");
-	
-	if(inraster.empty())
-		g_argerr("Input raster cannot be empty.");
-	if(outvect.empty())
-		g_warn("The treetop output filename is empty; not writing treetops");
-	if(window < 3)
-		g_argerr("A window size less than 3 makes no sense.");
-	if(window % 2 == 0) {
-		window++;
-		g_warn("Window is " << window << ". Bumping up to " << window);
+
+	// Smooth if necessary; set appropriate input filename.
+	std::string inputFilename;
+	if(config.performSmoothing) {
+		smooth(config.inputFilename, config.smoothedFilename, config.smoothingSigma, config.smoothingWindow);
+		inputFilename.assign(config.smoothedFilename);
+	} else {
+		inputFilename.assign(config.inputFilename);
 	}
 
 	Util::status(0, 1, "Locating tops... [Preparing input raster.]");
-	Raster<float> raster(inraster);
+
+	// Initialize input raster.
+	Raster<float> raster(inputFilename);
 	size_t count = raster.size();
 	int cols = raster.cols();
 	int rows = raster.rows();
@@ -167,21 +169,23 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 	size_t tid = 0;
 
 	Util::status(0, 1, "Locating tops... [Preparing database.]");	
-	SQLite db(outvect, SQLite::POINT, srid, {{"id", 1}}); // TODO: Get SRID from raster.
+
+	// Prepare database.
+	SQLite db(config.outputFilename, SQLite::POINT, config.srid, {{"id", 1}}); // TODO: Get SRID from raster.
 	db.makeFast();
 	db.dropGeomIndex();
-	db.setCacheSize(1024 * 1024);
+	db.setCacheSize(config.tableCacheSize);
 	db.clear(); // TODO: Faster to delete it and start over.
 	
 	// This is the size of the cache used by each thread.
-	int cachedRows = g_max(100, (24 * 1024 * 1024) / raster.rows() / sizeof(float));	// TODO: Make row cache configurable.
-	int blockHeight = window + cachedRows;
+	int cachedRows = g_max(100, (config.rowCacheSize / raster.rows() / sizeof(float))); // TODO: Make row cache configurable.
+	int blockHeight = config.searchWindow + cachedRows;
 	size_t tc = 0;
 	size_t topCount = 0;
 
 	#pragma omp parallel
 	{
-		g_debug("Thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
+		g_debug(" - thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
 		MemRaster<float> blk(cols, blockHeight);
 		std::map<size_t, std::unique_ptr<Top> > tops0;
 		double max;
@@ -207,17 +211,17 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 				raster.readBlock(0, curRow, blk);
 			}
 			
-			for(int r = 0; r < cachedRows - window; ++r) {
-				for(int c = 0; c < cols - window; ++c) {
+			for(int r = 0; r < cachedRows - config.searchWindow; ++r) {
+				for(int c = 0; c < cols - config.searchWindow; ++c) {
 					size_t id = ((size_t) c << 32) | (r + curRow);
-					if(blk.get(c, r) >= minHeight && isMaxCenter(blk, c, r, window, &max)) {
+					if(blk.get(c, r) >= config.minHeight && isMaxCenter(blk, c, r, config.searchWindow, &max)) {
 						std::unique_ptr<Top> t(new Top(
 							++tid, 
-							raster.toX(c + window / 2) + raster.resolutionX() / 2.0, // center of pixel
-							raster.toY(r + curRow + window / 2) + raster.resolutionY() / 2.0, 
+							raster.toX(c + config.searchWindow / 2) + raster.resolutionX() / 2.0, // center of pixel
+							raster.toY(r + curRow + config.searchWindow / 2) + raster.resolutionY() / 2.0, 
 							max,
-							c + window / 2,
-							r + curRow + window / 2
+							c + config.searchWindow / 2,
+							r + curRow + config.searchWindow / 2
 						));
 						tops0[id] = std::move(t);
 						++topCount0;
@@ -229,7 +233,7 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 		#pragma omp atomic
 		topCount += topCount0; // TODO: Doesn't work for status because there's no barrier here.
 		
-		g_debug("Writing " << topCount << " tops.");
+		g_debug(" - writing " << topCount << " tops.");
 
 		Util::status(1, 2, "Locating tops... [Saving to database.]");
 
@@ -261,16 +265,18 @@ void TreeUtil::treetops(const std::string &inraster, const std::string &outvect,
 		}
 	}
 
-	Util::status(99, 100, "Locating tops... [Building index.]");
+	if(config.buildIndex) {
+		Util::status(99, 100, "Locating tops... [Building index.]");
+		db.createGeomIndex();
+	}
 	db.makeSlow();
-	//db.createGeomIndex();
 
 	Util::status(1, 1, "Locating tops... Done.", true);
 	g_debug("Done.");
 
 }
 
-void TreeUtil::treecrowns(const std::string &inraster, const std::string &topsvect, 
+void Trees::treecrowns(const std::string &inraster, const std::string &topsvect, 
 	const std::string &crownsrast, const std::string &crownsvect, 
 	double threshold, double radius, double minHeight, bool d8) {
 

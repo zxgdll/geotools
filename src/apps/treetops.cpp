@@ -47,8 +47,11 @@ int main(int argc, char **argv) {
 
 	using namespace geotools::trees;
 	using namespace geotools::trees::util;
+	using namespace geotools::trees::config;
 
 	try {
+
+		TreeTopConfig ttConfig;
 		std::string inraster;  // Input raster.
 		std::string topsvect;  // Treetops output.
 		std::string crownrast;
@@ -67,11 +70,11 @@ int main(int argc, char **argv) {
 		for(; i < argc; ++i) {
 			std::string arg = argv[i];
 			if(arg == "-i") {
-				inraster = argv[++i];
+				ttConfig.setInputFilename(argv[++i]);
 			} else if(arg == "-t") {
-				topsvect = argv[++i];
+				ttConfig.setOutputFilename(argv[++i]);
 			} else if(arg == "-s") {
-				srid = atoi(argv[++i]);
+				ttConfig.setSRID(atoi(argv[++i]));
 			} else if(arg == "-cr") {
 				crownrast = argv[++i];
 			} else if(arg == "-cv") {
@@ -83,13 +86,17 @@ int main(int argc, char **argv) {
 			} else if(arg == "-cd") {
 				radius = atof(argv[++i]);
 			} else if(arg == "-tm") {
-				tminHeight = atof(argv[++i]);
+				ttConfig.setMinHeight(atof(argv[++i]));
 			} else if(arg == "-w") {
-				window = atoi(argv[++i]);
+				ttConfig.setSearchWindow(atoi(argv[++i]));
 			} else if(arg == "-v") {
 				g_loglevel(G_LOG_TRACE);
 			} else if(arg == "-sf") {
-				smoothed.assign(argv[++i]);
+				ttConfig.setSmoothedFilename(argv[++i]);
+			} else if(arg == "-ss") {
+				ttConfig.setSmoothingSigma(atof(argv[++i]));
+			} else if(arg == "-sw") {
+				ttConfig.setSmoothingWindow(atoi(argv[++i]));
 			} else if(arg == "-d8") {
 				d8 = true;
 			} else if(arg == "-threads") {
@@ -108,16 +115,10 @@ int main(int argc, char **argv) {
 			crowns = false;
 		}
 
-		TreeUtil tu;
-
-		// Create a smoothed raster.
-		if(!smoothed.empty()) {
-			tu.smooth(inraster, smoothed);
-			inraster.assign(smoothed);
-		}
+		Trees tu;
 
 		// Create tree tops.
-		tu.treetops(inraster, topsvect, window, tminHeight, srid);
+		tu.treetops(ttConfig);
 
 		// Create crowns if desired.
 		if(crowns)
