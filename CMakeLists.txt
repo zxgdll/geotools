@@ -21,6 +21,31 @@ set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
 set (CMAKE_CXX_STANDARD 11)
 
+set (CPACK_PACKAGE_NAME "GeoTools")
+set (CPACK_PACKAGE_VENDOR "dijital.ca")
+set (CPACK_PACKAGE_DESCRIPTION_SUMMARY "GeoTools - Tools for working with geodata.")
+set (CPACK_PACKAGE_VERSION "1.0.0")
+set (CPACK_PACKAGE_VERSION_MAJOR "1")
+set (CPACK_PACKAGE_VERSION_MINOR "0")
+set (CPACK_PACKAGE_VERSION_PATCH "0")
+set (CPACK_PACKAGE_INSTALL_DIRECTORY "geotools")
+
+set (CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "GeoTools Applications")
+set (CPACK_COMPONENT_LIBRARIES_DISPLAY_NAME "GeoTools Libraries")
+set (CPACK_COMPONENT_HEADERS_DISPLAY_NAME "GeoTools Header Files")
+
+set (CPACK_COMPONENT_APPLICATIONS_DESCRIPTION "GeoTools applications.")
+set (CPACK_COMPONENT_LIBRARIES_DESCRIPTION "Libraries for extending GeoTools.")
+set (CPACK_COMPONENT_HEADERS_DESCRIPTION "C/C++ header files for use with GeoTools.")
+
+set (CPACK_ALL_INSTALL_TYPES Full User)
+
+set (CPACK_COMPONENT_LIBRARIES_INSTALL_TYPES Full)
+set (CPACK_COMPONENT_APPLICATIONS_INSTALL_TYPES Full User)
+set (CPACK_COMPONENT_HEADERS_INSTALL_TYPES Full)
+
+include (CPack)
+
 project (geotools)
 
 link_directories(/usr/local/opt/sqlite/lib /usr/local/lib /usr/lib)
@@ -31,7 +56,6 @@ add_executable (flood src/flood.cpp src/geotools.cpp)
 target_link_libraries (flood gdal)
 
 
-
 add_executable (rasterstats src/rasterstats.cpp src/geotools.cpp)
 target_link_libraries (rasterstats gdal)
 
@@ -39,12 +63,10 @@ add_executable (mosaic-app src/mosaic.cpp src/geotools.cpp)
 target_link_libraries (mosaic-app gdal boost_system boost_filesystem)
 
 
-
 add_library (treetops SHARED src/treetops.cpp src/util.cpp src/geotools.cpp)
 target_link_libraries (treetops gdal sqlite3 spatialite)
 add_executable (treetops-app src/apps/treetops.cpp)
 target_link_libraries (treetops-app PUBLIC treetops gdal)
-
 
 
 add_library(lasgrid SHARED src/lasgrid.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
@@ -87,9 +109,9 @@ install (TARGETS rasterstats DESTINATION bin)
 
 install (TARGETS mosaic-app DESTINATION bin)
 
-install (TARGETS lasgrid DESTINATION lib)
-install (TARGETS lasgrid-app DESTINATION bin)
-install (FILES include/lasgrid.hpp DESTINATION include)
+install (TARGETS lasgrid DESTINATION lib COMPONENT libraries)
+install (TARGETS lasgrid-app RUNTIME DESTINATION bin COMPONENT applications)
+install (FILES include/lasgrid.hpp DESTINATION include COMPONENT headers)
 
 install (TARGETS lasvalidate DESTINATION lib)
 install (TARGETS lasvalidate-app DESTINATION bin)
@@ -105,4 +127,7 @@ install (TARGETS lasclip DESTINATION bin)
 
 install (TARGETS las2csrs DESTINATION bin)
 install (DIRECTORY share/ DESTINATION share PATTERN "share/*")
+
+
+set (CPACK_COMPONENTS_ALL applications libraries headers)
 
