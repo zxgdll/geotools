@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.0)
 
 if (${APPLE})
 	set (Qt5_DIR /usr/local/Cellar/qt5/5.6.1-1/lib/cmake/Qt5)
-	set (CMAKE_C_COMPILER /usr/local/bin/gcc-6 CACHE STRING "C compiler" FORCE)
-	set (CMAKE_CXX_COMPILER /usr/local/bin/g++-6 CACHE STRING "C++ compiler" FORCE)
+	set (CMAKE_C_COMPILER /usr/local/bin/clang-omp CACHE STRING "C compiler" FORCE)
+	set (CMAKE_CXX_COMPILER /usr/local/bin/clang-omp++ CACHE STRING "C++ compiler" FORCE)
 endif()
 
 enable_language(C)
@@ -38,11 +38,13 @@ set (CPACK_COMPONENT_APPLICATIONS_DESCRIPTION "GeoTools applications.")
 set (CPACK_COMPONENT_LIBRARIES_DESCRIPTION "Libraries for extending GeoTools.")
 set (CPACK_COMPONENT_HEADERS_DESCRIPTION "C/C++ header files for use with GeoTools.")
 
-set (CPACK_ALL_INSTALL_TYPES Full User)
-
 set (CPACK_COMPONENT_LIBRARIES_INSTALL_TYPES Full)
 set (CPACK_COMPONENT_APPLICATIONS_INSTALL_TYPES Full User)
 set (CPACK_COMPONENT_HEADERS_INSTALL_TYPES Full)
+
+set (CPACK_ALL_INSTALL_TYPES Full User)
+set (CPACK_COMPONENTS_ALL applications libraries headers)
+set (CPACK_INSTALL_CMAKE_PROJECTS /Users/robskelly/Documents/geotools/makefiles/lasgrid-app;lasgrid-app;ALL;/)
 
 include (CPack)
 
@@ -76,7 +78,7 @@ target_link_libraries (spectra-app PUBLIC spectra)
 
 
 add_library(lasgrid SHARED src/lasgrid.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasgrid las gdal las laszip boost_system boost_filesystem)
+target_link_libraries (lasgrid gdal laszip las boost_system boost_filesystem)
 add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp)
 target_link_libraries (lasgrid-app PUBLIC lasgrid Qt5::Gui Qt5::Core Qt5::Widgets)
 
@@ -139,5 +141,5 @@ install (TARGETS las2csrs DESTINATION bin)
 install (DIRECTORY share/ DESTINATION share PATTERN "share/*")
 
 
-set (CPACK_COMPONENTS_ALL applications libraries headers)
+
 
