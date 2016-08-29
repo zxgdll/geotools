@@ -20,8 +20,8 @@ namespace geotools {
                          */
                         class TreeTopConfig {
 				friend class geotools::trees::Trees;
-
-                        protected:
+			public:
+                       // ..protected:
                                 /**
                                  * Set to true to perform smoothing on the input raster.
                                  * This will force a check that the smoothing params are valild.

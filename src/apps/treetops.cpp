@@ -19,6 +19,7 @@ void usage() {
 			<< " -sf <filename>     If the CHM is to be smoothed, enter the filename of the\n"
 			<< "                    smoothed raster.\n"
 			<< " -ss <float>        The std. deviation value for gaussian smoothing (if -sf is\n"
+			<< " -sw <int>          The smoothing window size. 3 or greater; odd.\n"
 			<< "                    provided). Default 0.8408964\n"
 			<< " -cr <filename>     The crowns raster. If this is not provided, crowns are not\n" 
 			<< "                    produced.\n"
@@ -122,7 +123,7 @@ int main(int argc, char **argv) {
 
 		// Create crowns if desired.
 		if(crowns)
-			tu.treecrowns(inraster, topsvect, crownrast, crownvect, threshold, radius, cminHeight, d8);
+			tu.treecrowns(ttConfig.smoothedFilename, ttConfig.outputFilename, crownrast, crownvect, threshold, radius, cminHeight, d8);
 
 	} catch(const std::exception &e) {
 		std::cerr << e.what() << std::endl;
