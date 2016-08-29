@@ -675,6 +675,11 @@ namespace geotools {
 			GDALDataType type() const;
 
 			/**
+			 * Return the raster's geographic bounds.
+			 */
+			geotools::util::Bounds bounds() const;
+
+			/**
 			 * The minimum bounding x.
 			 */
 			double minx() const;

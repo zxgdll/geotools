@@ -1044,6 +1044,11 @@ GDALDataType Raster<T>::type() const {
 }
 
 template <class T>
+Bounds Raster<T>::bounds() const {
+	return Bounds(minx(), miny(), maxx(), maxy());
+}
+
+template <class T>
 double Raster<T>::minx() const {
 	return toX(0);
 }
