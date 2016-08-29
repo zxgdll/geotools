@@ -94,13 +94,13 @@ public:
 	}
 };
 
-std::set<int> computeBandList(const std::set<int> &bands, const std::string &specFilename) {
-	std::set<int> b;
-	b.insert(bands.begin(), bands.end());
+std::vector<int> computeBandList(const std::set<int> &bands, const std::string &specFilename) {
+	std::vector<int> b;
+	b.assign(bands.begin(), bands.end());
 	if(b.empty()) {
 		Raster<unsigned int> tmp(specFilename);
 		for(int i = 1; i <= tmp.bandCount(); ++i)
-			b.emplace(i);
+			b.push_back(i);
 	}
 	return b;
 }
@@ -121,14 +121,10 @@ void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idx
 	g_debug("processSpectralFile [config] [raster] " << specFilename);
 
 	// TODO: More versatile band selection.
-	std::set<int> bands = computeBandList(config.bands, specFilename);
+	std::vector<int> bands = computeBandList(config.bands, specFilename);
 	Bounds bounds = computeOverlapBounds(idxRaster, specFilename);
 
 	g_debug(" - bands " << bands.size() << "; bounds: " << bounds.print());
-
-	std::unordered_map<unsigned int, std::unique_ptr<Poly> > polys;
-	std::unordered_set<unsigned int> keep;
-	std::unordered_set<unsigned int> skip;
 
 	int startRow = idxRaster.toRow(bounds.miny());
 	int endRow = idxRaster.toRow(bounds.maxy());
@@ -137,13 +133,19 @@ void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idx
 
 	g_debug(" - rows: " << startRow << " -> " << endRow << "; cols: " << startCol << " -> " << endCol);
 
-	for(int row = startRow; row < endRow; ++row) {
-		keep.clear();
+	// Iterate over bands to populate Polys
+	#pragma omp parallel for
+	for(int b = 0; b < bands.size(); ++b) {
 
-		// Iterate over bands to populate Polys
-		for(const int &band : bands) {
+		int band = bands[b];
 
-			Raster<unsigned short> specRaster(specFilename, band);
+		Raster<unsigned short> specRaster(specFilename, band);
+		std::unordered_set<unsigned int> keep;
+		std::unordered_set<unsigned int> skip;
+		std::unordered_map<unsigned int, std::unique_ptr<Poly> > polys;
+
+		for(int row = startRow; row < endRow; ++row) {
+			keep.clear();
 
 			for(int col = startCol; col < endCol; ++col) {
 				unsigned int id = idxRaster.get(col, row);
@@ -172,7 +174,10 @@ void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idx
 		std::list<unsigned int> premove;
 		for(const auto &it : polys) {
 			if(keep.find(it.first) == keep.end()) {
-				it.second->print(std::cout << std::fixed << std::setprecision(12));
+				#pragma omp critical
+				{
+					it.second->print(std::cout << std::fixed << std::setprecision(12));
+				}
 				premove.push_back(it.first);
 			}
 		}
@@ -182,8 +187,11 @@ void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idx
 }
 
 void Spectral::extractSpectra(const SpectralConfig &config) {
+	g_debug("extractSpectra [config]");
+
 	Raster<unsigned int> idxRaster(config.indexFilename);
 	for(const std::string &specFilename : config.spectralFilenames) {
+		g_debug(" - file: " << specFilename);
 		processSpectralFile(config, idxRaster, specFilename);
 	}
 }
