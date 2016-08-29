@@ -630,6 +630,11 @@ namespace geotools {
 			std::string filename() const;
 
 			/**
+			 * Return the number of bands in the raster.
+			 */
+			int bandCount() const;
+
+			/**
 			 * Converts a numerical (EPSG) crs code to a projection string.
 			 */
 			std::string epsg2ProjText(int crs) const;
