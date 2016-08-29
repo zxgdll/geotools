@@ -707,8 +707,10 @@ template <class T>
 void BlockCache<T>::close() {
 	flush();
 	for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
-		if(it->second)                  
+		if(it->second) {
 			free(it->second);
+			it->second = nullptr;
+		}
 	}
 }
 
@@ -950,6 +952,11 @@ void Raster<T>::setCacheSize(size_t size) {
 template <class T>
 std::string Raster<T>::filename() const {
 	return m_filename;
+}
+
+template <class T>
+int Raster<T>::bandCount() const {
+	return m_ds->GetRasterCount();
 }
 
 template <class T>
