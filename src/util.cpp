@@ -66,6 +66,10 @@ bool Bounds::intersects(const Bounds &b, int dims) const {
 	}
 }
 
+Bounds Bounds::intersection(const Bounds &other) const {
+	return Bounds(g_max(minx(), other.minx()), g_max(miny(), other.miny()), g_min(maxx(), other.maxx()), g_min(maxy(), other.maxy()));
+}
+
 double Bounds::minx() const {
 	return m_minx;
 }

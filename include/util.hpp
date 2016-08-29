@@ -39,6 +39,8 @@ namespace geotools {
 
 			bool intersects(const geotools::util::Bounds &b, int dims = 2) const;
 
+			Bounds intersection(const Bounds &other) const;
+
 			double minx() const;
 
 			void minx(double minx);
