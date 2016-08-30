@@ -559,6 +559,14 @@ namespace geotools {
 
 		public:
 
+			const static int FLOAT64 = 1;
+			const static int FLOAT32 = 2;
+			const static int UINT32 = 3;
+			const static int UINT16 = 4;
+			const static int BYTE = 5;
+			const static int INT32 = 6;
+			const static int INT16 = 7;
+			
 			/**
 			 * Basic constructor.
 			 */
@@ -619,6 +627,12 @@ namespace geotools {
 			 */
 			void init(const std::string &filename, int band = 1, bool writable = false);
 
+			/**
+			 * Attempts to return the datatype of the raster
+			 * with the given filename.
+			 */
+			static int getType(const std::string &filename);
+			
 			/**
 			 * Set the number of blocks in the cache.
 			 */

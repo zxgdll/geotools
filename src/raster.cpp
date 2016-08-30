@@ -945,6 +945,24 @@ void Raster<T>::init(const std::string &filename, int band, bool writable) {
 }
 
 template <class T>
+int Raster<T>::getType(const std::string &filename) {
+	GDALDataset *ds = (GDALDataset *) GDALOpen(filename.c_str(), GA_ReadOnly);
+	int type = ds->GetRasterBand(1)->GetRasterDataType();
+	GDALClose(ds);
+	switch(type) {
+	case GDT_Byte: return Raster<T>::BYTE;
+	case GDT_UInt16: return Raster<T>::UINT16;
+	case GDT_UInt32: return Raster<T>::UINT32;
+	case GDT_Int16: return Raster<T>::INT16;
+	case GDT_Int32: return Raster<T>::INT32;
+	case GDT_Float32: return Raster<T>::FLOAT32;
+	case GDT_Float64: return Raster<T>::FLOAT64;
+	default:
+		g_argerr("Unknown data type: " << type);
+	}
+}
+
+template <class T>
 void Raster<T>::setCacheSize(size_t size) {
 	m_cache.setSize(size);
 }
