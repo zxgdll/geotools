@@ -167,30 +167,34 @@ void processSpectralFile(const SpectralConfig &config, const std::string &specFi
 	g_debug(" - rows: " << startRow << " -> " << endRow << "; cols: " << startCol << " -> " << endCol);
 	g_debug(" - bands " << bands.size() << "; bounds: " << bounds.print());
 
+	std::unordered_map<unsigned int, std::unique_ptr<Poly> > polys;
+	std::unordered_set<unsigned int> keep;
+	std::unordered_set<unsigned int> skip;
+
 	// Iterate over bands to populate Polys
 	#pragma omp parallel for
 	for(int b = 0; b < bands.size(); ++b) {
 
 		int band = bands[b];
 
+		g_debug(" - band " << band);
+
 		Raster<unsigned int> idxRaster(config.indexFilename);
 		Raster<unsigned short> specRaster(specFilename, band);
-		std::unordered_set<unsigned int> keep;
-		std::unordered_set<unsigned int> skip;
-		std::unordered_map<unsigned int, std::unique_ptr<Poly> > polys;
 
 		for(int row = startRow; row < endRow; ++row) {
 			keep.clear();
 
+			g_debug(" - row " << row);
+
 			for(int col = startCol; col < endCol; ++col) {
-				unsigned int id = 0;
-				#pragma omp critical(idRead)
-				{ 
-					id = idxRaster.get(col, row); // TODO: Use a raster for each thread.
-				}
+				unsigned int id = idxRaster.get(col, row);
 				if(id == idxNodata)
 					continue;
-				keep.emplace(id); // Keeps track of IDs found in the row; if a poly isn't in this list, output it.
+				#pragma omp critical
+				{
+					keep.emplace(id); // Keeps track of IDs found in the row; if a poly isn't in this list, output it.
+				}
 				double x = idxRaster.toX(col) + idxRaster.resolutionX() / 2.0;
 				double y = idxRaster.toY(row) + idxRaster.resolutionY() / 2.0;
 				int scol = specRaster.toCol(x);
@@ -198,28 +202,38 @@ void processSpectralFile(const SpectralConfig &config, const std::string &specFi
 				if(specRaster.has(scol, srow)) {
 					unsigned int v = specRaster.get(scol, srow);
 					if(v == specNodata) {
-						polys.erase(id);
-						skip.emplace(id);
+						#pragma omp critical
+						{
+							polys.erase(id);
+							skip.emplace(id);
+						}
 					} else if(skip.find(id) == skip.end()) {
-						if(polys.find(id) == polys.end())
-							polys[id] = std::unique_ptr<Poly>(new Poly(id, specNodata));
-						polys[id]->add(col, row, x, y, specRaster.get(scol, srow));
+						#pragma omp critical
+						{
+							if(polys.find(id) == polys.end())
+								polys[id] = std::unique_ptr<Poly>(new Poly(id, specNodata));
+							polys[id]->add(col, row, x, y, specRaster.get(scol, srow));
+						}
 					}
 				}
 			}
+			
+			g_debug(" - polys " << polys.size());
+
 			// Remove polys that have IDs that are not in the current row.	
-			std::list<unsigned int> premove;
-			for(const auto &it : polys) {
-				if(keep.find(it.first) == keep.end() && it.second->count() == bands.size()) {
-					#pragma omp critical(output)
-					{
-						it.second->print(std::cout << std::fixed << std::setprecision(3));
+			#pragma omp critical(output)
+			{
+				std::list<unsigned int> premove;
+				for(const auto &it : polys) {
+					g_debug(" - keep " << (keep.find(it.first) == keep.end()) << "; bands " << it.second->count() << "/" << bands.size());
+					if(keep.find(it.first) == keep.end() && it.second->count() == bands.size()) {
+							it.second->print(std::cout << std::fixed << std::setprecision(3));
+						}
+						premove.push_back(it.first);
 					}
-					premove.push_back(it.first);
-				}
+				for(const unsigned int &it : premove)
+					polys.erase(it);
 			}
-			for(const unsigned int &it : premove)
-				polys.erase(it);
 		}
 	}
 }
