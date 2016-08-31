@@ -105,11 +105,14 @@ namespace geotools {
 		class Util {
 		public:
 			
+			static void parseRanges(std::set<double> &values, const char *str, double step = 1.0);
+
+			static void parseRanges(std::set<int> &values, const char *str);
+
 			/**
 			 * Split a comma-delimited string into a set of unique integers.
 			 */
 			static void intSplit(std::set<int> &values, const char *str);
-		
 
 			/**
 			 * Split a comma-delimited string into a set of unique integers.

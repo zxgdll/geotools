@@ -213,6 +213,79 @@ void Bounds::print(std::ostream &str) const {
 	str << "[Bounds: " << minx() << ", " << miny() << ", " << minz() << "; " << maxx() << ", " << maxy() << ", " << maxz() << "]";
 }
 
+void Util::parseRanges(std::set<double> &values, const char *str, double step) {
+	std::stringstream ss;
+	double first, second;
+	bool range = false;
+	int i = 0;
+	char c = str[i++];
+	while(true) {
+		if(c == '-') {
+			range = true;
+			first = atof(ss.str().c_str());
+			ss.str(std::string());
+		} else if(c == ',' ||  c == '\0') {
+			if(!range) {
+				values.insert(atof(ss.str().c_str()));
+				ss.str(std::string());
+			} else {
+				second = atof(ss.str().c_str());
+				ss.str(std::string());
+				step = g_abs(step);
+				if(first > second) {
+					double tmp = second;
+					second = first;
+					first = tmp;
+				}
+				for(double i = first; i <= second; i += step)
+					values.insert(i);
+				range = false;
+			}
+			if(c == '\0')
+				break;
+		} else {
+			ss << c;
+		}
+		c = str[i++];
+	}
+}
+
+void Util::parseRanges(std::set<int> &values, const char *str) {
+	std::stringstream ss;
+	int first, second;
+	bool range = false;
+	int i = 0;
+	char c = str[i++];
+	while(true) {
+		if(c == '-') {
+			range = true;
+			first = atoi(ss.str().c_str());
+			ss.str(std::string());
+		} else if(c == ',' ||  c == '\0') {
+			if(!range) {
+				values.insert(atoi(ss.str().c_str()));
+				ss.str(std::string());
+			} else {
+				second = atoi(ss.str().c_str());
+				ss.str(std::string());
+				if(first > second) {
+					int tmp = second;
+					second = first;
+					first = tmp;
+				}
+				for(int i = first; i <= second; ++i)
+					values.insert(i);
+				range = false;
+			}
+			if(c == '\0')
+				break;
+		} else {
+			ss << c;
+		}
+		c = str[i++];
+	}
+}
+
 /**
  * Split a comma-delimited string into a set of unique integers.
  */

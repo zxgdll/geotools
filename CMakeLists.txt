@@ -71,10 +71,10 @@ add_executable (treetops-app src/apps/treetops.cpp)
 target_link_libraries (treetops-app PUBLIC treetops gdal)
 
 
-add_library (spectra SHARED src/spectra.cpp src/util.cpp src/geotools.cpp)
-target_link_libraries (spectra gdal sqlite3 spatialite)
-add_executable (spectra-app src/apps/spectra.cpp)
-target_link_libraries (spectra-app PUBLIC spectra)
+add_library (spectral SHARED src/spectral.cpp src/util.cpp src/geotools.cpp)
+target_link_libraries (spectral gdal sqlite3 spatialite)
+add_executable (spectral-app src/apps/spectral.cpp)
+target_link_libraries (spectral-app PUBLIC spectral)
 
 
 add_library(lasgrid SHARED src/lasgrid.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
@@ -113,8 +113,8 @@ install (TARGETS treetops DESTINATION lib)
 install (TARGETS treetops-app DESTINATION bin)
 install (FILES include/treetops.hpp DESTINATION include)
 
-install (TARGETS spectra DESTINATION lib)
-install (TARGETS spectra-app DESTINATION bin)
+install (TARGETS spectral DESTINATION lib)
+install (TARGETS spectral-app DESTINATION bin)
 install (FILES include/spectra.hpp DESTINATION include)
 
 install (TARGETS rasterstats DESTINATION bin)
