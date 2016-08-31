@@ -93,6 +93,9 @@ public:
 		}
 	}
 
+	/**
+	 * Return the number of band DNs in the px object.
+	 */
 	int count() {
 		const Px *p = px.begin()->second.get();
 		return p->dn.size();
@@ -100,6 +103,10 @@ public:
 
 };
 
+/**
+ * Computes a band list. If the given list is empty, populates the output list with
+ * all of the avaible bands. Otherwise returns a list of the desired bands.
+ */
 std::vector<int> computeBandList(const std::set<int> &bands, const std::string &specFilename) {
 	std::vector<int> b;
 	b.assign(bands.begin(), bands.end());
@@ -111,6 +118,10 @@ std::vector<int> computeBandList(const std::set<int> &bands, const std::string &
 	return b;
 }
 
+/**
+ * Computes the bounding box which describes the overlapping area between the index
+ * raster and the spectral raster.
+ */
 Bounds computeOverlapBounds(Raster<unsigned int> &idxRaster, const std::string &specFilename) {
 	Raster<float> tmp(specFilename);
 	return idxRaster.bounds().intersection(tmp.bounds());
@@ -122,24 +133,25 @@ Bounds computeOverlapBounds(Raster<unsigned int> &idxRaster, const std::string &
  * idxRaster    -- A Raster containing the polygon IDs that are used to group the extracted values.
  * specFilename -- The filename of the current spectral file.
  */
-void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idxRaster, const std::string &specFilename) {
+void processSpectralFile(const SpectralConfig &config, const std::string &specFilename) {
 	g_loglevel(G_LOG_DEBUG);
 	g_debug("processSpectralFile [config] [raster] " << specFilename);
 
 	// TODO: More versatile band selection.
 	std::vector<int> bands = computeBandList(config.bands, specFilename);
-	Bounds bounds = computeOverlapBounds(idxRaster, specFilename);
-
-	g_debug(" - bands " << bands.size() << "; bounds: " << bounds.print());
-
-	int startRow = idxRaster.toRow(idxRaster.resolutionY() > 0 ? bounds.miny() : bounds.maxy());
-	int endRow = idxRaster.toRow(idxRaster.resolutionY() > 0 ? bounds.maxy() : bounds.miny());
-	int startCol = idxRaster.toCol(bounds.minx());
-	int endCol = idxRaster.toCol(bounds.maxx());
+	int startRow, endRow, startCol, endCol;
+	Bounds bounds;
+	{
+		Raster<unsigned int> idxRaster(config.indexFilename);
+		startRow = idxRaster.toRow(idxRaster.resolutionY() > 0 ? bounds.miny() : bounds.maxy());
+		endRow = idxRaster.toRow(idxRaster.resolutionY() > 0 ? bounds.maxy() : bounds.miny());
+		startCol = idxRaster.toCol(bounds.minx());
+		endCol = idxRaster.toCol(bounds.maxx());
+		bounds.extend(computeOverlapBounds(idxRaster, specFilename));
+	}
 
 	g_debug(" - rows: " << startRow << " -> " << endRow << "; cols: " << startCol << " -> " << endCol);
-
-	std::unordered_map<unsigned int, std::unique_ptr<Poly> > polys;
+	g_debug(" - bands " << bands.size() << "; bounds: " << bounds.print());
 
 	// Iterate over bands to populate Polys
 	#pragma omp parallel for
@@ -147,9 +159,11 @@ void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idx
 
 		int band = bands[b];
 
+		Raster<unsigned int> idxRaster(config.indexFilename);
 		Raster<unsigned short> specRaster(specFilename, band);
 		std::unordered_set<unsigned int> keep;
 		std::unordered_set<unsigned int> skip;
+		std::unordered_map<unsigned int, std::unique_ptr<Poly> > polys;
 
 		for(int row = startRow; row < endRow; ++row) {
 			keep.clear();
@@ -173,29 +187,25 @@ void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idx
 						polys.erase(id);
 						skip.emplace(id);
 					} else if(skip.find(id) == skip.end()) {
-						#pragma omp critical(addPoly)
-						{
 						if(polys.find(id) == polys.end())
 							polys[id] = std::unique_ptr<Poly>(new Poly(id, config.nodata));
 						polys[id]->add(col, row, x, y, specRaster.get(scol, srow));
-						}
 					}
 				}
 			}
 			// Remove polys that have IDs that are not in the current row.	
-			#pragma omp critical(output)
-			{
 			std::list<unsigned int> premove;
 			for(const auto &it : polys) {
 				if(keep.find(it.first) == keep.end() && it.second->count() == bands.size()) {
-					it.second->print(std::cout << std::fixed << std::setprecision(3));
+					#pragma omp critical(output)
+					{
+						it.second->print(std::cout << std::fixed << std::setprecision(3));
+					}
 					premove.push_back(it.first);
 				}
 			}
 			for(const unsigned int &it : premove)
 				polys.erase(it);
-			}
-
 		}
 	}
 }
@@ -203,10 +213,9 @@ void processSpectralFile(const SpectralConfig &config, Raster<unsigned int> &idx
 void Spectral::extractSpectra(const SpectralConfig &config) {
 	g_debug("extractSpectra [config]");
 
-	Raster<unsigned int> idxRaster(config.indexFilename);
 	for(const std::string &specFilename : config.spectralFilenames) {
 		g_debug(" - file: " << specFilename);
-		processSpectralFile(config, idxRaster, specFilename);
+		processSpectralFile(config, specFilename);
 	}
 }
 
