@@ -54,6 +54,8 @@ int main(int argc, char **argv) {
 				threads = atoi(argv[++i]);
 			} else if(arg == "-v") {
 				g_loglevel(G_LOG_DEBUG);
+			} else if(arg == "-s") {
+				config.srid = atoi(argv[++i]);
 			} else {
 				config.spectralFilenames.push_back(std::string(argv[i]));
 			}	

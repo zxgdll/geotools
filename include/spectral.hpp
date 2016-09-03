@@ -23,10 +23,12 @@ namespace geotools {
 					unsigned int idxNodata;
 					bool hasIdxNodata;
 					bool hasSpecNodata;
+					int srid;
 
 					SpectralConfig() :
 						specNodata(0),
-						idxNodata(0) {
+						idxNodata(0),
+						srid(0) {
 					}
 
 					void check() const {
@@ -36,8 +38,8 @@ namespace geotools {
 							g_argerr("The index filename must be given.");
 						if(outputFilename.empty())
 							g_argerr("The output filename must be given.");
-						if(bands.size() == 0)
-							g_warn("No bands given. Using all bands.");
+						if(srid == 0)
+							g_warn("The SRID is zero.");
 					}
 
 				};
