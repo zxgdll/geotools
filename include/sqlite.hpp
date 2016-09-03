@@ -99,7 +99,7 @@ namespace geotools {
 			 */
 			size_t maxAddPointCount() {
 				size_t c = (size_t) (sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1) / (m_fields.size() + 1));
-				g_trace("max point count: " << c << ", " << sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1));
+				g_debug("max point count: " << c << ", " << sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1));
 				return c;
 			}
 
@@ -182,7 +182,7 @@ namespace geotools {
 				ss << "))', SRID(geom)))";
 
 				std::string q = ss.str();
-				g_trace("getPoints: " << q);
+				g_debug("getPoints: " << q);
 				char *err;	
 				begin();
 				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(),  
@@ -277,7 +277,7 @@ namespace geotools {
 				}
 			}
 			if(kv.first != "geom" && kv.first != "gid") {
-				g_trace("Field: " << kv.first << ", " << kv.second);
+				g_debug("Field: " << kv.first << ", " << kv.second);
 				fields->insert(kv);
 			}
 			return 0;
@@ -291,11 +291,11 @@ namespace geotools {
 
 		void SQLite::init() {
 			bool dbExists = exists(m_file);
-			g_trace("Initializing sqlite with exists: " << dbExists);
+			g_debug("Initializing sqlite with exists: " << dbExists);
 			
 			char *err;
 
-			g_trace("Opening...");
+			g_debug("Opening...");
 			if(SQLITE_OK != sqlite3_open_v2(m_file.c_str(), &m_db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL))
 				handleError("Failed to open DB: ");
 			
@@ -303,16 +303,16 @@ namespace geotools {
 			spatialite_init_ex(m_db, m_cache, 0);
 
 			if(dbExists) {
-				g_trace("DB exists so collecting metadata.");
+				g_debug("DB exists so collecting metadata.");
 				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA table_info('data')", 
 					tableInfoCallback, &m_fields, &err))
 					handleError("Failed to read table info from database. Formatted incorrectly? ", err);
 				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT SRID(geom) AS geomsrid FROM data", 
 					sridCallback, &m_srid, &err))
 					handleError("Failed to read table info from database. Formatted incorrectly? ", err);
-				g_trace("SRID: " << m_srid);
+				g_debug("SRID: " << m_srid);
 			} else {
-				g_trace("Table is new, so initializing as spatial.");
+				g_debug("Table is new, so initializing as spatial.");
 				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT InitSpatialMetadata(1)", NULL, NULL, &err))
 					handleError("Failed to initialize DB: ", err);
 			}
@@ -355,7 +355,7 @@ namespace geotools {
 
 			if(!dbExists) {
 				q.assign(ss.str());
-				g_trace("Creating table: " << q);
+				g_debug("Creating table: " << q);
 				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(), NULL, NULL, &err)) 
 					handleError("Failed to create table: ", err);
 				ss.str(std::string());
@@ -375,7 +375,7 @@ namespace geotools {
 				ss << "', 'XYZ')";
 				q.assign(ss.str());
 
-				g_trace("Creating geometry column: " << q);
+				g_debug("Creating geometry column: " << q);
 				if(SQLITE_OK != sqlite3_exec(m_db, q.c_str(), NULL, NULL, &err))
 					handleError("Failed to create geometry: ", err);
 			}
@@ -386,14 +386,14 @@ namespace geotools {
 				<< m_srid << "), " << fp.str() << ")";
 
 			q.assign(ss.str());
-			g_trace("Preparing insert query: " << q);
+			g_debug("Preparing insert query: " << q);
 			if(SQLITE_OK != sqlite3_prepare_v2(m_db, q.c_str(), q.size(), &m_stmt, NULL))
 				handleError("Failed to prepare insert statement: ");
 
 		}
 
 		void SQLite::clear() {
-			g_trace("Deleting existing records.");
+			g_debug("Deleting existing records.");
 			char *err;
 			begin();
 			dropGeomIndex();
