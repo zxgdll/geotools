@@ -155,7 +155,7 @@ void processSpectralFile(const SpectralConfig &config, const std::vector<int> &b
 						if(v == specNodata)
 							continue;
 						size_t idx = ((size_t) col << 32) | row;
-						#pragma omp critical(px)
+						#pragma omp critical (PX)
 						{
 							if(skip.find(idx) == skip.end()) {
 								if(px.find(idx) == px.end())
@@ -175,7 +175,7 @@ void processSpectralFile(const SpectralConfig &config, const std::vector<int> &b
 		}
 		// Remove polys that have IDs that are not in the current row.	
 		std::cout << std::fixed << std::setprecision(3);
-		#pragma omp critical(px)
+		#pragma omp critical (PX)
 		{
 			g_debug("Save " << finalize.size());
 			db.begin();
@@ -185,13 +185,14 @@ void processSpectralFile(const SpectralConfig &config, const std::vector<int> &b
 			}
 			db.commit();
 		}
-		#pragma omp critical(px)
+		#pragma omp critical (PX)
 		{
 			g_debug("Finalize.");
 			for(const size_t &idx : finalize)
 				px.erase(idx);
+			finalize.clear();
 		}
-		finalize.clear();
+
 	}
 }
 
