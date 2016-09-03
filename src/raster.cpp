@@ -1052,6 +1052,19 @@ double Raster<T>::resolutionY() const {
 }
 
 template <class T>
+void Raster<T>::setBand(int band) {
+	if(band == m_bandn)
+		return;
+	flush();
+	m_band = m_ds->GetRasterBand(band);
+	m_bandn = band;
+}
+template <class T>
+int Raster<T>::getBandNum() {
+	return m_bandn;
+}
+
+template <class T>
 void Raster<T>::projection(std::string &proj) const {
 	proj.assign(m_ds->GetProjectionRef());
 }

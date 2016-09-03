@@ -654,6 +654,16 @@ namespace geotools {
 			std::string epsg2ProjText(int crs) const;
 
 			/**
+			 * Set the band number. Invokes a flush and loads the new band.
+			 */
+			void setBand(int band);
+
+			/**
+			 * Returns the current band number.
+			 */
+			int getBandNum();
+
+			/**
 			 * Returns true if the raster is initialized.
 			 */
 			bool inited() const;
