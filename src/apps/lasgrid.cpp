@@ -81,8 +81,9 @@ int main(int argc, char **argv) {
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
 			} else if(s == "-b") {
-				bounds.extend(atof(argv[++i]), atof(argv[++i]));
-				bounds.extend(atof(argv[++i]), atof(argv[++i]));
+				bounds.extend(atof(argv[i + 1]), atof(argv[i + 2]));
+				bounds.extend(atof(argv[i + 3]), atof(argv[i + 4]));
+				i += 4;
 			} else {
 				files.push_back(argv[i]);
 			}
