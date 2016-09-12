@@ -4,11 +4,16 @@
 #include "geotools.h"
 #include "lasgrid.hpp"
 #include "lasgrid_ui.hpp"
+#include "crs_selector_ui.hpp"
 
 using namespace geotools::ui;
 using namespace geotools::las::lasgrid_config;
 
-LasgridForm::LasgridForm(QWidget *p) : QObject(p) {
+LasgridForm::LasgridForm(QWidget *p) : QWidget(p) {
+}
+
+LasgridForm::~LasgridForm() {
+	m_last = nullptr;
 }
 
 void LasgridForm::setupUi(QWidget *form) {
@@ -18,6 +23,7 @@ void LasgridForm::setupUi(QWidget *form) {
 	g_loglevel(G_LOG_TRACE);
 
 	m_form = form;
+	m_last = new QDir(QDir::home());
 
 	spnResolution->setValue(defaultResolution);
 	spnRadius->setValue(defaultRadius);
@@ -57,12 +63,22 @@ void LasgridForm::setupUi(QWidget *form) {
 	connect(btnCancel, SIGNAL(clicked()), this, SLOT(cancelClicked()));
 	connect(btnRun, SIGNAL(clicked()), this, SLOT(runClicked()));
 	connect(btnDestFile, SIGNAL(clicked()), this, SLOT(destFileClicked()));
+	connect(lstFiles, SIGNAL(itemSelectionChanged()), this, SLOT(fileListSelectionChanged()));
+	connect(btnCRSConfig, SIGNAL(clicked()), this, SLOT(crsConfigClicked()));
+}
 
+void LasgridForm::crsConfigClicked() {
+	CRSSelector cs(m_form);
+	if(cs.exec());
+}
+
+void LasgridForm::fileListSelectionChanged() {
+	updateFileButtons();
 }
 
 void LasgridForm::destFileClicked() {
 	QFileDialog d(m_form);
-	d.setDirectory(QDir::homePath());
+	d.setDirectory(*m_last);
 	d.setFileMode(QFileDialog::ExistingFile);
 	d.setNameFilter(QString("GeoTiff Files (*.tif)"));
 	if(d.exec()) {
@@ -90,34 +106,51 @@ void LasgridForm::cancelClicked() {
 	m_form->close();
 }
 
-void updateFileList(QListWidget *l, const std::vector<std::string> &files) {
-	for(int i = 0; i < l->count(); ++i)
-		l->takeItem(i);
-	for(int i = 0; i < files.size(); ++i)
-		l->addItem(QString(files[i].c_str()));
+void LasgridForm::updateFileList() {
+	while(lstFiles->count())
+		lstFiles->takeItem(0);
+	for(int i = 0; i < m_lasFiles.size(); ++i)
+		lstFiles->addItem(QString(m_lasFiles[i].c_str()));
+	updateFileButtons();
+}
+
+void LasgridForm::updateFileButtons() {
+	btnClearFiles->setEnabled(lstFiles->count() > 0);
+	btnRemoveSelected->setEnabled(lstFiles->selectedItems().size() > 0);
 }
 
 void LasgridForm::removeFilesClicked() {
-	g_trace("Not implemented.");
+	std::vector<std::string> lst;
+	for(int i = 0; i < lstFiles->count(); ++i) {
+		QListWidgetItem *item = lstFiles->item(i);
+		if(!item->isSelected())
+			lst.push_back(m_lasFiles[i]);
+	}
+	m_lasFiles.clear();
+	m_lasFiles.assign(lst.begin(), lst.end());
+	updateFileList();
 }
 
 void LasgridForm::clearFilesClicked() {
-	m_lasFiles.empty();
-	updateFileList(lstFiles, m_lasFiles);
+	m_lasFiles.clear();
+	updateFileList();
 }
 
 void LasgridForm::selectFilesClicked() {
 	QFileDialog d(m_form);
-	d.setDirectory(QDir::homePath());
-	d.setFileMode(QFileDialog::ExistingFile);
+	d.setDirectory(*m_last);
+	d.setFileMode(QFileDialog::ExistingFiles);
 	d.setNameFilter(QString("LAS Files (*.las)"));
 	if(d.exec()) {
 		QStringList files = d.selectedFiles();
-		m_lasFiles.empty();
+		*m_last = d.directory();
+		std::set<std::string> tmp(m_lasFiles.begin(), m_lasFiles.end());
 		for(int i = 0; i < files.size(); ++i)
-			m_lasFiles.push_back(files[i].toStdString());
-		updateFileList(lstFiles, m_lasFiles);
+			tmp.insert(files[i].toStdString());
+		m_lasFiles.clear();
+		m_lasFiles.assign(tmp.begin(), tmp.end());
 	}
+	updateFileList();
 }
 
 #include "moc_lasgrid_ui.cpp"

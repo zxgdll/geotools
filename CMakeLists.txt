@@ -79,7 +79,7 @@ target_link_libraries (spectral-app PUBLIC spectral)
 
 add_library(lasgrid SHARED src/lasgrid.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
 target_link_libraries (lasgrid gdal laszip las boost_system boost_filesystem)
-add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp)
+add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp src/apps/crs_selector_ui.cpp)
 target_link_libraries (lasgrid-app PUBLIC lasgrid Qt5::Gui Qt5::Core Qt5::Widgets)
 
 add_executable (lasboundary src/lasboundary.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)

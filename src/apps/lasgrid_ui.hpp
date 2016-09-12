@@ -2,6 +2,7 @@
 #define __LASGRID_UI_HPP__
 
 #include <QtWidgets/QWidget>
+#include <QDir>
 
 #include "ui_lasgrid.h"
 
@@ -9,7 +10,7 @@ namespace geotools {
 
 	namespace ui {
 
-		class LasgridForm : public QObject, public Ui::LasgridForm {
+		class LasgridForm : public QWidget, public Ui::LasgridForm {
 			Q_OBJECT
 		private:
 			QWidget *m_form;
@@ -24,17 +25,22 @@ namespace geotools {
 			bool m_snap;
 			double m_resolution;
 			double m_radius;
-			
+			QDir *m_last;
+			void updateFileList();
+			void updateFileButtons();
 		public:
-			LasgridForm(QWidget *p = 0);
+			LasgridForm(QWidget *p = Q_NULLPTR);
 			void setupUi(QWidget *Form);
+			~LasgridForm();
 		public slots:
+			void fileListSelectionChanged();
 			void selectFilesClicked();
 			void removeFilesClicked();
 			void clearFilesClicked();
 			void cancelClicked();
 			void runClicked();
 			void destFileClicked();
+			void crsConfigClicked();
 		};
 
 	}
