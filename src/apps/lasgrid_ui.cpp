@@ -69,7 +69,15 @@ void LasgridForm::setupUi(QWidget *form) {
 
 void LasgridForm::crsConfigClicked() {
 	CRSSelector cs(m_form);
-	if(cs.exec());
+	if(cs.exec()) {
+		int vsrid = cs.getVerticalSRID();
+		int hsrid = cs.getHorizontalSRID();
+		std::stringstream ss;
+		ss << "epsg:" << hsrid;
+		if(vsrid > 0)
+			ss << "+" << vsrid;
+		txtCRSConfig->setText(QString(ss.str().c_str()));
+	}
 }
 
 void LasgridForm::fileListSelectionChanged() {

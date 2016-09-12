@@ -22,7 +22,7 @@
      <x>5</x>
      <y>10</y>
      <width>391</width>
-     <height>121</height>
+     <height>133</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -36,7 +36,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QComboBox" name="cboHorizontalCRS"/>
+       <widget class="QLineEdit" name="txtHorizontalCRS"/>
       </item>
      </layout>
     </item>
@@ -50,7 +50,7 @@
        </widget>
       </item>
       <item>
-       <widget class="QComboBox" name="cboVerticalDatum"/>
+       <widget class="QLineEdit" name="txtVerticalDatum"/>
       </item>
      </layout>
     </item>
