@@ -58,6 +58,23 @@ void CRSSelector::initUi() {
 	connect(btnCancel, SIGNAL(clicked()), this, SLOT(cancelClicked()));
 	connect(txtHorizontalCRS, SIGNAL(textChanged(const QString &)), this, SLOT(textUpdate()));
 	connect(txtVerticalDatum, SIGNAL(textChanged(const QString &)), this, SLOT(textUpdate()));
+
+	updateFields();
+}
+
+void CRSSelector::updateFields() {
+	if(m_hcomp && m_hsrid > 0) {
+		QString h;
+		h.setNum(m_hsrid);
+		txtHorizontalCRS->setText(h);
+		m_hcomp->complete();
+	}
+	if(m_vcomp && m_vsrid > 0) {
+		QString v;
+		v.setNum(m_vsrid);
+		txtVerticalDatum->setText(v);
+		m_vcomp->complete();
+	}
 }
 
 void CRSSelector::textUpdate() {
@@ -79,6 +96,16 @@ void CRSSelector::selectClicked() {
 		m_vsrid = std::next(m_vcrs.begin(), vidx)->first;
 	g_debug("vsrid: " << m_vsrid << "; hsrid: " << m_hsrid);
 	accept();
+}
+
+void CRSSelector::setVerticalSRID(int srid) {
+	m_vsrid = srid;
+	updateFields();
+}
+
+void CRSSelector::setHorizontalSRID(int srid) {
+	m_hsrid = srid;
+	updateFields();
 }
 
 int CRSSelector::getVerticalSRID() {

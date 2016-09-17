@@ -9,7 +9,24 @@
 using namespace geotools::ui;
 using namespace geotools::las::lasgrid_config;
 
-LasgridForm::LasgridForm(QWidget *p) : QWidget(p) {
+/**
+ * Utility methods for status callbacks.
+ */
+ LasgridForm *form;
+
+void fileCallback(float status) {
+	form->setFileStatus(status);
+}
+
+void overallCallback(float status) {
+	form->setOverallStatus(status);
+}
+
+
+
+LasgridForm::LasgridForm(QWidget *p) : 
+	QWidget(p),
+	m_vsrid(0), m_hsrid(0) {
 }
 
 LasgridForm::~LasgridForm() {
@@ -25,24 +42,28 @@ void LasgridForm::setupUi(QWidget *form) {
 	m_form = form;
 	m_last = new QDir(QDir::home());
 
-	spnResolution->setValue(defaultResolution);
-	spnRadius->setValue(defaultRadius);
+	m_radius = defaultRadius;
+	m_resolution = defaultResolution;
+	spnResolution->setValue(m_resolution);
+	spnRadius->setValue(m_radius);
 
+	m_type = defaultType;
 	int i = 0;
 	int defaultIdx = -1;
 	for(auto it = types.begin(); it != types.end(); ++it) {
 		cboType->addItem(QString::fromStdString(it->first), QVariant(it->second));
-		if(it->second == defaultType)
+		if(it->second == m_type)
 			defaultIdx = i;
 		++i;
 	}
 	cboType->setCurrentIndex(defaultIdx);
 
+	m_attribute = defaultAttribute;
 	i = 0;
 	defaultIdx = -1;
 	for(auto it = attributes.begin(); it != attributes.end(); ++it) {
 		cboAttribute->addItem(QString::fromStdString(it->first), QVariant(it->second));
-		if(it->second == defaultAttribute)
+		if(it->second == m_attribute)
 			defaultIdx = i;
 		++i;
 	}
@@ -54,6 +75,8 @@ void LasgridForm::setupUi(QWidget *form) {
 		QListWidgetItem *item = new QListWidgetItem(str, lstClasses);
 		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
 		item->setCheckState(defaultClasses.count(i) > 0 ? Qt::Checked : Qt::Unchecked);
+		if(defaultClasses.count(i) > 0)
+			m_classes.insert(i);
 		lstClasses->addItem(item);
 	}
 
@@ -65,29 +88,43 @@ void LasgridForm::setupUi(QWidget *form) {
 	connect(btnDestFile, SIGNAL(clicked()), this, SLOT(destFileClicked()));
 	connect(lstFiles, SIGNAL(itemSelectionChanged()), this, SLOT(fileListSelectionChanged()));
 	connect(btnCRSConfig, SIGNAL(clicked()), this, SLOT(crsConfigClicked()));
+	connect(cboType, SIGNAL(currentIndexChanged(int)), this, SLOT(typeSelected(int)));
+}
+
+void LasgridForm::typeSelected(int index) {
+	std::string type = cboType->itemText(index).toStdString();
+	m_type = types[type];
+	bool on = m_type == TYPE_QUANTILE;
+	spnQuantile->setEnabled(on);
+	spnQuantiles->setEnabled(on);
+	checkRun();
 }
 
 void LasgridForm::crsConfigClicked() {
 	CRSSelector cs(m_form);
+	cs.setHorizontalSRID(m_hsrid);
+	cs.setVerticalSRID(m_vsrid);
 	if(cs.exec()) {
-		int vsrid = cs.getVerticalSRID();
-		int hsrid = cs.getHorizontalSRID();
+		m_vsrid = cs.getVerticalSRID();
+		m_hsrid = cs.getHorizontalSRID();
 		std::stringstream ss;
-		ss << "epsg:" << hsrid;
-		if(vsrid > 0)
-			ss << "+" << vsrid;
+		ss << "epsg:" << m_hsrid;
+		if(m_vsrid > 0)
+			ss << "+" << m_vsrid;
 		txtCRSConfig->setText(QString(ss.str().c_str()));
 	}
+	checkRun();
 }
 
 void LasgridForm::fileListSelectionChanged() {
 	updateFileButtons();
+	checkRun();
 }
 
 void LasgridForm::destFileClicked() {
 	QFileDialog d(m_form);
 	d.setDirectory(*m_last);
-	d.setFileMode(QFileDialog::ExistingFile);
+	//d.setFileMode(QFileDialog::ExistingFile);
 	d.setNameFilter(QString("GeoTiff Files (*.tif)"));
 	if(d.exec()) {
 		m_destFile = d.selectedFiles()[0].toStdString();
@@ -95,6 +132,15 @@ void LasgridForm::destFileClicked() {
 		m_destFile = "";
 	}
 	txtDestFile->setText(QString(m_destFile.c_str()));
+	checkRun();
+}
+
+void LasgridForm::setFileStatus(float status) {
+	prgFile->setValue((int) status);
+}
+
+void LasgridForm::setOverallStatus(float status) {
+	prgOverall->setValue((int) status);
 }
 
 void LasgridForm::runClicked() {
@@ -105,8 +151,21 @@ void LasgridForm::runClicked() {
 
 	Bounds bounds;
 
-	lasgrid(m_destFile, m_lasFiles, m_classes, m_crs, m_attribute, m_type, m_radius, m_resolution, 
-		bounds, m_angleLimit, m_fill, m_snap);
+	m_angleLimit = 100;
+
+	// TODO: Bounds
+	// TODO: Angle limit
+	// TODO: Compound CRS
+	try {
+		form = this;
+		LasGrid lg;
+		lg.setFileCallback(fileCallback);
+		lg.setOverallCallback(overallCallback);
+		lg.lasgrid(m_destFile, m_lasFiles, m_classes, m_hsrid, m_attribute, m_type, m_radius, m_resolution, 
+			bounds, m_angleLimit, m_fill, m_snap);
+	} catch(const std::exception &e) {
+		std::cerr << e.what() << std::endl;
+	}
 }
 
 void LasgridForm::cancelClicked() {
@@ -120,6 +179,7 @@ void LasgridForm::updateFileList() {
 	for(int i = 0; i < m_lasFiles.size(); ++i)
 		lstFiles->addItem(QString(m_lasFiles[i].c_str()));
 	updateFileButtons();
+	checkRun();
 }
 
 void LasgridForm::updateFileButtons() {
@@ -137,11 +197,13 @@ void LasgridForm::removeFilesClicked() {
 	m_lasFiles.clear();
 	m_lasFiles.assign(lst.begin(), lst.end());
 	updateFileList();
+	checkRun();
 }
 
 void LasgridForm::clearFilesClicked() {
 	m_lasFiles.clear();
 	updateFileList();
+	checkRun();
 }
 
 void LasgridForm::selectFilesClicked() {
@@ -159,6 +221,10 @@ void LasgridForm::selectFilesClicked() {
 		m_lasFiles.assign(tmp.begin(), tmp.end());
 	}
 	updateFileList();
+	checkRun();
 }
 
-#include "moc_lasgrid_ui.cpp"
+void LasgridForm::checkRun() {
+	// TODO: Check runnable.
+	btnRun->setEnabled(true);
+}

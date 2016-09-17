@@ -55,9 +55,18 @@ namespace geotools {
 
 		}
 
-		void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
-			int crs, int attribute, int type, double radius,
-			double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill, bool snap = true);
+		class LasGrid {
+		private:
+			void (*m_fileCallback)(float);
+			void (*m_overallCallback)(float);
+		public:
+			void setFileCallback(void (*callback)(float));
+			void setOverallCallback(void (*callback)(float));
+
+			void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
+				int crs, int attribute, int type, double radius,
+				double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill, bool snap = true);
+		};
 
 	} // las
 	
