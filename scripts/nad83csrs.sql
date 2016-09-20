@@ -67,11 +67,14 @@ $$ LANGUAGE 'plpgsql';
 -- eto		The destination epoch.
 -- fromSRS  The proj string of the origin geometry.
 -- toSRS    The proj string of the destination geometry.
-CREATE OR REPLACE FUNCTION ToNAD83CSRS(geoms bytea[], ffrom text, efrom float8, eto float8, fromSRS text, toSRS text)
+CREATE OR REPLACE FUNCTION ToNAD83CSRS(geoms bytea[], ffrom text, efrom float8, eto float8, fromsrs text, tosrs text)
 RETURNS bytea[]
 AS $$
 
+global fromsrs
+
 import sys
+import os
 
 script_base = '/Users/robskelly/Documents/geotools'
 script_path = script_base + '/scripts'
@@ -97,7 +100,7 @@ for i in range(count):
 	y[i] = pt.y
 	z[i] = pt.z
 
-t = nad83csrs.Transformer(ffrom, efrom, eto, fromSRS, toSRS)
+t = nad83csrs.Transformer(ffrom, efrom, eto, fromsrs, tosrs)
 x, y, z, bounds = t.transformPoints(x, y, z)
 
 result = [None] * count
