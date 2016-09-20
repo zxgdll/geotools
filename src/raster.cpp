@@ -543,12 +543,14 @@ template <class T>
 void MemRaster<T>::writeBlock(int col, int row, Grid<T> &block, int srcCol, int srcRow) {
 	if(&block == this)
 		g_argerr("Recursive call to writeBlock.");
+	if(srcCol < 0 || srcRow < 0 || srcCol >= block.cols() || srcRow >= block.rows())
+		g_argerr("Invalid source column or row: row: " << srcRow << "; col: " << srcCol << "; block: " << block.rows() << "," << block.rows());
 	if(col + block.cols() - srcCol > m_cols)
 		g_argerr("Block is wider than the available space.");
 	if(row + block.rows() - srcRow > m_rows)
 		g_argerr("Block is taller than the available space.");
 	if(block.hasGrid()) {
-		for(int r = 0; r < block.rows(); ++r) {
+		for(int r = 0; r < block.rows() - srcRow; ++r) {
 			std::memcpy(
 				m_grid + (row + r) * m_cols + col,
 				block.grid() + (r + srcRow) * block.cols() + srcCol,
