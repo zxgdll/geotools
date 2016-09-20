@@ -1,5 +1,9 @@
 DELETE FROM spatial_ref_sys WHERE srid>99990;
 
+-- SRID for canadian peatland atlas
+-- Geological Survey of Canada Open File 3834
+INSERT into spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext) values ( 200000, 'epsg', 200000, '+proj=lcc +lat_1=49 +lat_2=77 +lat_0=49 +lon_0=-95 +x_0=0 +y_0=0 +ellps=clrk66 +units=m +no_defs','');
+
 -- 26912 + 5713
 INSERT into spatial_ref_sys (srid, auth_name, auth_srid, proj4text, srtext) values ( 99991, 'epsg', 26912, '+init=EPSG:26912 +geoidgrids=HT2_0.gtx', 
 	'PROJCS["NAD83 / UTM zone 12N",GEOGCS["NAD83",DATUM["North_American_Datum_1983",SPHEROID["GRS 1980",6378137,298.257222101,AUTHORITY["EPSG","7019"]],AUTHORITY["EPSG","6269"]],PRIMEM["Greenwich",0,AUTHORITY["EPSG","8901"]],UNIT["degree",0.01745329251994328,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4269"]],UNIT["metre",1,AUTHORITY["EPSG","9001"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",-111],PARAMETER["scale_factor",0.9996],PARAMETER["false_easting",500000],PARAMETER["false_northing",0],AUTHORITY["EPSG","26912"],AXIS["Easting",EAST],AXIS["Northing",NORTH]],
