@@ -526,8 +526,8 @@ void MemRaster<T>::readBlock(int col, int row, Grid<T> &block, int dstCol, int d
 	if(block.hasGrid()) {
 		for(int r = 0; r < block.rows() - dstRow; ++r) {
 			std::memcpy(
-				block.grid() + (r + dstRow) * block.cols() + dstCol,
-				m_grid + (row + r) * m_cols + col,
+				(block.grid() + (r + dstRow) * block.cols() + dstCol),
+				(m_grid + (row + r) * m_cols + col),
 				(block.cols() - dstCol) * sizeof(T)
 			);
 		}
@@ -551,11 +551,11 @@ void MemRaster<T>::writeBlock(int col, int row, Grid<T> &block, int srcCol, int 
 		g_argerr("Block is taller than the available space.");
 	if(block.hasGrid()) {
 		for(int r = 0; r < block.rows() - srcRow; ++r) {
-			g_debug(" -- " << r << "; " << col << ", " << row << "; " << srcCol << "," << srcRow << "; " << m_cols << "," << m_rows << "; " << block.cols() << "," << block.rows() << "; " << sizeof(T));
+			//g_debug(" -- " << r << "; " << col << ", " << row << "; " << srcCol << "," << srcRow << "; " << m_cols << "," << m_rows << "; " << block.cols() << "," << block.rows() << "; " << sizeof(T));
 			std::memcpy(
 				(m_grid + (row + r) * m_cols + col),
 				(block.grid() + (r + srcRow) * block.cols() + srcCol),
-				(block.cols() - srcRow) * sizeof(T)
+				(block.cols() - srcCol) * sizeof(T)
 			);
 		}
 	} else {
@@ -1015,9 +1015,15 @@ void Raster<T>::readBlock(int col, int row, Grid<T> &grd, int dstCol, int dstRow
 	if(cols < 1 || rows < 1)
 		g_argerr("Zero read size.");
 	if(grd.hasGrid()) {
-		MemRaster<T> mr(cols, rows);
-		if(m_band->RasterIO(GF_Read, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
-			g_runerr("Failed to read from band.");
+		if(cols != grd.cols() || rows != grd.rows()) {
+			MemRaster<float> g(cols, rows);
+			if(m_band->RasterIO(GF_Read, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				g_runerr("Failed to read from band.");
+			grd.writeBlock(dstCol, dstRow, g);
+		} else {
+			if(m_band->RasterIO(GF_Read, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				g_runerr("Failed to read from band.");
+		}
 	} else {
 		MemRaster<T> mr(cols, rows);
 		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
@@ -1035,8 +1041,15 @@ void Raster<T>::writeBlock(int col, int row, Grid<T> &grd, int srcCol, int srcRo
 	if(cols < 1 || rows < 1)
 		g_argerr("Zero write size.");
 	if(grd.hasGrid()) {
-		if(m_band->RasterIO(GF_Write, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
-			g_runerr("Failed to write to band.");
+		if(cols != grd.cols() || rows != grd.rows()) {
+			MemRaster<float> g(cols, rows);
+			grd.readBlock(srcCol, srcRow, g);
+			if(m_band->RasterIO(GF_Write, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				g_runerr("Failed to write to band.");
+		} else {
+			if(m_band->RasterIO(GF_Write, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				g_runerr("Failed to write to band.");
+		}
 	} else {
 		MemRaster<T> mr(cols, rows);
 		grd.readBlock(srcCol, srcRow, mr);
