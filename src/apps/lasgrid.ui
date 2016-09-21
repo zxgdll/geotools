@@ -183,7 +183,20 @@
         <item row="7" column="1">
          <layout class="QHBoxLayout" name="horizontalLayout_2">
           <item>
-           <widget class="QLineEdit" name="txtCRSConfig"/>
+           <widget class="QLineEdit" name="txtCRSConfig">
+            <property name="mouseTracking">
+             <bool>false</bool>
+            </property>
+            <property name="focusPolicy">
+             <enum>Qt::NoFocus</enum>
+            </property>
+            <property name="acceptDrops">
+             <bool>false</bool>
+            </property>
+            <property name="toolTip">
+             <string>Click Select to configure CRS.</string>
+            </property>
+           </widget>
           </item>
           <item>
            <widget class="QPushButton" name="btnCRSConfig">
@@ -232,14 +245,14 @@
     <item>
      <widget class="QProgressBar" name="prgFile">
       <property name="value">
-       <number>24</number>
+       <number>0</number>
       </property>
      </widget>
     </item>
     <item>
      <widget class="QProgressBar" name="prgOverall">
       <property name="value">
-       <number>24</number>
+       <number>0</number>
       </property>
      </widget>
     </item>

@@ -139,7 +139,15 @@ namespace geotools {
 
 		} // util
 
-		void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
+		void LasGrid::setFileCallback(void (*callback)(float)) {
+			m_fileCallback = callback;
+		}
+
+		void LasGrid::setOverallCallback(void (*callback)(float)) {
+			m_overallCallback = callback;
+		}
+
+		void LasGrid::lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
 					int crs, int attribute, int type, double radius,
 					double resolution, Bounds &bounds, unsigned char angleLimit, bool fill, bool snap) {
 
@@ -162,14 +170,14 @@ namespace geotools {
 			if(angleLimit <= 0)
 				g_argerr("Angle limit must be greater than zero.");
 
-			g_trace("Radius: " << radius);
-			g_trace("Resolution: " << resolution);
-			g_trace("Files: " << files.size());
-			g_trace("Destination: " << dstFile);
-			g_trace("Attribute: " << attribute);
-			g_trace("Type: " << type);
-			g_trace("Classes: " << classes.size());
-			g_trace("Angle Limit: " << angleLimit);
+			g_debug("Radius: " << radius);
+			g_debug("Resolution: " << resolution);
+			g_debug("Files: " << files.size());
+			g_debug("Destination: " << dstFile);
+			g_debug("Attribute: " << attribute);
+			g_debug("Type: " << type);
+			g_debug("Classes: " << classes.size());
+			g_debug("Angle Limit: " << angleLimit);
 			
 			using namespace geotools::las::lasgrid_util;
 
@@ -181,22 +189,22 @@ namespace geotools {
 			std::vector<unsigned int> indices;
 			Bounds bounds1;
 			bounds1.collapse();
-			g_trace("Total bounds initial: " << bounds1.print());
+			g_debug("Total bounds initial: " << bounds1.print());
 	
 			for(unsigned int i=0; i<files.size(); ++i) {
-				g_trace("Checking file " << files[i]);
+				g_debug("Checking file " << files[i]);
 				std::ifstream in(files[i].c_str(), std::ios::in|std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 				Bounds bounds0;
 				if(!LasUtil::computeLasBounds(h, bounds0, 2))
 					LasUtil::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
-				g_trace("File bounds " << files[i] << ": " << bounds0.print());
+				g_debug("File bounds " << files[i] << ": " << bounds0.print());
 				in.close();
 				if(bounds.intersects(bounds0, 2)) {
 					indices.push_back(i);
 					bounds1.extend(bounds0);
-					g_trace("Total bounds: " << bounds1.print());
+					g_debug("Total bounds: " << bounds1.print());
 				}
 			}
 
@@ -206,19 +214,19 @@ namespace geotools {
 			if(snap)
 				bounds.snap(resolution);
 			
-			g_trace(bounds.print());
+			g_debug(bounds.print());
 
 			// Prepare grid
 			int cols = bounds.cols(resolution);
 			int rows = bounds.rows(resolution);
 
-			g_trace("Raster size: " << cols << ", " << rows << "; Cell radius: " << radius);
+			g_debug("Raster size: " << cols << ", " << rows << "; Cell radius: " << radius);
 			
 			// For types other than count, we need a double grid to manage sums.
 			if(type != TYPE_COUNT) {
 				grid1.init(cols, rows);
 				grid1.fill(-9999.0);
-				g_trace("Created grid1: " << cols << ", " << rows);
+				g_debug("Created grid1: " << cols << ", " << rows);
 			}
 
 			// For the median grid.
@@ -233,29 +241,36 @@ namespace geotools {
 				qGrid.setDeallocator(&vector_dealloc);
 				for(size_t i = 0; i < qGrid.size(); ++i)
 					qGrid.set(i, new std::vector<double>());
-				g_trace("Created qGrid: " << cols << ", " << rows);
+				g_debug("Created qGrid: " << cols << ", " << rows);
 				break;
 			}
 
 			// Create a grid for maintaining counts.
-			g_trace("Creating counts grid: " << cols << ", " << rows);
+			g_debug("Creating counts grid: " << cols << ", " << rows);
 			counts.init(cols, rows);
 			counts.fill(0);
 
-			g_trace("Using " << indices.size() << " of " << files.size() << " files.");
+			g_debug("Using " << indices.size() << " of " << files.size() << " files.");
 
 			// Process files
-			int current = 0; // Current file counter.
 			for(unsigned int j = 0; j < indices.size(); ++j) {
 				unsigned int i = indices[j];
 				std::ifstream in(files[i].c_str());
 				liblas::Reader reader = rf.CreateWithStream(in);
 				liblas::Header header = reader.GetHeader();
 
-				g_trace("File " << ++current << " of " << indices.size());
+				if(m_overallCallback)
+					m_overallCallback((float) j / indices.size() * 100.0);
+
+				size_t curPt = 0;
+				size_t numPts = header.GetPointRecordsCount();
 
 				while(reader.ReadNextPoint()) {
 					liblas::Point pt = reader.GetPoint();
+
+					if(curPt % 1000 == 0)
+						m_fileCallback((float) curPt / numPts * 100.0);
+					++curPt;
 
 					if(g_abs(pt.GetScanAngleRank()) > angleLimit)
 						continue;
@@ -291,7 +306,7 @@ namespace geotools {
 								continue;
 							// Compute the grid index. The rows are assigned from the bottom.
 							int idx = (rows - rr - 1) * cols + cc;
-							g_trace("idx: " << idx);
+							g_debug("idx: " << idx);
 							counts.set(idx, counts.get(idx) + 1);
 
 							switch(type){
@@ -322,7 +337,14 @@ namespace geotools {
 						}
 					}
 				}
+
+				if(m_fileCallback)
+					m_fileCallback(100.0);
+
 			}
+
+			if(m_overallCallback)
+				m_overallCallback(100.0);
 
 			// Calculate cells or set nodata.
 			// Welford's method for variance.

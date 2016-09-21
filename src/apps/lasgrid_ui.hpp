@@ -1,6 +1,8 @@
 #ifndef __LASGRID_UI_HPP__
 #define __LASGRID_UI_HPP__
 
+#include <set>
+
 #include <QtWidgets/QWidget>
 #include <QDir>
 
@@ -17,7 +19,8 @@ namespace geotools {
 			std::string m_destFile;
 			std::vector<std::string> m_lasFiles;
 			std::set<int> m_classes;
-			int m_crs;
+			int m_vsrid;
+			int m_hsrid;
 			int m_attribute;
 			int m_type;
 			unsigned char m_angleLimit;
@@ -28,10 +31,14 @@ namespace geotools {
 			QDir *m_last;
 			void updateFileList();
 			void updateFileButtons();
+			void checkRun();
 		public:
 			LasgridForm(QWidget *p = Q_NULLPTR);
 			void setupUi(QWidget *Form);
 			~LasgridForm();
+			void setFileStatus(float);
+			void setOverallStatus(float);
+
 		public slots:
 			void fileListSelectionChanged();
 			void selectFilesClicked();
@@ -41,6 +48,7 @@ namespace geotools {
 			void runClicked();
 			void destFileClicked();
 			void crsConfigClicked();
+			void typeSelected(int);
 		};
 
 	}
