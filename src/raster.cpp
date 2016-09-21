@@ -551,9 +551,10 @@ void MemRaster<T>::writeBlock(int col, int row, Grid<T> &block, int srcCol, int 
 		g_argerr("Block is taller than the available space.");
 	if(block.hasGrid()) {
 		for(int r = 0; r < block.rows() - srcRow; ++r) {
+			g_debug(" -- " << r << "; " << col << ", " << row << "; " << srcCol << "," << srcRow << "; " << m_cols << "," << m_rows << "; " << block.cols() << "," << block.rows() << "; " << sizeof(T));
 			std::memcpy(
-				m_grid + (row + r) * m_cols + col,
-				block.grid() + (r + srcRow) * block.cols() + srcCol,
+				(m_grid + (row + r) * m_cols + col),
+				(block.grid() + (r + srcRow) * block.cols() + srcCol),
 				(block.cols() - srcRow) * sizeof(T)
 			);
 		}
@@ -1013,10 +1014,16 @@ void Raster<T>::readBlock(int col, int row, Grid<T> &grd, int dstCol, int dstRow
 	int rows = g_min(m_rows - row, grd.rows() - dstRow);
 	if(cols < 1 || rows < 1)
 		g_argerr("Zero read size.");
-	MemRaster<T> mr(cols, rows);
-	if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-		g_runerr("Failed to read from band.");
-	grd.writeBlock(dstCol, dstRow, mr);
+	if(grd.hasGrid()) {
+		MemRaster<T> mr(cols, rows);
+		if(m_band->RasterIO(GF_Read, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
+			g_runerr("Failed to read from band.");
+	} else {
+		MemRaster<T> mr(cols, rows);
+		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+			g_runerr("Failed to read from band.");
+		grd.writeBlock(dstCol, dstRow, mr);
+	}
 }
 
 template <class T>
@@ -1027,10 +1034,15 @@ void Raster<T>::writeBlock(int col, int row, Grid<T> &grd, int srcCol, int srcRo
 	int rows = g_min(m_rows - row, grd.rows() - srcRow);
 	if(cols < 1 || rows < 1)
 		g_argerr("Zero write size.");
-	MemRaster<T> mr(cols, rows);
-	grd.readBlock(srcCol, srcRow, mr);
-	if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-		g_runerr("Failed to write to band.");
+	if(grd.hasGrid()) {
+		if(m_band->RasterIO(GF_Write, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
+			g_runerr("Failed to write to band.");
+	} else {
+		MemRaster<T> mr(cols, rows);
+		grd.readBlock(srcCol, srcRow, mr);
+		if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+			g_runerr("Failed to write to band.");
+	}
 }
 
 template <class T>
