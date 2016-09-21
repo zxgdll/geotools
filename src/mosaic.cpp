@@ -115,17 +115,24 @@ namespace geotools {
 
 			using namespace geotools::raster::util;
 
+			g_debug("Opening base file.");
 			// Open the BG file for reading only.
 			Raster<float> base(files[0]);
 
+			g_debug("Writing base file to output.");
 			// Create the destination file to modify it.
 			Raster<float> output(outfile, 1, base);
-			output.writeBlock(base);
+			MemRaster<float> buf(base.cols(), 1000);
+			for(int r = 0; r < base.rows(); r += 1000) {
+				g_debug("Writing base block " << r);
+				base.readBlock(0, r, buf);
+				output.writeBlock(0, r, buf);
+			}
 
 			// Iterate over the files, adding each one to the background.
 			for(unsigned int i = 1; i < files.size(); ++i) {
 
-				g_trace("Processing file: " << files[i]);
+				g_debug("Processing file: " << files[i]);
 				Raster<float> input(files[i]);
 				if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
 					g_argerr("Raster's resolution does not match the background.");
@@ -144,7 +151,7 @@ namespace geotools {
 				int cols = output.toCol(posXRes ? maxx : minx) - col;
 				int rows = output.toRow(posYRes ? maxy : miny) - row;
 
-				g_trace("Col: " << col << ", row: " << row << ", cols: " << cols << ", rows: " << rows);
+				g_debug("Col: " << col << ", row: " << row << ", cols: " << cols << ", rows: " << rows);
 				
 				float imNodata = input.nodata();
 				float outNodata = output.nodata();
@@ -160,7 +167,7 @@ namespace geotools {
 				#pragma omp parallel for
 				for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) {
 
-					g_trace("Bufrow: " << bufRow);
+					g_debug("Bufrow: " << bufRow);
 					
 					// Initialize the grids.
 					MemRaster<float> imGrid(cols, bufRows);
@@ -185,7 +192,7 @@ namespace geotools {
 
 					// The last row might have to be smaller.
 					if(bufRow0 + bufRows0 > rows) {
-						g_trace("Adjusting last row");
+						g_debug("Adjusting last row");
 						bufRows0 = rows - bufRow0;
 						rowHeight0 = bufRows0 - rowOffset0;
 					}
@@ -196,35 +203,35 @@ namespace geotools {
 
 					// If the height of the row has changed, reinit the grids.
 					if(bufRows0 < bufRows) {
-						g_trace("Reiniting grids for last line");
+						g_debug("Reiniting grids for last line");
 						imGrid.init(cols, bufRows0);
 						outGrid.init(cols, bufRows0);
 						alphaGrid.init(cols, bufRows0);
 					}
 
-					g_trace("Loading overlay");
+					g_debug("Loading overlay");
 					// Load the overlay.
 					#pragma omp critical(a)
 					{
 						input.readBlock(0, bufRow0, imGrid);
 					}
 
-					g_trace("Feathering");
+					g_debug("Feathering");
 					// Feather the overlay
 					feather(imGrid, alphaGrid, cols, bufRows0, distance, imNodata, g_abs(input.resolutionX()));
 
-					g_trace("Reading background");
+					g_debug("Reading background");
 					// Read background data.
 					#pragma omp critical(b)
 					{
 						base.readBlock(col, row + bufRow0, outGrid);
 					}
 
-					g_trace("Blending");
+					g_debug("Blending");
 					// Blend the overlay into the output.
 					blend(imGrid, outGrid, alphaGrid, cols, bufRows0, imNodata, outNodata);
 
-					g_trace("Writing output");
+					g_debug("Writing output");
 					// Write back to the output.
 					// We are extracting a slice out of the buffer, not writing the whole thing.
 					#pragma omp critical(c)
@@ -266,7 +273,7 @@ int main(int argc, char **argv) {
 	 		} else if(arg == "-o") {
 	 			outfile = argv[++i];
 			} else if(arg == "-v") {
-				g_loglevel(G_LOG_TRACE);
+				g_loglevel(G_LOG_DEBUG);
 	 		} else {
 	 			files.push_back(argv[i]);
 	 		}
