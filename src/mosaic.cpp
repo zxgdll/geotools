@@ -65,6 +65,7 @@ namespace geotools {
 				float step = 0.0;
 				float steps = g_max(1.0, distance / resolution);
 				bool found = false;
+				g_debug("feather step: " << step << "; " << steps);
 				// "Snow in" the alpha mask. The loop will exit when no more edge pixels can be found.
 				do {
 					found = false;
@@ -87,10 +88,17 @@ namespace geotools {
 			/**
 			 * Blends two rasters together using the alpha grid for blending.
 			 */
-			void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, int cols, int rows, float imNodata, float bgNodata) {
-				for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-					if(!(bgGrid[i] == bgNodata || imgGrid[i] == imNodata))
-						bgGrid.set(i, bgGrid[i] * (1.0 - alpha[i]) + imgGrid[i] * alpha[i]);
+			void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, 
+				int cols, int rows, float imNodata, float bgNodata) {
+				for(int r = 0; r < rows; ++r) {
+					for(int c = 0; c < cols; ++c) {
+						float bv = bgGrid.get(c, r);
+						float iv = imgGrid.get(c, r);
+						if(!(bv == bgNodata || iv == imNodata)) {
+							float av = alpha.get(c, r);
+							bgGrid.set(c, r, iv * (1.0 - av) + iv * av);
+						}
+					}
 				}
 			}
 
@@ -129,6 +137,24 @@ namespace geotools {
 				output.writeBlock(0, r, buf);
 			}
 
+			// Determine if the vertical and horizontal resolution are positive.
+			bool posYRes = base.resolutionY() > 0;
+			bool posXRes = base.resolutionX() > 0;
+			float outNodata = base.nodata();
+
+			// Get the smaller resolution.
+			float res = g_min(g_abs(base.resolutionX()), g_abs(base.resolutionY()));
+
+			// Snap the distance to resolution
+			distance = std::floor(distance / res) * res;
+			g_debug("Distance is " << distance);
+
+			// The number of rows required to accomodate the fade distance.
+			int rowOffset = (int) distance / res;
+
+			// The height, in rows, of the buffer.
+			int bufRows = rowHeight + rowOffset * 2;
+
 			// Iterate over the files, adding each one to the background.
 			for(unsigned int i = 1; i < files.size(); ++i) {
 
@@ -137,34 +163,23 @@ namespace geotools {
 				if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
 					g_argerr("Raster's resolution does not match the background.");
 
-				// Determine if the vertical and horizontal resolution are positive.
-				bool posYRes = input.resolutionY() > 0;
-				bool posXRes = input.resolutionX() > 0;
-
 				// Get the origin of the input w/r/t the output and the number of overlapping cols, rows.
 				double maxx = g_min(input.maxx(), output.maxx());
 				double minx = g_max(input.minx(), output.minx());
 				double maxy = g_min(input.maxy(), output.maxy());
 				double miny = g_max(input.miny(), output.miny());
-				int col = output.toCol(posXRes ? minx : maxx);
-				int row = output.toRow(posYRes ? miny : maxy);
-				int cols = output.toCol(posXRes ? maxx : minx) - col;
-				int rows = output.toRow(posYRes ? maxy : miny) - row;
+				int col = output.toCol(posXRes ? input.minx() : input.maxx());
+				int row = output.toRow(posYRes ? input.miny() : input.maxy());
+
+				int cols = (int) input.cols() + rowOffset * 2; //output.toCol(posXRes ? input.maxx() : input.minx()) - col;
+				int rows = (int) input.rows() + rowOffset * 2; //output.toRow(posYRes ? input.maxy() : input.miny()) - row;
 
 				g_debug("Col: " << col << ", row: " << row << ", cols: " << cols << ", rows: " << rows);
 				
 				float imNodata = input.nodata();
-				float outNodata = output.nodata();
-
-				// Compute the average resolution between x and y.
-				float res = (g_abs(input.resolutionX()) + g_abs(input.resolutionY())) / 2.0;
-				// The number of rows required to accomodate the fade distance.
-				int rowOffset = (int) distance / res + 1;
-				// The height, in rows, of the buffer.
-				int bufRows = rowHeight + rowOffset * 2;
 
 				// Move the window down by rowHeight and one rowOffset *not* two for each iteration.
-				#pragma omp parallel for
+				//#pragma omp parallel for
 				for(int bufRow = -rowOffset; bufRow < rows; bufRow += rowHeight) {
 
 					g_debug("Bufrow: " << bufRow);
@@ -183,60 +198,72 @@ namespace geotools {
 					int bufRow0 = bufRow;
 					int rowHeight0 = rowHeight;
 					int rowOffset0 = rowOffset;
-					
+		
+					int inCol = col < 0 ? -col : 0;
+					int baseCol = col < 0 ? 0 : col;
+	
+					/*		
 					if(bufRow0 < 0) {
 						bufRow0 = 0;
 						bufRows0 = bufRows - rowOffset;
 						rowOffset0 = 0;
 					}
-
+					*/
 					// The last row might have to be smaller.
+					/*
 					if(bufRow0 + bufRows0 > rows) {
 						g_debug("Adjusting last row");
 						bufRows0 = rows - bufRow0;
 						rowHeight0 = bufRows0 - rowOffset0;
 					}
-
+					*/
 					// Could happen with multiple threads.
 					if(rowHeight0 < 1)
 						continue;
 
 					// If the height of the row has changed, reinit the grids.
+					/*
 					if(bufRows0 < bufRows) {
 						g_debug("Reiniting grids for last line");
 						imGrid.init(cols, bufRows0);
 						outGrid.init(cols, bufRows0);
 						alphaGrid.init(cols, bufRows0);
 					}
+					*/
+					bufRow0 = bufRow < 0 ? 0 : bufRow0;
+					rowOffset0 = bufRow < 0 ? rowOffset : 0;
 
 					g_debug("Loading overlay");
+					g_debug(" -- bufRow0: " << bufRow0 << "; rowOffset0: " << rowOffset0);
+					g_debug(" -- incol: " << inCol << "; baseCol: " << baseCol);
 					// Load the overlay.
 					#pragma omp critical(a)
 					{
-						input.readBlock(0, bufRow0, imGrid);
+						input.readBlock(inCol, bufRow0, imGrid, 0, rowOffset0);
 					}
 
 					g_debug("Feathering");
 					// Feather the overlay
-					feather(imGrid, alphaGrid, cols, bufRows0, distance, imNodata, g_abs(input.resolutionX()));
+					if(distance > 0.0)
+						feather(imGrid, alphaGrid, cols, bufRows, distance, imNodata, res);
 
 					g_debug("Reading background");
 					// Read background data.
 					#pragma omp critical(b)
 					{
-						base.readBlock(col, row + bufRow0, outGrid);
+						base.readBlock(baseCol, row + bufRow0, outGrid, 0, rowOffset0);
 					}
 
 					g_debug("Blending");
 					// Blend the overlay into the output.
-					blend(imGrid, outGrid, alphaGrid, cols, bufRows0, imNodata, outNodata);
+					blend(imGrid, outGrid, alphaGrid, cols, bufRows, imNodata, outNodata);
 
 					g_debug("Writing output");
 					// Write back to the output.
 					// We are extracting a slice out of the buffer, not writing the whole thing.
 					#pragma omp critical(c)
 					{
-						output.writeBlock(col, row + bufRow0 + rowOffset0, outGrid, 0, rowOffset0);
+						output.writeBlock(0, row + bufRow0, outGrid, 0, rowOffset0);
 					}
 
 				}
