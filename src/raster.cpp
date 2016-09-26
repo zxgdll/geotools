@@ -516,51 +516,53 @@ void MemRaster<T>::nodata(T nodata) {
 }
 
 template <class T>
-void MemRaster<T>::readBlock(int col, int row, Grid<T> &block, int dstCol, int dstRow) {
+void MemRaster<T>::readBlock(int col, int row, Grid<T> &block, int dstCol, int dstRow, int xcols, int xrows) {
 	if(&block == this)
 		g_argerr("Recursive call to readBlock.");
-	if(col + block.cols() - dstRow > m_cols)
-		g_argerr("Block is wider than the available space.");
-	if(row + block.rows() - dstCol > m_rows)
-		g_argerr("Block is taller than the available space.");
+	if(dstCol < 0 || dstRow < 0 || dstCol >= block.cols() || dstRow >= block.rows())
+		g_argerr("Invalid destination column or row: row: " << dstRow << "; col: " << dstCol << "; block: " << block.rows() << "," << block.rows());
+	int cols = g_min(m_cols - col, block.cols() - dstCol);
+	int rows = g_min(m_rows - row, block.rows() - dstRow);
 	if(block.hasGrid()) {
-		for(int r = 0; r < block.rows() - dstRow; ++r) {
+		// Copy rows of he source l
+		for(int r = 0; r < rows; ++r) {
+			//g_debug(" -- " << r << "; " << col << ", " << row << "; " << dstCol << "," << dstRow << "; " << m_cols << "," << m_rows << "; " << block.cols() << "," << block.rows() << "; " << sizeof(T));
 			std::memcpy(
-				(block.grid() + (r + dstRow) * block.cols() + dstCol),
-				(m_grid + (row + r) * m_cols + col),
-				(block.cols() - dstCol) * sizeof(T)
+				(block.grid() + (dstRow + r) * block.cols() + dstCol),
+				(m_grid       + (row    + r) * m_cols       + col),
+				cols * sizeof(T)
 			);
 		}
 	} else {
-		for(int r = 0; r < block.rows() - dstRow; ++r) {
-			for(int c = 0; c < block.cols() - dstCol; ++c)
+		for(int r = 0; r < rows; ++r) {
+			for(int c = 0; c < cols; ++c)
 				block.set(c + dstCol, r + dstRow, get(c + col, r + row));
 		}
 	}
 }
 
 template <class T>
-void MemRaster<T>::writeBlock(int col, int row, Grid<T> &block, int srcCol, int srcRow) {
+void MemRaster<T>::writeBlock(int col, int row, Grid<T> &block, int srcCol, int srcRow, int xcols, int xrows) {
 	if(&block == this)
 		g_argerr("Recursive call to writeBlock.");
 	if(srcCol < 0 || srcRow < 0 || srcCol >= block.cols() || srcRow >= block.rows())
 		g_argerr("Invalid source column or row: row: " << srcRow << "; col: " << srcCol << "; block: " << block.rows() << "," << block.rows());
-	if(col + block.cols() - srcCol > m_cols)
-		g_argerr("Block is wider than the available space.");
-	if(row + block.rows() - srcRow > m_rows)
-		g_argerr("Block is taller than the available space.");
+	int cols = g_min(m_cols - col, block.cols() - srcCol);
+	int rows = g_min(m_rows - row, block.rows() - srcRow);
+	if(xcols > 0) cols = g_min(xcols, cols);
+	if(xrows > 0) rows = g_min(xrows, rows);
 	if(block.hasGrid()) {
-		for(int r = 0; r < block.rows() - srcRow; ++r) {
+		for(int r = 0; r < rows; ++r) {
 			//g_debug(" -- " << r << "; " << col << ", " << row << "; " << srcCol << "," << srcRow << "; " << m_cols << "," << m_rows << "; " << block.cols() << "," << block.rows() << "; " << sizeof(T));
 			std::memcpy(
-				(m_grid + (row + r) * m_cols + col),
+				(m_grid       + (r + row)    * m_cols       + col),
 				(block.grid() + (r + srcRow) * block.cols() + srcCol),
-				(block.cols() - srcCol) * sizeof(T)
+				cols * sizeof(T)
 			);
 		}
 	} else {
-		for(int r = 0; r < block.rows() - srcRow; ++r) {
-			for(int c = 0; c < block.cols() - srcCol; ++c)
+		for(int r = 0; r < rows; ++r) {
+			for(int c = 0; c < cols; ++c)
 				set(c + col, r + row, block.get(c + srcCol, r + srcRow));
 		}
 	}
@@ -575,7 +577,6 @@ template <class T>
 void MemRaster<T>::readBlock(Grid<T> &block) {
 	readBlock(0, 0, block);
 }
-
 
 // Implementations for BlockCache
 template <class T>
@@ -1007,9 +1008,10 @@ void Raster<T>::fill(T value) {
 }
 
 template <class T>
-void Raster<T>::readBlock(int col, int row, Grid<T> &grd, int dstCol, int dstRow) {
+void Raster<T>::readBlock(int col, int row, Grid<T> &grd, int dstCol, int dstRow, int xcols, int xrows) {
 	if(&grd == this)
 		g_runerr("Recursive call to readBlock.");
+	m_cache.flush();
 	int cols = g_min(m_cols - col, grd.cols() - dstCol);
 	int rows = g_min(m_rows - row, grd.rows() - dstRow);
 	if(cols < 1 || rows < 1)
@@ -1033,11 +1035,14 @@ void Raster<T>::readBlock(int col, int row, Grid<T> &grd, int dstCol, int dstRow
 }
 
 template <class T>
-void Raster<T>::writeBlock(int col, int row, Grid<T> &grd, int srcCol, int srcRow) {
+void Raster<T>::writeBlock(int col, int row, Grid<T> &grd, int srcCol, int srcRow, int xcols, int xrows) {
 	if(&grd == this)
 		g_runerr("Recursive call to writeBlock.");
+	m_cache.flush();
 	int cols = g_min(m_cols - col, grd.cols() - srcCol);
 	int rows = g_min(m_rows - row, grd.rows() - srcRow);
+	if(xcols > 0) cols = g_min(xcols, cols);
+	if(xrows > 0) rows = g_min(xrows, rows);
 	if(cols < 1 || rows < 1)
 		g_argerr("Zero write size.");
 	if(grd.hasGrid()) {

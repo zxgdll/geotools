@@ -184,8 +184,10 @@ namespace geotools {
 			 * block  - The block to read into.
 			 * dstCol - The column in the destination block to write to.
 			 * dstRow - The row in the destination block to write to. 
+			 * xcols  - The max number of cols to write.
+			 * xrows  - The max number of rows to write.
 			 */
-			virtual void readBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0) =0;
+			virtual void readBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0, int xcols = 0, int xrows = 0) =0;
 
 			/**
 			 * Read data into Grid instance. Will attempt to read a region of the same size
@@ -201,8 +203,10 @@ namespace geotools {
 			 * block  - The block to write from..
 			 * srcCol - The column in the source block to read from.
 			 * srcRow - The row in the source block to read from. 
+			 * xcols  - The max number of cols to write.
+			 * xrows  - The max number of rows to write.
 			 */
-			virtual void writeBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0) =0;
+			virtual void writeBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0, int xcols = 0, int xrows = 0) =0;
 
 			/**
 			 * Write data from Grid instance. Will attempt to write a region of the same size
@@ -384,9 +388,9 @@ namespace geotools {
 
 			void nodata(T nodata);
 
-			void readBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0);
+			void readBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0, int xcols = 0, int xrows = 0);
 
-			void writeBlock(int col, int row, Grid<T> &block, int srcCol = 0, int srcRow = 0);
+			void writeBlock(int col, int row, Grid<T> &block, int srcCol = 0, int srcRow = 0, int xcols = 0, int xrows = 0);
 
 			void writeBlock(Grid<T> &block);
 
@@ -670,9 +674,9 @@ namespace geotools {
 
 			void fill(T value);
 
-			void readBlock(int col, int row, Grid<T> &grd, int dstCol = 0, int dstRow = 0);
+			void readBlock(int col, int row, Grid<T> &grd, int dstCol = 0, int dstRow = 0, int xcols = 0, int xrows = 0);
 
-			void writeBlock(int col, int row, Grid<T> &grd, int srcCol = 0, int srcRow = 0);
+			void writeBlock(int col, int row, Grid<T> &grd, int srcCol = 0, int srcRow = 0, int xcols = 0, int xrows = 0);
 
 			void writeBlock(Grid<T> &block);
 			
