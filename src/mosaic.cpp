@@ -54,13 +54,25 @@ namespace geotools {
 			 * Feathers the edges of data regions in a raster grid by setting the alpha
 			 * value for a pixel in proportion to its distance from the nearest null or edge.
 			 */
-			void feather(Grid<float> &srcGrid, Grid<float> &dstGrid, int cols, int rows, float distance, float nodata, float resolution) {
+			bool feather(Grid<float> &srcGrid, Grid<float> &dstGrid, float distance, float nodata, float resolution) {
 				// Fill grid is used to keep track of where the edges are as they're "snowed in"
 				// Starts out as a mask of non-nodata pixels from the source.
-				g_debug("feather: nodata: " << nodata << "; res: " << resolution << "; distance: " << distance << "; cols: " << cols << "; rows: " << rows);
+				int cols = srcGrid.cols();
+				int rows = srcGrid.rows();
+				//g_debug("feather: nodata: " << nodata << "; res: " << resolution << "; distance: " << distance << "; cols: " << cols << "; rows: " << rows);
 				MemRaster<char> fillGrid(cols, rows);
-				for(size_t i = 0; i < (size_t) rows * cols; ++i)
-					fillGrid.set(i, srcGrid[i] == nodata ? 0 : 1);
+				int valid = 0;
+				for(size_t i = 0; i < (size_t) rows * cols; ++i) {
+					if(srcGrid[i] == nodata) {
+						fillGrid.set(i, 0);
+					} else {
+						fillGrid.set(i, 1);
+						++valid;
+					}
+				}
+			
+				if(valid == 0) 
+					return false;
 
 				// The number of steps is just the number of pixels needed to 
 				// cover the distance of the fade.
@@ -84,28 +96,99 @@ namespace geotools {
 						if(fillGrid[i] == 2) fillGrid.set(i, 0);
 					step += 1.0;
 				} while(found && step <= steps);
+
+				return true;
 			}
 
 			/**
 			 * Blends two rasters together using the alpha grid for blending.
 			 */
-			void blend(Grid<float> &imgGrid, Grid<float> &bgGrid, Grid<float> &alpha, 
-				int cols, int rows, float imNodata, float bgNodata) {
-				for(int r = 0; r < rows; ++r) {
-					for(int c = 0; c < cols; ++c) {
+			void blend(Grid<float> &imGrid, Grid<float> &bgGrid, Grid<float> &alpha, float imNodata, float bgNodata) {
+				for(int r = 0; r < imGrid.rows(); ++r) {
+					for(int c = 0; c < imGrid.cols(); ++c) {
 						float bv = bgGrid.get(c, r);
-						float iv = imgGrid.get(c, r);
+						float iv = imGrid.get(c, r);
 						if(!(bv == bgNodata)) {
 							float av = alpha.get(c, r);
-							if(iv == imNodata)
-								iv = 0.0;
-							bgGrid.set(c, r, bv * (1.0 - av) + iv * av);
+							if(iv != imNodata)
+								bgGrid.set(c, r, bv * (1.0 - av) + iv * av);
 						}
 					}
 				}
 			}
 
 		} // util
+
+		class Tile {
+		public:
+			int iCol;
+			int iRow;
+			int oCol;
+			int oRow;
+			int tileSize;
+			int buffer;
+
+			Tile(int tileSize, int buffer, int iCol, int iRow, int oCol, int oRow) :
+				tileSize(tileSize), buffer(buffer),
+				iCol(iCol), iRow(iRow),
+				oCol(oCol), oRow(oRow) {
+			}
+
+			bool readInput(MemRaster<float> &buf, Raster<float> &input) const {
+				int col = iCol - buffer;
+				int row = iRow - buffer;
+				int cols = tileSize + buffer * 2;
+				int rows = tileSize + buffer * 2;
+				int cOff = 0;
+				int rOff = 0;
+				if(col < 0) {
+					cOff = -col;
+					cols -= col;
+					col = 0;
+				}
+				if(row < 0) {
+					rOff = -row;
+					rows -= row;
+					row = 0;
+				}
+				if(cols <= 0 || rows <= 0)
+					return false;
+				input.readBlock(col, row, buf, cOff, rOff, cols, rows);
+				return true;
+			}
+				
+			bool readOutput(MemRaster<float> &buf, Raster<float> &output) const {
+				int col = oCol - buffer;
+				int row = oRow - buffer;
+				int cols = tileSize + buffer * 2;
+				int rows = tileSize + buffer * 2;
+				int cOff = 0;
+				int rOff = 0;
+				if(col < 0) {
+					cOff = -col;
+					cols -= col;
+					col = 0;
+				}
+				if(row < 0) {
+					rOff = -row;
+					rows -= row;
+					row = 0;
+				}
+				if(cols <= 0 || rows <= 0)
+					return false;
+				output.readBlock(col, row, buf, cOff, rOff, cols, rows);
+				return true;
+			}
+
+			void writeOutput(MemRaster<float> &buf, Raster<float> &output) const {
+				if(!(oCol >= output.cols() || oRow >= output.rows()))
+					output.writeBlock(oCol, oRow, buf, buffer, buffer, tileSize, tileSize);
+			}
+
+			void print() const {
+				std::cerr << "[Tile: in: " << iCol << "," << iRow << "; out: " << oCol << "," << oRow << "]" << std::endl;
+			}
+		};
 
 		/**
 		 * Mosaic the given files together using the first as the base. The base file will serve as a clipping
@@ -115,7 +198,7 @@ namespace geotools {
 		* used, the existing overviews may obscure the fact that the image has changed (when zoomed out.)
 		 */
 		 // TODO: Background must be larger than other files. Remedy this.
-		void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, int rowHeight = 500, int threads = 1) {
+		void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, int tileSize, int threads = 1) {
 			
 			g_debug("mosaic");
 
@@ -125,13 +208,22 @@ namespace geotools {
 				g_argerr("No output file given.");
 			if(files.size() < 2)
 				g_argerr("Less than 2 files. Nothing to do.");
+			if(tileSize <= 0)
+				g_argerr("Tile size must be greater than zero.");
 
 			using namespace geotools::raster::util;
 
 			// Open the BG file for reading only.
 			g_debug(" -- opening base file.");
 			Raster<float> base(files[0]);
-
+	
+			// Check some properties of other files for compatibility.
+			for(int i = 1; i < files.size(); ++i) {
+				Raster<float> check(files[i]);
+				if(check.resolutionX() != base.resolutionX() || check.resolutionY() != base.resolutionY())
+					g_argerr("Resolution of " << files[i] << " doesn't match base.")
+			}
+				
 			// Create the destination file to modify it.
 			Raster<float> output(outfile, 1, base);
 			{
@@ -140,113 +232,101 @@ namespace geotools {
 				// Copy by block to avoid memory problems on big rasters. 
 				// TODO: Configurable block size.
 				for(int r = 0; r < base.rows(); r += 1000) {
-					//base.readBlock(0, r, buf);
-					//output.writeBlock(0, r, buf);
+					base.readBlock(0, r, buf);
+					output.writeBlock(0, r, buf);
 				}
 			}
 
-			// Determine if the vertical and horizontal resolution are positive.
-			// Get the smaller resolution to use for distance calculations.
-			bool posYRes = base.resolutionY() > 0;
-			bool posXRes = base.resolutionX() > 0;
-			float outNodata = base.nodata();
-			float res = g_min(g_abs(base.resolutionX()), g_abs(base.resolutionY()));
+			for(int i = 1; i < files.size(); ++i) {
 
-			// Snap the distance to resolution
-			distance = std::floor(distance / res) * res;
-			g_debug(" -- snapped distance is " << distance);
-
-			// The number of rows required to accomodate the fade distance.
-			int buffer = (int) distance / res + 1;
-			while(rowHeight <= buffer) {
-				g_warn("The row height (" << rowHeight << ") must be larger than the buffer distance (" << buffer << "). Doubling.");
-				rowHeight *= 2;
-			}
-
-			// Iterate over the files, adding each one to the background.
-			for(unsigned int i = 1; i < files.size(); ++i) {
-
-				g_debug(" -- processing file: " << files[i]);
 				Raster<float> input(files[i]);
-				if(output.resolutionX() != input.resolutionX() || output.resolutionY() != input.resolutionY()) 
-					g_argerr("Raster's resolution does not match the background.");
 
-				// Get the origin of the input w/r/t the output and the number of overlapping cols, rows.
-				int col = output.toCol(posXRes ? input.minx() : input.maxx());
-				int row = output.toRow(posYRes ? input.miny() : input.maxy());
-				int cols = output.toCol(posXRes ? input.maxx() : input.minx()) - col;
-				int rows = output.toRow(posYRes ? input.maxy() : input.miny()) - row;
-				float imNodata = input.nodata();
+				Bounds bounds = base.bounds().intersection(input.bounds());
 
-				g_debug(" -- col: " << col << ", row: " << row << ", cols: " << cols << ", rows: " << rows);
+				// Compute the column/row bounds of the intersection.
+				int iStartCol = input.toCol(input.positiveX() ? bounds.minx() : bounds.maxx());
+				int iStartRow = input.toRow(input.positiveY() ? bounds.miny() : bounds.maxy());
+				int iEndCol = input.toCol(input.positiveX() ? bounds.maxx() : bounds.minx());
+				int iEndRow = input.toRow(input.positiveY() ? bounds.maxy() : bounds.miny());
+				int oStartCol = base.toCol(output.positiveX() ? bounds.minx() : bounds.maxx());
+				int oStartRow = base.toRow(output.positiveY() ? bounds.miny() : bounds.maxy());
+				int oEndCol = base.toCol(output.positiveX() ? bounds.maxx() : bounds.minx());
+				int oEndRow = base.toRow(output.positiveY() ? bounds.maxy() : bounds.miny());
 
-				const int batchSize = ((int) std::ceil((double) rows / threads / rowHeight)) * rowHeight;
+				// Get the minimum absolute resolution.			
+				double res = g_min(g_abs(base.resolutionX()), g_abs(base.resolutionY()));
+				g_debug(" -- resolution is: " << res);
 
-				g_debug(" -- batch size: " << batchSize << " for " << threads << " threads");
+				// Snap the distance to resolution
+				distance = std::floor(distance / res) * res;
+				g_debug(" -- snapped distance is " << distance);
 
-				#pragma omp parallel for
-				for(int o = 0; o < threads; ++o) {
-					// TODO: This is to solve a problem with skipping the second iteration under OMP.
-					int offset = o * batchSize;
-					g_debug(" -- o: " << o << "; offset: " << offset << "; batchSize: " << batchSize);
+				// The number of rows required to accomodate the fade distance.
+				int buffer = (int) distance / res + 1;
+				while(tileSize <= buffer) {
+					g_warn("The tileSize (" << tileSize << ") must be larger than the buffer distance (" << buffer << "). Doubling.");
+					tileSize *= 2;
+				}
+				g_debug(" -- tile size is: " << tileSize);
+
+				std::vector<Tile> tiles;
+
+				for(int ir = iStartRow, rr = oStartRow; ir <= iEndRow; ir += tileSize, rr += tileSize) {
+					for(int ic = iStartCol, oc = oStartCol; ic <= iEndCol; ic += tileSize, oc += tileSize)
+						tiles.push_back(Tile(tileSize, buffer, ic, ir, oc, rr));
+				}
+
+				int t = 0;
+
+				#pragma omp parallel
+				{
 
 					// Initialize the grids.
-					MemRaster<float> imGrid(cols + buffer * 2, rowHeight + buffer * 2);
-					MemRaster<float> outGrid(cols + buffer * 2, rowHeight + buffer * 2);
-					MemRaster<float> alphaGrid(cols + buffer * 2, rowHeight + buffer * 2);
+					MemRaster<float> inGrid(tileSize + buffer * 2, tileSize + buffer * 2);
+					MemRaster<float> outGrid(tileSize + buffer * 2, tileSize + buffer * 2);
+					MemRaster<float> alphaGrid(tileSize + buffer * 2, tileSize + buffer * 2);
+					float outNodata = output.nodata();
+					float inNodata = input.nodata();
 
-					int inCol   = (col - buffer) < 0 ? -(col - buffer) : 0;
-					int baseCol = (col - buffer) < 0 ? 0               : (col - buffer);
-	
-					for(int bufRow = offset; bufRow < offset + batchSize; bufRow += rowHeight) {
-
-						g_debug(" -- bufrow: " << bufRow << "; row height: " << rowHeight << "; thread: " << omp_get_thread_num());
-						
+					#pragma omp for
+					for(int t = 0; t < tiles.size(); ++t) {
+						const Tile &tile = tiles[t];
+						g_debug(" -- tile " << t << "; thread: " << omp_get_thread_num());
+		
 						// Set to zero or nodata depending on the band.
 						outGrid.fill(outNodata);
-						imGrid.fill(imNodata);
+						inGrid.fill(inNodata);
 						alphaGrid.fill(1.0);
 
-						// Load the overlay.
-						g_debug(" -- loading overlay; thread: " << omp_get_thread_num());
-						#pragma omp critical(access_input)
+						bool good;
+
+						#pragma omp critical(input)
 						{
-							int a = bufRow - buffer < 0 ? 0 : bufRow - buffer;
-							int b = bufRow - buffer < 0 ? -(bufRow - buffer) : 0;
-							input.readBlock(inCol, a, imGrid, buffer, b);
+							good = tile.readInput(inGrid, input);
+						}
+					
+						if(!good) continue;
+
+						#pragma omp critical(output)
+						{
+							good = tile.readOutput(outGrid, output);
 						}
 
-						// Feather the overlay
-						if(distance > 0.0) {
-							g_debug(" -- feathering; thread: " << omp_get_thread_num());
-							int b = g_min(rowHeight + buffer * 2, rows - bufRow);
-							feather(imGrid, alphaGrid, cols + buffer * 2, b, distance, imNodata, res);
-						}
+						if(!good) continue;
 
-						// Read background data.
-						g_debug(" -- reading background; thread: " << omp_get_thread_num());
-						#pragma omp critical(access_output)
-						{
-							int a = bufRow + row - buffer < 0 ? 0 : bufRow + row - buffer;
-							int b = bufRow + row - buffer < 0 ? -(bufRow + row - buffer) : 0;
-							output.readBlock(baseCol, a, outGrid, 0, b);
-						}
-
-						// Blend the overlay into the output.
-						g_debug(" -- blending; thread: " << omp_get_thread_num());
-						//blend(imGrid, outGrid, alphaGrid, cols + buffer * 2, rowHeight + buffer * 2, imNodata, outNodata);
-
-						// Write back to the output.
-						// We are extracting a slice out of the buffer, not writing the whole thing.
-						g_debug(" -- writing output; thread: " << omp_get_thread_num());
-						#pragma omp critical(access_output)
-						{
-							int b = g_min(rowHeight, output.rows() - bufRow + row);
-							output.writeBlock(baseCol, bufRow + row, outGrid, 0, buffer, 0, b);
+						// Feather returns true if it did any work.
+						if(feather(inGrid, alphaGrid, distance, inNodata, res)) {
+							blend(inGrid, outGrid, alphaGrid, inNodata, outNodata);
+							#pragma omp critical(output)
+							{
+								tile.writeOutput(outGrid, output);
+							}
 						}
 					}
-				}
+
+				} // parallel
 			}
+
 		}
 
 	} // raster
@@ -263,7 +343,7 @@ void usage() {
 		<< "    -v               Verbose messages.\n"
 		<< "    -t               The number of threads to use. Defaults to the number\n"
 		<< "                     of cores.\n"
-		<< "    -r               Buffer row height. This manages the heights of the buffer\n"
+		<< "    -s               Tile size. This manages the sizes of the tiles. Default 1024.\n"
 		<< "                     that is used for feathering/blending. Keep in mind the width\n"
 		<< "                     of the images, the number of threads and the size of the type.\n";
 	
@@ -277,7 +357,7 @@ int main(int argc, char **argv) {
 	 	std::vector<std::string> files;
 	 	std::string outfile;
 	 	int threads = 0;
-	 	int rowHeight = 500;
+	 	int tileSize = 1024;
 
 	 	for(int i = 1; i < argc; ++i) {
 	 		std::string arg(argv[i]);
@@ -289,8 +369,8 @@ int main(int argc, char **argv) {
 				g_loglevel(G_LOG_DEBUG);
 			} else if(arg == "-t") {
 				threads = atoi(argv[++i]);
-			} else if(arg == "-r") {
-				rowHeight = atoi(argv[++i]);
+			} else if(arg == "-s") {
+				tileSize = atoi(argv[++i]);
 	 		} else {
 	 			files.push_back(argv[i]);
 	 		}
@@ -302,7 +382,7 @@ int main(int argc, char **argv) {
 	 		omp_set_num_threads(threads);
 	 	}
 
- 		geotools::raster::mosaic(files, outfile, distance, rowHeight, threads);
+ 		geotools::raster::mosaic(files, outfile, distance, tileSize, threads);
 
  	} catch(const std::exception &e) {
  		g_error(e.what());
