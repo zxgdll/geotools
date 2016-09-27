@@ -1084,6 +1084,16 @@ double Raster<T>::resolutionY() const {
 }
 
 template <class T>
+bool Raster<T>::positiveX() const {
+	return resolutionX() > 0;
+}
+
+template <class T>
+bool Raster<T>::positiveY() const {
+	return resolutionY() > 0;
+}
+
+template <class T>
 void Raster<T>::setBand(int band) {
 	if(band == m_bandn)
 		return;

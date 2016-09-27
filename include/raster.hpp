@@ -692,6 +692,10 @@ namespace geotools {
 			 */
 			double resolutionY() const;
 
+			bool positiveX() const;
+
+			bool positiveY() const;
+
 			/**
 			 * Write the projection data to the given string object.
 			 */
