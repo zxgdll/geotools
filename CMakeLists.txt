@@ -61,7 +61,7 @@ target_link_libraries (flood gdal)
 add_executable (rasterstats src/rasterstats.cpp src/geotools.cpp)
 target_link_libraries (rasterstats gdal)
 
-add_executable (mosaic-app src/mosaic.cpp src/geotools.cpp)
+add_executable (mosaic-app src/mosaic.cpp src/util.cpp src/geotools.cpp)
 target_link_libraries (mosaic-app gdal boost_system boost_filesystem)
 
 
