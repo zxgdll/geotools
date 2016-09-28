@@ -57,7 +57,7 @@ include_directories(/usr/local/opt/sqlite/include include /usr/local/include /us
 add_library (geotools SHARED src/geotools.cpp)
 add_library (util SHARED src/util.cpp)
 add_library (raster SHARED src/raster.cpp)
-target_link_libraries (raster util gdal)
+target_link_libraries (raster gdal util geotools)
 
 
 add_executable (flood src/flood.cpp)
