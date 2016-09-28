@@ -1,5 +1,7 @@
 #include <queue>
+#include <string>
 
+#include "util.hpp"
 #include "raster.hpp"
 
 using namespace geotools::util;
@@ -110,80 +112,6 @@ T Grid<T>::variance() {
 	if(!m_stats)
 		computeStats();
 	return m_variance;
-}
-
-template <class T>
-template <class U>
-std::vector<int> Grid<T>::floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U fill) {
-
-	int minc = cols() + 1;
-	int minr = rows() + 1;
-	int maxc = -1;
-	int maxr = -1;
-	int area = 0;
-
-	std::queue<std::unique_ptr<Cell> > q;
-	q.push(std::unique_ptr<Cell>(new Cell(col, row)));
-
-	std::vector<bool> visited(size(), false); // Tracks visited pixels.
-
-	while(q.size()) {
-
-		std::unique_ptr<Cell> cel = std::move(q.front());
-		row = cel->row;
-		col = cel->col;
-		q.pop();
-
-		size_t idx = (size_t) row * cols() + col;
-
-		if(!visited[idx] && op.fill(get(col, row))) {
-
-			minc = g_min(col, minc);
-			maxc = g_max(col, maxc);
-			minr = g_min(row, minr);
-			maxr = g_max(row, maxr);
-			++area;
-			other.set(col, row, fill);
-			visited[idx] = true;
-
-			if(row > 0)
-				q.push(std::unique_ptr<Cell>(new Cell(col, row - 1)));
-			if(row < rows() - 1)
-				q.push(std::unique_ptr<Cell>(new Cell(col, row + 1)));
-
-			for(int c = col - 1; c >= 0; --c) {
-				idx = (size_t) row * cols() + c;
-				if(!visited[idx] && op.fill(get(c, row))) {
-					minc = g_min(c, minc);
-					++area;
-					other.set(c, row, fill);
-					visited[idx] = true;
-					if(row > 0)
-						q.push(std::unique_ptr<Cell>(new Cell(c, row - 1)));
-					if(row < rows() - 1)
-						q.push(std::unique_ptr<Cell>(new Cell(c, row + 1)));
-				} else {
-					break;
-				}
-			}
-			for(int c = col + 1; c < cols(); ++c) {
-				idx = (size_t) row * cols() + c;
-				if(!visited[idx] && op.fill(get(c, row))) {
-					maxc = g_max(c, maxc);
-					++area;
-					other.set(c, row, fill);
-					visited[idx] = true;
-					if(row > 0)
-						q.push(std::unique_ptr<Cell>(new Cell(c, row - 1)));
-					if(row < rows() - 1)
-						q.push(std::unique_ptr<Cell>(new Cell(c, row + 1)));
-				} else {
-					break;
-				}
-			}
-		}
-	}
-	return {minc, minr, maxc, maxr, area};
 }
 
 template <class T>
@@ -348,11 +276,6 @@ MemRaster<T>::MemRaster(int cols, int rows) : MemRaster() {
 	init(cols, rows);
 }
 
-template <class T>
-template <class U>
-MemRaster<T>::MemRaster(Grid<U> &tpl) : MemRaster() {
-	init(tpl.cols(), tpl.rows());
-}
 
 template <class T>
 MemRaster<T>::~MemRaster() {
@@ -377,14 +300,6 @@ T *MemRaster<T>::grid() {
 template <class T>
 bool MemRaster<T>::hasGrid() const {
 	return true;
-}
-
-template <class T>
-template <class U>
-void MemRaster<T>::convert(MemRaster<U> &g) {
-	g.init(cols(), rows());
-	for(size_t i = 0; i < size(); ++i)
-		g.set(i, (U) get(i));
 }
 
 template <class T>
@@ -413,12 +328,6 @@ void MemRaster<T>::init(int cols, int rows) {
 			free(m_grid);
 		m_grid = (T *) malloc(sizeof(T) * cols * rows);
 	}
-}
-
-template <class T>
-template <class U>
-void MemRaster<T>::init(Grid<U> &tpl) {
-	init(tpl.cols(), tpl.rows());
 }
 
 template <class T>
@@ -570,12 +479,12 @@ void MemRaster<T>::writeBlock(int col, int row, Grid<T> &block, int srcCol, int 
 
 template <class T>
 void MemRaster<T>::writeBlock(Grid<T> &block) {
-	writeBlock(0, 0, block);
+	writeBlock(0, 0, block, 0, 0, block.cols(), block.rows());
 }
 
 template <class T>
 void MemRaster<T>::readBlock(Grid<T> &block) {
-	readBlock(0, 0, block);
+	readBlock(0, 0, block, 0, 0, block.cols(), block.rows());
 }
 
 // Implementations for BlockCache
@@ -743,6 +652,12 @@ GDALDataType Raster<T>::getType(unsigned long v) {
 }
 
 template <class T>
+GDALDataType Raster<T>::getType(long v) {
+	(void) v;
+	g_runerr("Raster with 64 bit integral type requested. Not implemented.");
+}
+
+template <class T>
 GDALDataType Raster<T>::getType(double v) {
 	(void) v;
 	return GDT_Float64;
@@ -779,6 +694,12 @@ GDALDataType Raster<T>::getType(short v) {
 }
 
 template <class T>
+GDALDataType Raster<T>::getType(unsigned char v) {
+	(void) v;
+	return GDT_Byte;
+}
+
+template <class T>
 GDALDataType Raster<T>::getType(char v) {
 	(void) v;
 	return GDT_Byte;
@@ -810,18 +731,9 @@ Raster<T>::Raster() :
 }
 
 template <class T>
-template <class U>
-Raster<T>::Raster(const std::string &filename, int band, const Raster<U> &tpl) : Raster() {
-	std::string proj;
-	tpl.projection(proj);
-	init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(),
-		tpl.resolutionY(), (T) tpl.nodata(), proj);
+Raster<T>::Raster(const std::string &filename, int band, const Raster<T> &tpl) : Raster() {
+	init(filename, band, tpl);
 }
-
-//template <class T>
-//Raster<T>::Raster(const std::string &filename, int band, const Raster<T> &tpl) : Raster() {
-//	init(filename, band, tpl);
-//}
 
 template <class T>
 Raster<T>::Raster(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
@@ -845,16 +757,6 @@ Raster<T>::Raster(const std::string &filename, int band, double minx, double min
 template <class T>
 Raster<T>::Raster(const std::string &filename, int band, bool writable) : Raster() {
 	init(filename, band, writable);
-}
-
-template <class T>
-template <class U>
-void Raster<T>::init(const std::string &filename, int band, const Raster<U> &tpl) {
-	g_trace("Raster init: " << filename << "; [tpl]");
-	std::string proj;
-	tpl.projection(proj);
-	init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(),
-		tpl.resolutionY(), tpl.nodata(), proj);
 }
 
 template <class T>
@@ -1018,7 +920,7 @@ void Raster<T>::readBlock(int col, int row, Grid<T> &grd, int dstCol, int dstRow
 		g_argerr("Zero read size.");
 	if(grd.hasGrid()) {
 		if(cols != grd.cols() || rows != grd.rows()) {
-			MemRaster<float> g(cols, rows);
+			MemRaster<T> g(cols, rows);
 			if(m_band->RasterIO(GF_Read, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
 				g_runerr("Failed to read from band.");
 			grd.writeBlock(dstCol, dstRow, g);
@@ -1047,7 +949,7 @@ void Raster<T>::writeBlock(int col, int row, Grid<T> &grd, int srcCol, int srcRo
 		g_argerr("Zero write size.");
 	if(grd.hasGrid()) {
 		if(cols != grd.cols() || rows != grd.rows()) {
-			MemRaster<float> g(cols, rows);
+			MemRaster<T> g(cols, rows);
 			grd.readBlock(srcCol, srcRow, g);
 			if(m_band->RasterIO(GF_Write, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
 				g_runerr("Failed to write to band.");
@@ -1325,5 +1227,40 @@ Raster<T>::~Raster() {
 	if(m_ds) // Probably not necessary.
 		GDALClose(m_ds);
 }
+
+
+template class geotools::raster::Grid<float>;
+template class geotools::raster::Grid<double>;
+template class geotools::raster::Grid<unsigned int>;
+template class geotools::raster::Grid<unsigned short>;
+template class geotools::raster::Grid<unsigned char>;
+template class geotools::raster::Grid<unsigned long>;
+template class geotools::raster::Grid<int>;
+template class geotools::raster::Grid<short>;
+template class geotools::raster::Grid<char>;
+template class geotools::raster::Grid<long>;
+
+template class geotools::raster::Raster<float>;
+template class geotools::raster::Raster<double>;
+template class geotools::raster::Raster<unsigned int>;
+template class geotools::raster::Raster<unsigned short>;
+template class geotools::raster::Raster<unsigned char>;
+template class geotools::raster::Raster<unsigned long>;
+template class geotools::raster::Raster<int>;
+template class geotools::raster::Raster<short>;
+template class geotools::raster::Raster<char>;
+template class geotools::raster::Raster<long>;
+
+template class geotools::raster::MemRaster<float>;
+template class geotools::raster::MemRaster<double>;
+template class geotools::raster::MemRaster<unsigned int>;
+template class geotools::raster::MemRaster<unsigned short>;
+template class geotools::raster::MemRaster<unsigned char>;
+template class geotools::raster::MemRaster<unsigned long>;
+template class geotools::raster::MemRaster<int>;
+template class geotools::raster::MemRaster<short>;
+template class geotools::raster::MemRaster<char>;
+template class geotools::raster::MemRaster<long>;
+template class geotools::raster::MemRaster<std::vector<double>*>;
 
 

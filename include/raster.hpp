@@ -252,8 +252,79 @@ namespace geotools {
 			 * and the present grid is unchanged *unless* the present grid is passed
 			 * as other.
 			 */
+			// TODO: Moved here to allow compilation of different type combinations.
 			template <class U>
-			std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U fill);
+			std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U fill) {
+
+				int minc = cols() + 1;
+				int minr = rows() + 1;
+				int maxc = -1;
+				int maxr = -1;
+				int area = 0;
+
+				std::queue<std::unique_ptr<Cell> > q;
+				q.push(std::unique_ptr<Cell>(new Cell(col, row)));
+
+				std::vector<bool> visited(size(), false); // Tracks visited pixels.
+
+				while(q.size()) {
+
+					std::unique_ptr<Cell> cel = std::move(q.front());
+					row = cel->row;
+					col = cel->col;
+					q.pop();
+
+					size_t idx = (size_t) row * cols() + col;
+
+					if(!visited[idx] && op.fill(get(col, row))) {
+
+						minc = g_min(col, minc);
+						maxc = g_max(col, maxc);
+						minr = g_min(row, minr);
+						maxr = g_max(row, maxr);
+						++area;
+						other.set(col, row, fill);
+						visited[idx] = true;
+
+						if(row > 0)
+							q.push(std::unique_ptr<Cell>(new Cell(col, row - 1)));
+						if(row < rows() - 1)
+							q.push(std::unique_ptr<Cell>(new Cell(col, row + 1)));
+
+						for(int c = col - 1; c >= 0; --c) {
+							idx = (size_t) row * cols() + c;
+							if(!visited[idx] && op.fill(get(c, row))) {
+								minc = g_min(c, minc);
+								++area;
+								other.set(c, row, fill);
+								visited[idx] = true;
+								if(row > 0)
+									q.push(std::unique_ptr<Cell>(new Cell(c, row - 1)));
+								if(row < rows() - 1)
+									q.push(std::unique_ptr<Cell>(new Cell(c, row + 1)));
+							} else {
+								break;
+							}
+						}
+						for(int c = col + 1; c < cols(); ++c) {
+							idx = (size_t) row * cols() + c;
+							if(!visited[idx] && op.fill(get(c, row))) {
+								maxc = g_max(c, maxc);
+								++area;
+								other.set(c, row, fill);
+								visited[idx] = true;
+								if(row > 0)
+									q.push(std::unique_ptr<Cell>(new Cell(c, row - 1)));
+								if(row < rows() - 1)
+									q.push(std::unique_ptr<Cell>(new Cell(c, row + 1)));
+							} else {
+								break;
+							}
+						}
+					}
+				}
+				return {minc, minr, maxc, maxr, area};
+			}
 
 			/**
 			 * Begin flood fill at the given cell; fill cells equal to the target value.
@@ -304,7 +375,9 @@ namespace geotools {
 			MemRaster(int cols, int rows);
 
 			template <class U>
-			MemRaster(Grid<U> &tpl);
+			MemRaster(Grid<U> &tpl) : MemRaster() {
+			        init(tpl.cols(), tpl.rows());
+			}
 
 			~MemRaster();
 
@@ -325,7 +398,11 @@ namespace geotools {
 			 * Cas a MemRaster to some other type.
 			 */
 			template <class U>
-			void convert(MemRaster<U> &g);
+			void convert(MemRaster<U> &g) {
+				g.init(cols(), rows());
+				for(size_t i = 0; i < size(); ++i)
+					g.set(i, (U) get(i));
+			}
 
 			int rows() const;
 
@@ -334,7 +411,9 @@ namespace geotools {
 			size_t size() const;
 
 			template <class U>
-			void init(Grid<U> &tpl);
+			void init(Grid<U> &tpl) {
+			        init(tpl.cols(), tpl.rows());
+			}
 
 			/**
 			 * Initialize with the given number of cols and rows.
@@ -539,9 +618,11 @@ namespace geotools {
 
 			GDALDataType getType(float v);
 
-			GDALDataType getType(unsigned int v);
-
 			GDALDataType getType(unsigned long v);
+			
+			GDALDataType getType(long v);
+			
+			GDALDataType getType(unsigned int v);
 			
 			GDALDataType getType(int v);
 
@@ -549,6 +630,8 @@ namespace geotools {
 
 			GDALDataType getType(short v);
 
+			GDALDataType getType(unsigned char v);
+			
 			GDALDataType getType(char v);
 
 			/**
@@ -580,12 +663,17 @@ namespace geotools {
 			 * Create a new raster for writing with a template of a different type.
 			 */
 			template <class U>
-			Raster(const std::string &filename, int band, const Raster<U> &tpl);
+			Raster(const std::string &filename, int band, const Raster<U> &tpl) : Raster() {
+			        std::string proj;
+			        tpl.projection(proj);
+			        init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(),
+			                tpl.resolutionY(), (T) tpl.nodata(), proj);
+			}
 
 			/**
 			 * Create a new raster for writing with a template of a different type.
 			 */
-			//Raster(const std::string &filename, int band, const Raster<T> &tpl);
+			Raster(const std::string &filename, int band, const Raster<T> &tpl);
 
 			/**
 			 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
@@ -615,7 +703,13 @@ namespace geotools {
 			 * another raster as a template. The raster pixel types need not be the same.
 			 */
 			template <class U>
-			void init(const std::string &filename, int band, const Raster<U> &tpl);
+			void init(const std::string &filename, int band, const Raster<U> &tpl) {
+			        g_debug("Raster init: " << filename << "; [tpl]");
+			        std::string proj;
+			        tpl.projection(proj);
+			        init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(),
+			                tpl.resolutionY(), tpl.nodata(), proj);
+			}
 
 			void init(const std::string &filename, int band, const Bounds &bounds, double resolutionX, double resolutionY,
 				double nodata, const std::string &proj);
