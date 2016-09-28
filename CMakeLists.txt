@@ -54,56 +54,70 @@ link_directories(/usr/local/opt/sqlite/lib /usr/local/lib /usr/lib)
 include_directories(/usr/local/opt/sqlite/include include /usr/local/include /usr/include /usr/include/x86_64-linux-gnu/qt5 /usr/local/include/gdal /usr/local/include/geos /usr/include/gdal /usr/include/geos)
 
 
-add_executable (flood src/flood.cpp src/geotools.cpp)
-target_link_libraries (flood gdal)
+add_library (geotools SHARED src/geotools.cpp)
+add_library (util SHARED src/util.cpp)
+add_library (raster SHARED src/raster.cpp)
+target_link_libraries (raster util gdal)
 
 
-add_executable (rasterstats src/rasterstats.cpp src/geotools.cpp)
-target_link_libraries (rasterstats gdal)
-
-add_executable (mosaic-app src/mosaic.cpp src/util.cpp src/geotools.cpp)
-target_link_libraries (mosaic-app gdal boost_system boost_filesystem)
+add_executable (flood src/flood.cpp)
+target_link_libraries (flood gdal raster util geotools)
 
 
-add_library (treetops SHARED src/treetops.cpp src/util.cpp src/geotools.cpp)
-target_link_libraries (treetops gdal sqlite3 spatialite)
+add_executable (rasterstats src/rasterstats.cpp)
+target_link_libraries (rasterstats gdal raster util geotools)
+
+
+add_executable (mosaic-app src/mosaic.cpp)
+target_link_libraries (mosaic-app gdal boost_system boost_filesystem raster util geotools)
+
+
+add_library (treetops SHARED src/treetops.cpp)
+target_link_libraries (treetops gdal sqlite3 spatialite raster util geotools)
 add_executable (treetops-app src/apps/treetops.cpp)
-target_link_libraries (treetops-app PUBLIC treetops gdal)
+target_link_libraries (treetops-app PUBLIC treetops)
 
 
-add_library (spectral SHARED src/spectral.cpp src/util.cpp src/geotools.cpp)
-target_link_libraries (spectral gdal sqlite3 spatialite)
+add_library (spectral SHARED src/spectral.cpp)
+target_link_libraries (spectral gdal sqlite3 spatialite raster util geotools)
 add_executable (spectral-app src/apps/spectral.cpp)
 target_link_libraries (spectral-app PUBLIC spectral)
 
 
-add_library(lasgrid SHARED src/lasgrid.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasgrid gdal laszip las boost_system boost_filesystem)
+add_library(lasgrid SHARED src/lasgrid.cpp src/lasutil.cpp)
+target_link_libraries (lasgrid gdal laszip las boost_system boost_filesystem raster util geotools)
 add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp src/apps/crs_selector_ui.cpp)
-target_link_libraries (lasgrid-app PUBLIC lasgrid Qt5::Gui Qt5::Core Qt5::Widgets)
+target_link_libraries (lasgrid-app PUBLIC lasgrid Qt5::Gui Qt5::Core Qt5::Widgets raster)
 
-add_executable (lasboundary src/lasboundary.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system boost_filesystem)
 
-add_library(lasvalidate SHARED src/lasvalidate.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasvalidate las laszip geos)
+add_executable (lasboundary src/lasboundary.cpp src/lasutil.cpp)
+target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system boost_filesystem raster util geotools)
+
+
+add_library(lasvalidate SHARED src/lasvalidate.cpp src/lasutil.cpp)
+target_link_libraries (lasvalidate las laszip geos raster util geotools)
 add_executable (lasvalidate-app src/apps/lasvalidate.cpp)
 target_link_libraries (lasvalidate-app lasvalidate)
 
-add_executable (lasstats src/lasstats.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasstats gdal las laszip geos boost_system boost_filesystem)
 
-add_executable (lasmerge src/lasmerge.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasmerge las laszip boost_system boost_filesystem)
+add_executable (lasstats src/lasstats.cpp src/lasutil.cpp)
+target_link_libraries (lasstats gdal las laszip geos boost_system boost_filesystem raster util geotools)
 
-add_executable (lasreclass src/lasreclass.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasreclass las laszip boost_system boost_filesystem)
 
-add_executable (lasclip src/lasclip.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (lasclip gdal las laszip geos boost_system boost_filesystem)
+add_executable (lasmerge src/lasmerge.cpp src/lasutil.cpp)
+target_link_libraries (lasmerge las laszip boost_system boost_filesystem util geotools)
 
-add_executable (las2csrs src/las2csrs.cpp src/util.cpp src/lasutil.cpp src/geotools.cpp)
-target_link_libraries (las2csrs gdal las laszip proj boost_system boost_filesystem)
+
+add_executable (lasreclass src/lasreclass.cpp src/lasutil.cpp)
+target_link_libraries (lasreclass las laszip boost_system boost_filesystem util geotools)
+
+
+add_executable (lasclip src/lasclip.cpp src/lasutil.cpp)
+target_link_libraries (lasclip gdal las laszip geos boost_system boost_filesystem util geotools)
+
+
+add_executable (las2csrs src/las2csrs.cpp src/lasutil.cpp)
+target_link_libraries (las2csrs gdal las laszip proj boost_system boost_filesystem util raster geotools)
 
 
 
