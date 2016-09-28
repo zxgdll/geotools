@@ -13,8 +13,7 @@
 using namespace geotools::spectral;
 using namespace geotools::spectral::config;
 using namespace geotools::db;
-
-#include "raster.cpp"
+using namespace geotools::raster;
 
 /**
  * Represents a single pixel across all bands.

@@ -18,9 +18,6 @@
 
 #define LAS2CSRS_DATA "LAS2CSRS_DATA"
 
-
-#include "raster.cpp"
-
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
 namespace las = liblas;

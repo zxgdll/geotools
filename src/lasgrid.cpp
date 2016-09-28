@@ -31,9 +31,6 @@
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
 
-
-#include "raster.cpp"
-
 using namespace geotools::util;
 using namespace geotools::raster;
 

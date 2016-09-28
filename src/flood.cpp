@@ -22,10 +22,6 @@
 
 #include "raster.hpp"
 
-
-#include "raster.cpp"
-
-
 using namespace geotools::raster;
 
 namespace geotools {
@@ -315,8 +311,10 @@ namespace geotools {
 				int fillBasins(std::string &filename, float elevation) {
 					g_trace("Filling basins: " << filename << "; " << elevation);
 
-					Raster<unsigned int> basins(filename, 1, m_dem);
-					basins.nodata(0);
+					std::string proj;
+					m_dem.projection(proj);
+					Raster<unsigned int> basins(filename, 1, m_dem.minx(), m_dem.miny(), m_dem.maxx(), 
+						m_dem.maxy(), m_dem.resolutionX(), m_dem.resolutionY(), 0, proj);
 					basins.fill(0);
 					m_basinList.clear();
 					

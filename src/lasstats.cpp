@@ -50,10 +50,6 @@ namespace alg = boost::algorithm;
 #define VECTOR 2
 #define CSV 3
 
-
-#include "raster.cpp"
-
-
 using namespace geotools::util;
 using namespace geotools::raster;
 

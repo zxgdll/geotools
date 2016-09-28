@@ -5,6 +5,7 @@
 #include <fstream>
 #include <map>
 #include <cmath>
+#include <string>
 
 #include "csv.h"
 

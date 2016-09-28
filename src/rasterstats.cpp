@@ -20,8 +20,6 @@
 #include "util.hpp"
 #include "raster.hpp"
 
-#include "raster.cpp"
-
 using namespace geotools::util;
 using namespace geotools::raster;
 
