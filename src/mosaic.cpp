@@ -57,7 +57,7 @@ namespace geotools {
 				// Starts out as a mask of non-nodata pixels from the source.
 				int cols = srcGrid.cols();
 				int rows = srcGrid.rows();
-				//g_debug("feather: nodata: " << nodata << "; res: " << resolution << "; distance: " << distance << "; cols: " << cols << "; rows: " << rows);
+				g_debug(" -- feather: nodata: " << nodata << "; res: " << resolution << "; distance: " << distance << "; cols: " << cols << "; rows: " << rows);
 				MemRaster<char> fillGrid(cols, rows);
 				int valid = 0;
 				for(size_t i = 0; i < (size_t) rows * cols; ++i) {
@@ -101,15 +101,15 @@ namespace geotools {
 			/**
 			 * Blends two rasters together using the alpha grid for blending.
 			 */
-			void blend(Grid<float> &imGrid, Grid<float> &bgGrid, Grid<float> &alpha, float imNodata, float bgNodata) {
-				for(int r = 0; r < imGrid.rows(); ++r) {
-					for(int c = 0; c < imGrid.cols(); ++c) {
+			void blend(Grid<float> &imGrid, Grid<float> &bgGrid, Grid<float> &alpha, float imNodata, float bgNodata, int buffer) {
+				g_debug(" -- blending");
+				for(int r = buffer; r < imGrid.rows() - buffer; ++r) {
+					for(int c = buffer; c < imGrid.cols() - buffer; ++c) {
 						float bv = bgGrid.get(c, r);
 						float iv = imGrid.get(c, r);
-						if(!(bv == bgNodata)) {
+						if(!(bv == bgNodata || iv == imNodata)) {
 							float av = alpha.get(c, r);
-							if(iv != imNodata)
-								bgGrid.set(c, r, bv * (1.0 - av) + iv * av);
+							bgGrid.set(c, r, bv * (1.0 - av) + iv * av);
 						}
 					}
 				}
@@ -149,6 +149,7 @@ namespace geotools {
 					rows -= row;
 					row = 0;
 				}
+				g_debug(" -- tile.readInput: " << col << "," << row << "," << cOff << "," << rOff << "," << cols << "," << rows << "; " << omp_get_thread_num());
 				if(cols <= 0 || rows <= 0)
 					return false;
 				input.readBlock(col, row, buf, cOff, rOff, cols, rows);
@@ -172,6 +173,7 @@ namespace geotools {
 					rows -= row;
 					row = 0;
 				}
+				g_debug(" -- tile.readOutput: " << col << "," << row << "," << cOff << "," << rOff << "," << cols << "," << rows << "; " << omp_get_thread_num());
 				if(cols <= 0 || rows <= 0)
 					return false;
 				output.readBlock(col, row, buf, cOff, rOff, cols, rows);
@@ -179,6 +181,7 @@ namespace geotools {
 			}
 
 			void writeOutput(MemRaster<float> &buf, Raster<float> &output) const {
+				g_debug(" -- tile.writeOutput; " << omp_get_thread_num());
 				if(!(oCol >= output.cols() || oRow >= output.rows()))
 					output.writeBlock(oCol, oRow, buf, buffer, buffer, tileSize, tileSize);
 			}
@@ -285,6 +288,7 @@ namespace geotools {
 					MemRaster<float> alphaGrid(tileSize + buffer * 2, tileSize + buffer * 2);
 					float outNodata = output.nodata();
 					float inNodata = input.nodata();
+					g_debug(" -- nodata - in: " << inNodata << "; out: " << outNodata);
 
 					#pragma omp for
 					for(int t = 0; t < tiles.size(); ++t) {
@@ -314,7 +318,7 @@ namespace geotools {
 
 						// Feather returns true if it did any work.
 						if(feather(inGrid, alphaGrid, distance, inNodata, res)) {
-							blend(inGrid, outGrid, alphaGrid, inNodata, outNodata);
+							blend(inGrid, outGrid, alphaGrid, inNodata, outNodata, buffer);
 							#pragma omp critical(output)
 							{
 								tile.writeOutput(outGrid, output);
