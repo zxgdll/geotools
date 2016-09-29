@@ -57,7 +57,6 @@ namespace geotools {
 				// Starts out as a mask of non-nodata pixels from the source.
 				int cols = srcGrid.cols();
 				int rows = srcGrid.rows();
-				g_debug(" -- feather: nodata: " << nodata << "; res: " << resolution << "; distance: " << distance << "; cols: " << cols << "; rows: " << rows);
 				MemRaster<char> fillGrid(cols, rows);
 				int valid = 0;
 				for(size_t i = 0; i < (size_t) rows * cols; ++i) {
@@ -102,7 +101,6 @@ namespace geotools {
 			 * Blends two rasters together using the alpha grid for blending.
 			 */
 			void blend(Grid<float> &imGrid, Grid<float> &bgGrid, Grid<float> &alpha, float imNodata, float bgNodata, int buffer) {
-				g_debug(" -- blending");
 				for(int r = buffer; r < imGrid.rows() - buffer; ++r) {
 					for(int c = buffer; c < imGrid.cols() - buffer; ++c) {
 						float bv = bgGrid.get(c, r);
@@ -117,6 +115,8 @@ namespace geotools {
 
 		} // util
 
+		int __tile_id = 0;
+
 		class Tile {
 		public:
 			int iCol;
@@ -125,8 +125,10 @@ namespace geotools {
 			int oRow;
 			int tileSize;
 			int buffer;
+			int id;
 
 			Tile(int tileSize, int buffer, int iCol, int iRow, int oCol, int oRow) :
+				id(++__tile_id),
 				tileSize(tileSize), buffer(buffer),
 				iCol(iCol), iRow(iRow),
 				oCol(oCol), oRow(oRow) {
@@ -149,7 +151,6 @@ namespace geotools {
 					rows -= row;
 					row = 0;
 				}
-				g_debug(" -- tile.readInput: " << col << "," << row << "," << cOff << "," << rOff << "," << cols << "," << rows << "; " << omp_get_thread_num());
 				if(cols <= 0 || rows <= 0)
 					return false;
 				input.readBlock(col, row, buf, cOff, rOff, cols, rows);
@@ -173,7 +174,6 @@ namespace geotools {
 					rows -= row;
 					row = 0;
 				}
-				g_debug(" -- tile.readOutput: " << col << "," << row << "," << cOff << "," << rOff << "," << cols << "," << rows << "; " << omp_get_thread_num());
 				if(cols <= 0 || rows <= 0)
 					return false;
 				output.readBlock(col, row, buf, cOff, rOff, cols, rows);
@@ -181,7 +181,6 @@ namespace geotools {
 			}
 
 			void writeOutput(MemRaster<float> &buf, Raster<float> &output) const {
-				g_debug(" -- tile.writeOutput; " << omp_get_thread_num());
 				if(!(oCol >= output.cols() || oRow >= output.rows()))
 					output.writeBlock(oCol, oRow, buf, buffer, buffer, tileSize, tileSize);
 			}
@@ -270,60 +269,53 @@ namespace geotools {
 				}
 				g_debug(" -- tile size is: " << tileSize);
 
-				std::vector<Tile> tiles;
+				std::vector<std::unique_ptr<Tile> > tiles;
 
 				for(int ir = iStartRow, rr = oStartRow; ir <= iEndRow; ir += tileSize, rr += tileSize) {
-					for(int ic = iStartCol, oc = oStartCol; ic <= iEndCol; ic += tileSize, oc += tileSize)
-						tiles.push_back(Tile(tileSize, buffer, ic, ir, oc, rr));
+					for(int ic = iStartCol, oc = oStartCol; ic <= iEndCol; ic += tileSize, oc += tileSize) {
+						std::unique_ptr<Tile> t(new Tile(tileSize, buffer, ic, ir, oc, rr));
+						tiles.push_back(std::move(t));
+					}
 				}
-
-				int t = 0;
 
 				#pragma omp parallel
 				{
-
 					// Initialize the grids.
 					MemRaster<float> inGrid(tileSize + buffer * 2, tileSize + buffer * 2);
 					MemRaster<float> outGrid(tileSize + buffer * 2, tileSize + buffer * 2);
 					MemRaster<float> alphaGrid(tileSize + buffer * 2, tileSize + buffer * 2);
 					float outNodata = output.nodata();
 					float inNodata = input.nodata();
-					g_debug(" -- nodata - in: " << inNodata << "; out: " << outNodata);
-
-					#pragma omp for
+					
+					#pragma omp for nowait
 					for(int t = 0; t < tiles.size(); ++t) {
-						const Tile &tile = tiles[t];
-						g_debug(" -- tile " << t << "; thread: " << omp_get_thread_num());
-		
+
+						std::unique_ptr<Tile> tile = std::move(tiles[t]);
+
+						g_debug(" -- tile " << t << ", " << tile->id << "; thread: " << omp_get_thread_num());
+
 						// Set to zero or nodata depending on the band.
 						outGrid.fill(outNodata);
 						inGrid.fill(inNodata);
 						alphaGrid.fill(1.0);
 
-						bool good;
-
-						#pragma omp critical(input)
-						{
-							good = tile.readInput(inGrid, input);
-						}
-					
-						if(!good) continue;
-
-						#pragma omp critical(output)
-						{
-							good = tile.readOutput(outGrid, output);
-						}
-
-						if(!good) continue;
+						// Load foreground
+						if(!tile->readInput(inGrid, input))
+							continue;
 
 						// Feather returns true if it did any work.
-						if(feather(inGrid, alphaGrid, distance, inNodata, res)) {
-							blend(inGrid, outGrid, alphaGrid, inNodata, outNodata, buffer);
-							#pragma omp critical(output)
-							{
-								tile.writeOutput(outGrid, output);
-							}
-						}
+						if(!feather(inGrid, alphaGrid, distance, inNodata, res)) 
+							continue;
+
+						// Load background
+						if(!tile->readOutput(outGrid, output))
+							continue;
+
+						// Blend the fore/background images with alpha
+						blend(inGrid, outGrid, alphaGrid, inNodata, outNodata, buffer);
+						
+						// Write to output.
+						tile->writeOutput(outGrid, output);
 					}
 
 				} // parallel
