@@ -435,7 +435,6 @@ void MemRaster<T>::readBlock(int col, int row, Grid<T> &block, int dstCol, int d
 	if(block.hasGrid()) {
 		// Copy rows of he source l
 		for(int r = 0; r < rows; ++r) {
-			//g_debug(" -- " << r << "; " << col << ", " << row << "; " << dstCol << "," << dstRow << "; " << m_cols << "," << m_rows << "; " << block.cols() << "," << block.rows() << "; " << sizeof(T));
 			std::memcpy(
 				(block.grid() + (dstRow + r) * block.cols() + dstCol),
 				(m_grid       + (row    + r) * m_cols       + col),
@@ -462,7 +461,6 @@ void MemRaster<T>::writeBlock(int col, int row, Grid<T> &block, int srcCol, int 
 	if(xrows > 0) rows = g_min(xrows, rows);
 	if(block.hasGrid()) {
 		for(int r = 0; r < rows; ++r) {
-			//g_debug(" -- " << r << "; " << col << ", " << row << "; " << srcCol << "," << srcRow << "; " << m_cols << "," << m_rows << "; " << block.cols() << "," << block.rows() << "; " << sizeof(T));
 			std::memcpy(
 				(m_grid       + (r + row)    * m_cols       + col),
 				(block.grid() + (r + srcRow) * block.cols() + srcCol),
@@ -492,8 +490,11 @@ template <class T>
 void BlockCache<T>::flushBlock(size_t idx) {
 	if(hasBlock(idx) && m_band->GetDataset()->GetAccess() == GA_Update) {
 		T *blk = m_blocks[idx];
-		if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
-			g_runerr("Failed to flush block.");
+		#pragma omp critical(__gdal_io)
+		{
+			if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
+				g_runerr("Failed to flush block.");
+		}
 		m_dirty[idx] = false;
 	}
 }
@@ -597,8 +598,11 @@ T* BlockCache<T>::getBlock(int col, int row, bool forWrite) {
 		T *blk = freeOne();
 		if(!blk)
 			blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
-		if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
-			g_runerr("Failed to read block.");
+		#pragma omp critical(__gdal_io)
+		{
+			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
+				g_runerr("Failed to read block.");
+		}
 		m_blocks[idx] = blk;
 	}
 	++m_time; // TODO: No provision for rollover
@@ -901,10 +905,13 @@ template <class T>
 void Raster<T>::fill(T value) {
 	MemRaster<T> grd(m_cache.blockWidth(), m_cache.blockHeight());
 	grd.fill(value);
-	for(int r = 0; r < rows() / grd.rows(); ++r) {
-		for(int c = 0; c < cols() / grd.cols(); ++c) {
-			if(m_band->WriteBlock(c, r, grd.grid()) != CE_None)
-				g_runerr("Fill error.");
+	#pragma omp critical(__gdal_io)
+	{
+		for(int r = 0; r < rows() / grd.rows(); ++r) {
+			for(int c = 0; c < cols() / grd.cols(); ++c) {
+				if(m_band->WriteBlock(c, r, grd.grid()) != CE_None)
+					g_runerr("Fill error.");
+			}
 		}
 	}
 }
@@ -916,22 +923,36 @@ void Raster<T>::readBlock(int col, int row, Grid<T> &grd, int dstCol, int dstRow
 	m_cache.flush();
 	int cols = g_min(m_cols - col, grd.cols() - dstCol);
 	int rows = g_min(m_rows - row, grd.rows() - dstRow);
+	if(xcols > 0) cols = g_min(xcols, cols);
+	if(xrows > 0) rows = g_min(xrows, rows);
 	if(cols < 1 || rows < 1)
 		g_argerr("Zero read size.");
 	if(grd.hasGrid()) {
 		if(cols != grd.cols() || rows != grd.rows()) {
 			MemRaster<T> g(cols, rows);
-			if(m_band->RasterIO(GF_Read, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
-				g_runerr("Failed to read from band.");
+			#pragma omp critical(__gdal_io)
+			{
+				if(m_band->RasterIO(GF_Read, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
+					g_runerr("Failed to read from band. (1)");
+				m_band->FlushCache();
+			}
 			grd.writeBlock(dstCol, dstRow, g);
 		} else {
-			if(m_band->RasterIO(GF_Read, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
-				g_runerr("Failed to read from band.");
+			#pragma omp critical(__gdal_io)
+			{
+				if(m_band->RasterIO(GF_Read, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
+					g_runerr("Failed to read from band. (2)");
+				m_band->FlushCache();
+			}
 		}
 	} else {
 		MemRaster<T> mr(cols, rows);
-		if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-			g_runerr("Failed to read from band.");
+		#pragma omp critical(__gdal_io)
+		{
+			if(m_band->RasterIO(GF_Read, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				g_runerr("Failed to read from band. (3)");
+			m_band->FlushCache();
+		}
 		grd.writeBlock(dstCol, dstRow, mr);
 	}
 }
@@ -951,17 +972,29 @@ void Raster<T>::writeBlock(int col, int row, Grid<T> &grd, int srcCol, int srcRo
 		if(cols != grd.cols() || rows != grd.rows()) {
 			MemRaster<T> g(cols, rows);
 			grd.readBlock(srcCol, srcRow, g);
-			if(m_band->RasterIO(GF_Write, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
-				g_runerr("Failed to write to band.");
+			#pragma omp critical(__gdal_io)
+			{
+				if(m_band->RasterIO(GF_Write, col, row, cols, rows, g.grid(), cols, rows, getType(), 0, 0) != CE_None)
+					g_runerr("Failed to write to band. (1)");
+				m_band->FlushCache();
+			}
 		} else {
-			if(m_band->RasterIO(GF_Write, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
-				g_runerr("Failed to write to band.");
+			#pragma omp critical(__gdal_io)
+			{
+				if(m_band->RasterIO(GF_Write, col, row, cols, rows, grd.grid(), cols, rows, getType(), 0, 0) != CE_None)
+					g_runerr("Failed to write to band. (2)");
+				m_band->FlushCache();
+			}
 		}
 	} else {
 		MemRaster<T> mr(cols, rows);
 		grd.readBlock(srcCol, srcRow, mr);
-		if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
-			g_runerr("Failed to write to band.");
+		#pragma omp critical(__gdal_io)
+		{
+			if(m_band->RasterIO(GF_Write, col, row, cols, rows, mr.grid(), cols, rows, getType(), 0, 0) != CE_None)
+				g_runerr("Failed to write to band. (3)");
+			m_band->FlushCache();
+		}
 	}
 }
 
