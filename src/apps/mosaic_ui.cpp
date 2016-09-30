@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QFileDialog>
 #include <QMessageBox>
