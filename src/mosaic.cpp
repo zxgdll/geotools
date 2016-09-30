@@ -12,6 +12,7 @@
 #include <omp.h>
 
 #include "geotools.h"
+#include "mosaic.hpp"
 #include "util.hpp"
 #include "raster.hpp"
 
@@ -113,82 +114,91 @@ namespace geotools {
 				}
 			}
 
+			int __tile_id = 0;
+
+			class Tile {
+			public:
+				int iCol;
+				int iRow;
+				int oCol;
+				int oRow;
+				int tileSize;
+				int buffer;
+				int id;
+
+				Tile(int tileSize, int buffer, int iCol, int iRow, int oCol, int oRow) :
+					id(++__tile_id),
+					tileSize(tileSize), buffer(buffer),
+					iCol(iCol), iRow(iRow),
+					oCol(oCol), oRow(oRow) {
+				}
+
+				bool readInput(MemRaster<float> &buf, Raster<float> &input) const {
+					int col = iCol - buffer;
+					int row = iRow - buffer;
+					int cols = tileSize + buffer * 2;
+					int rows = tileSize + buffer * 2;
+					int cOff = 0;
+					int rOff = 0;
+					if(col < 0) {
+						cOff = -col;
+						cols -= col;
+						col = 0;
+					}
+					if(row < 0) {
+						rOff = -row;
+						rows -= row;
+						row = 0;
+					}
+					if(cols <= 0 || rows <= 0)
+						return false;
+					input.readBlock(col, row, buf, cOff, rOff, cols, rows);
+					return true;
+				}
+					
+				bool readOutput(MemRaster<float> &buf, Raster<float> &output) const {
+					int col = oCol - buffer;
+					int row = oRow - buffer;
+					int cols = tileSize + buffer * 2;
+					int rows = tileSize + buffer * 2;
+					int cOff = 0;
+					int rOff = 0;
+					if(col < 0) {
+						cOff = -col;
+						cols -= col;
+						col = 0;
+					}
+					if(row < 0) {
+						rOff = -row;
+						rows -= row;
+						row = 0;
+					}
+					if(cols <= 0 || rows <= 0)
+						return false;
+					output.readBlock(col, row, buf, cOff, rOff, cols, rows);
+					return true;
+				}
+
+				void writeOutput(MemRaster<float> &buf, Raster<float> &output) const {
+					if(!(oCol >= output.cols() || oRow >= output.rows()))
+						output.writeBlock(oCol, oRow, buf, buffer, buffer, tileSize, tileSize);
+				}
+
+				void print() const {
+					std::cerr << "[Tile: in: " << iCol << "," << iRow << "; out: " << oCol << "," << oRow << "]" << std::endl;
+				}
+			};
+
 		} // util
 
-		int __tile_id = 0;
 
-		class Tile {
-		public:
-			int iCol;
-			int iRow;
-			int oCol;
-			int oRow;
-			int tileSize;
-			int buffer;
-			int id;
+		void Mosaic::setFileCallback(void (*callback)(float)) {
+			m_fileCallback = callback;
+		}
 
-			Tile(int tileSize, int buffer, int iCol, int iRow, int oCol, int oRow) :
-				id(++__tile_id),
-				tileSize(tileSize), buffer(buffer),
-				iCol(iCol), iRow(iRow),
-				oCol(oCol), oRow(oRow) {
-			}
-
-			bool readInput(MemRaster<float> &buf, Raster<float> &input) const {
-				int col = iCol - buffer;
-				int row = iRow - buffer;
-				int cols = tileSize + buffer * 2;
-				int rows = tileSize + buffer * 2;
-				int cOff = 0;
-				int rOff = 0;
-				if(col < 0) {
-					cOff = -col;
-					cols -= col;
-					col = 0;
-				}
-				if(row < 0) {
-					rOff = -row;
-					rows -= row;
-					row = 0;
-				}
-				if(cols <= 0 || rows <= 0)
-					return false;
-				input.readBlock(col, row, buf, cOff, rOff, cols, rows);
-				return true;
-			}
-				
-			bool readOutput(MemRaster<float> &buf, Raster<float> &output) const {
-				int col = oCol - buffer;
-				int row = oRow - buffer;
-				int cols = tileSize + buffer * 2;
-				int rows = tileSize + buffer * 2;
-				int cOff = 0;
-				int rOff = 0;
-				if(col < 0) {
-					cOff = -col;
-					cols -= col;
-					col = 0;
-				}
-				if(row < 0) {
-					rOff = -row;
-					rows -= row;
-					row = 0;
-				}
-				if(cols <= 0 || rows <= 0)
-					return false;
-				output.readBlock(col, row, buf, cOff, rOff, cols, rows);
-				return true;
-			}
-
-			void writeOutput(MemRaster<float> &buf, Raster<float> &output) const {
-				if(!(oCol >= output.cols() || oRow >= output.rows()))
-					output.writeBlock(oCol, oRow, buf, buffer, buffer, tileSize, tileSize);
-			}
-
-			void print() const {
-				std::cerr << "[Tile: in: " << iCol << "," << iRow << "; out: " << oCol << "," << oRow << "]" << std::endl;
-			}
-		};
+		void Mosaic::setOverallCallback(void (*callback)(float)) {
+			m_overallCallback = callback;
+		}
 
 		/**
 		 * Mosaic the given files together using the first as the base. The base file will serve as a clipping
@@ -198,7 +208,7 @@ namespace geotools {
 		* used, the existing overviews may obscure the fact that the image has changed (when zoomed out.)
 		 */
 		 // TODO: Background must be larger than other files. Remedy this.
-		void mosaic(std::vector<std::string> &files, std::string &outfile, float distance, int tileSize, int threads = 1) {
+		void Mosaic::mosaic(const std::vector<std::string> &files, const std::string &outfile, float distance, int tileSize, int threads) {
 			
 			g_debug("mosaic");
 
@@ -210,6 +220,14 @@ namespace geotools {
 				g_argerr("Less than 2 files. Nothing to do.");
 			if(tileSize <= 0)
 				g_argerr("Tile size must be greater than zero.");
+
+		 	if(threads > 0) {
+		 		g_debug("running with " << threads << " threads");
+		 		omp_set_dynamic(1);
+		 		omp_set_num_threads(threads);
+		 	} else {
+		 		g_argerr("Run with >=1 thread.");
+		 	}
 
 			using namespace geotools::raster::util;
 
@@ -238,6 +256,9 @@ namespace geotools {
 			}
 
 			for(int i = 1; i < files.size(); ++i) {
+
+				if(m_overallCallback)
+					m_overallCallback((i - 0.5) / (files.size() - 1));
 
 				Raster<float> input(files[i]);
 
@@ -278,7 +299,9 @@ namespace geotools {
 					}
 				}
 
-				#pragma omp parallel
+				int tileStatus = 0;
+
+				#pragma omp parallel shared(tileStatus)
 				{
 					// Initialize the grids.
 					MemRaster<float> inGrid(tileSize + buffer * 2, tileSize + buffer * 2);
@@ -289,6 +312,12 @@ namespace geotools {
 					
 					#pragma omp for nowait
 					for(int t = 0; t < tiles.size(); ++t) {
+
+						#pragma omp atomic
+						tileStatus++;
+
+						if(m_fileCallback)
+							m_fileCallback((tileStatus - 0.5) / tiles.size());
 
 						std::unique_ptr<Tile> tile = std::move(tiles[t]);
 
@@ -316,10 +345,21 @@ namespace geotools {
 						
 						// Write to output.
 						tile->writeOutput(outGrid, output);
+
+						if(m_fileCallback)
+							m_fileCallback((float) tileStatus / tiles.size());
+
 					}
 
 				} // parallel
+
+				if(m_fileCallback)
+					m_fileCallback(1.0);
+				if(m_overallCallback)
+					m_overallCallback((float) i / (files.size() - 1));
 			}
+
+			g_debug(" -- done.");
 
 		}
 
@@ -327,62 +367,3 @@ namespace geotools {
 
 } // geotools
 
-void usage() {
-	std::cerr << "Usage: mosaic [options] -o <output file> <file [file [file [...]]]>\n"
-		<< "    -o <file>        The output file.\n"
-		<< "    -d <distance>    The feather distance in map units (default 100.)\n"
-		<< "    <file [...]>     A list of files. The first is used as the background\n"
-		<< "                     and determines the size of the output. Subsequent\n"
-		<< "                     images are layered on top and feathered.\n"
-		<< "    -v               Verbose messages.\n"
-		<< "    -t               The number of threads to use. Defaults to the number\n"
-		<< "                     of cores.\n"
-		<< "    -s               Tile size. This manages the sizes of the tiles. Default 1024.\n"
-		<< "                     that is used for feathering/blending. Keep in mind the width\n"
-		<< "                     of the images, the number of threads and the size of the type.\n";
-	
-}
-
-int main(int argc, char **argv) {
-
- 	try {
-
-	 	float distance = 100.0;
-	 	std::vector<std::string> files;
-	 	std::string outfile;
-	 	int threads = 0;
-	 	int tileSize = 1024;
-
-	 	for(int i = 1; i < argc; ++i) {
-	 		std::string arg(argv[i]);
-	 		if(arg == "-d") {
-	 			distance = atof(argv[++i]);
-	 		} else if(arg == "-o") {
-	 			outfile = argv[++i];
-			} else if(arg == "-v") {
-				g_loglevel(G_LOG_DEBUG);
-			} else if(arg == "-t") {
-				threads = atoi(argv[++i]);
-			} else if(arg == "-s") {
-				tileSize = atoi(argv[++i]);
-	 		} else {
-	 			files.push_back(argv[i]);
-	 		}
-	 	}
-
-	 	if(threads > 0) {
-	 		g_debug("running with " << threads << " threads");
-	 		omp_set_dynamic(1);
-	 		omp_set_num_threads(threads);
-	 	}
-
- 		geotools::raster::mosaic(files, outfile, distance, tileSize, threads);
-
- 	} catch(const std::exception &e) {
- 		g_error(e.what());
- 		usage();
- 		return 1;
- 	}
-
- 	return 0;
- }

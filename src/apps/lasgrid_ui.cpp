@@ -12,14 +12,14 @@ using namespace geotools::las::lasgrid_config;
 /**
  * Utility methods for status callbacks.
  */
- LasgridForm *form;
+ LasgridForm *callbackForm;
 
 void fileCallback(float status) {
-	form->setFileStatus(status);
+	callbackForm->setFileStatus(status);
 }
 
 void overallCallback(float status) {
-	form->setOverallStatus(status);
+	callbackForm->setOverallStatus(status);
 }
 
 
@@ -157,7 +157,7 @@ void LasgridForm::runClicked() {
 	// TODO: Angle limit
 	// TODO: Compound CRS
 	try {
-		form = this;
+		callbackForm = this;
 		LasGrid lg;
 		lg.setFileCallback(fileCallback);
 		lg.setOverallCallback(overallCallback);

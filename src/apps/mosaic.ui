@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>733</width>
-    <height>502</height>
+    <width>531</width>
+    <height>497</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,7 +18,7 @@
     <rect>
      <x>10</x>
      <y>14</y>
-     <width>711</width>
+     <width>511</width>
      <height>471</height>
     </rect>
    </property>
@@ -42,9 +42,15 @@
            <widget class="QPushButton" name="btnSelectFiles">
             <property name="sizePolicy">
              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-              <horstretch>1</horstretch>
+              <horstretch>2</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
+            </property>
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>0</height>
+             </size>
             </property>
             <property name="text">
              <string>Select Files</string>
@@ -61,7 +67,7 @@
             </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-              <horstretch>1</horstretch>
+              <horstretch>2</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
@@ -77,7 +83,7 @@
             </property>
             <property name="sizePolicy">
              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-              <horstretch>1</horstretch>
+              <horstretch>2</horstretch>
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
@@ -93,6 +99,12 @@
            <widget class="QPushButton" name="btnOrderUp">
             <property name="enabled">
              <bool>false</bool>
+            </property>
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+              <horstretch>1</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
             </property>
             <property name="text">
              <string>Up</string>
@@ -179,6 +191,9 @@
             <property name="inputMask">
              <string>D0000</string>
             </property>
+            <property name="text">
+             <string>100</string>
+            </property>
            </widget>
           </item>
           <item row="3" column="1">
@@ -229,7 +244,7 @@
       <item>
        <widget class="QPushButton" name="btnCancel">
         <property name="text">
-         <string>Cancel</string>
+         <string>Close</string>
         </property>
        </widget>
       </item>

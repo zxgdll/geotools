@@ -68,8 +68,10 @@ add_executable (rasterstats src/rasterstats.cpp)
 target_link_libraries (rasterstats gdal raster util geotools)
 
 
-add_executable (mosaic-app src/mosaic.cpp)
-target_link_libraries (mosaic-app gdal boost_system boost_filesystem raster util geotools)
+add_library (mosaic SHARED src/mosaic.cpp)
+target_link_libraries (mosaic gdal boost_system boost_filesystem raster util geotools)
+add_executable (mosaic-app src/apps/mosaic.cpp src/apps/mosaic_ui.cpp)
+target_link_libraries (mosaic-app PUBLIC mosaic Qt5::Gui Qt5::Core Qt5::Widgets util geotools raster)
 
 
 add_library (treetops SHARED src/treetops.cpp)

@@ -6,14 +6,16 @@
 #include <QtWidgets/QWidget>
 #include <QDir>
 
-#include "ui_lasgrid.h"
+#include "ui_mosaic.h"
 
 namespace geotools {
 
 	namespace ui {
 
-		class MosaicForm : public QWidget, public Ui::LasgridForm {
+		class MosaicForm : public QWidget, public Ui::MosaicForm {
+		
 			Q_OBJECT
+		
 		private:
 			QWidget *m_form;
 			std::string m_destFile;
@@ -25,12 +27,17 @@ namespace geotools {
 			void updateFileList();
 			void updateFileButtons();
 			void checkRun();
+		
 		public:
 			MosaicForm(QWidget *p = Q_NULLPTR);
 			void setupUi(QWidget *Form);
 			~MosaicForm();
 			void setFileStatus(float);
 			void setOverallStatus(float);
+		
+		signals:
+			void fileProgress(int);
+			void overallProgress(int);
 
 		public slots:
 			void fileListSelectionChanged();
@@ -42,9 +49,9 @@ namespace geotools {
 			void destFileClicked();
 			void upClicked();
 			void downClicked();
-			void distanceChanged(double);
+			void distanceChanged(QString);
 			void threadsChanged(int);
-			void tileSizeChanged(int);
+			void tileSizeChanged(QString);
 		};
 
 	}
