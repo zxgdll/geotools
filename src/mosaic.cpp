@@ -192,12 +192,8 @@ namespace geotools {
 		} // util
 
 
-		void Mosaic::setFileCallback(void (*callback)(float)) {
-			m_fileCallback = callback;
-		}
-
-		void Mosaic::setOverallCallback(void (*callback)(float)) {
-			m_overallCallback = callback;
+		void Mosaic::setCallbacks(geotools::util::Callbacks *callbacks) {
+			m_callbacks = callbacks;
 		}
 
 		/**
@@ -211,6 +207,13 @@ namespace geotools {
 		void Mosaic::mosaic(const std::vector<std::string> &files, const std::string &outfile, float distance, int tileSize, int threads) {
 			
 			g_debug("mosaic");
+
+			using namespace geotools::raster::util;
+
+			if(m_callbacks) {
+				m_callbacks->fileCallback(0.0f);
+				m_callbacks->overallCallback(0.0f);
+			}
 
 			if(distance <= 0.0)
 				g_argerr("Invalid distance: " << distance);
@@ -228,8 +231,6 @@ namespace geotools {
 		 	} else {
 		 		g_argerr("Run with >=1 thread.");
 		 	}
-
-			using namespace geotools::raster::util;
 
 			// Open the BG file for reading only.
 			g_debug(" -- opening base file.");
@@ -257,8 +258,8 @@ namespace geotools {
 
 			for(unsigned int i = 1; i < files.size(); ++i) {
 
-				if(m_overallCallback)
-					m_overallCallback((i - 0.5) / (files.size() - 1));
+				if(m_callbacks)
+					m_callbacks->overallCallback((i - 0.5) / (files.size() - 1));
 
 				Raster<float> input(files[i]);
 
@@ -314,8 +315,8 @@ namespace geotools {
 						#pragma omp atomic
 						tileStatus++;
 
-						if(m_fileCallback)
-							m_fileCallback((tileStatus - 0.5) / tiles.size());
+						if(m_callbacks)
+							m_callbacks->fileCallback((tileStatus - 0.5) / tiles.size());
 
 						std::unique_ptr<Tile> tile = std::move(tiles[t]);
 
@@ -344,17 +345,17 @@ namespace geotools {
 						// Write to output.
 						tile->writeOutput(outGrid, output);
 
-						if(m_fileCallback)
-							m_fileCallback((float) tileStatus / tiles.size());
+						if(m_callbacks)
+							m_callbacks->fileCallback((float) tileStatus / tiles.size());
 
 					}
 
 				} // parallel
 
-				if(m_fileCallback)
-					m_fileCallback(1.0);
-				if(m_overallCallback)
-					m_overallCallback((float) i / (files.size() - 1));
+				if(m_callbacks) {
+					m_callbacks->fileCallback(1.0);
+					m_callbacks->overallCallback((float) i / (files.size() - 1));
+				}
 			}
 
 			g_debug(" -- done.");

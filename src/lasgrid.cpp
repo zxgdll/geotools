@@ -137,12 +137,8 @@ namespace geotools {
 
 		} // util
 
-		void LasGrid::setFileCallback(void (*callback)(float)) {
-			m_fileCallback = callback;
-		}
-
-		void LasGrid::setOverallCallback(void (*callback)(float)) {
-			m_overallCallback = callback;
+		void LasGrid::setCallbacks(geotools::util::Callbacks *callbacks) {
+			m_callbacks = callbacks;
 		}
 
 		void LasGrid::lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
@@ -258,8 +254,8 @@ namespace geotools {
 				liblas::Reader reader = rf.CreateWithStream(in);
 				liblas::Header header = reader.GetHeader();
 
-				if(m_overallCallback)
-					m_overallCallback(((j + 0.5f) / indices.size()) * 0.75f);
+				if(m_callbacks)
+					m_callbacks->overallCallback(((j + 0.5f) / indices.size()) * 0.75f);
 
 				size_t curPt = 0;
 				size_t numPts = header.GetPointRecordsCount();
@@ -267,8 +263,10 @@ namespace geotools {
 				while(reader.ReadNextPoint()) {
 					liblas::Point pt = reader.GetPoint();
 
-					if(curPt % 1000 == 0)
-						m_fileCallback((curPt + 1.0) / numPts);
+					if(curPt % 1000 == 0) {
+						if(m_callbacks) 
+							m_callbacks->fileCallback((curPt + 1.0) / numPts);
+					}
 					++curPt;
 
 					if(g_abs(pt.GetScanAngleRank()) > angleLimit)
@@ -337,16 +335,15 @@ namespace geotools {
 					}
 				}
 
-				if(m_fileCallback)
-					m_fileCallback(1.0f);
-
-				if(m_overallCallback)
-					m_overallCallback(((j + 1.0f) / indices.size()) * 0.75f);
+				if(m_callbacks) {
+					m_callbacks->fileCallback(1.0f);
+					m_callbacks->overallCallback(((j + 1.0f) / indices.size()) * 0.75f);
+				}
 
 			}
 
-			if(m_overallCallback)
-				m_overallCallback(0.75f);
+			if(m_callbacks)
+				m_callbacks->overallCallback(0.75f);
 
 			// Calculate cells or set nodata.
 			// Welford's method for variance.
@@ -461,8 +458,8 @@ namespace geotools {
 				break;
 			}
 
-			if(m_overallCallback)
-				m_overallCallback(0.85f);
+			if(m_callbacks)
+				m_callbacks->overallCallback(0.85f);
 
 			if(type == TYPE_COUNT) {
 				// TODO: Determine resolution sign properly.
@@ -476,8 +473,8 @@ namespace geotools {
 				//	rast.voidFillIDW(resolution);
 			}
 
-			if(m_overallCallback)
-				m_overallCallback(1.0f);
+			if(m_callbacks)
+				m_callbacks->overallCallback(1.0f);
 
 		}
 

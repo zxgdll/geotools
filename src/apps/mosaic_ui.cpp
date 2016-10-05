@@ -1,8 +1,5 @@
-#include <cmath>
-
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QFileDialog>
-#include <QMessageBox>
 
 #include "omp.h"
 
@@ -11,31 +8,20 @@
 #include "mosaic_ui.hpp"
 
 using namespace geotools::ui;
-
-/**
- * Utility methods for status callbacks.
- */
-MosaicForm *callbackForm;
-
-void fileCallback(float status) {
-	callbackForm->setFileStatus(status);
-}
-
-void overallCallback(float status) {
-	callbackForm->setOverallStatus(status);
-}
-
+using namespace geotools::raster;
 
 
 MosaicForm::MosaicForm(QWidget *p) : 
 	QWidget(p),
 	m_tileSize(2048),
 	m_distance(100.0),
-	m_threads(1) {
+	m_threads(1),
+	m_callbacks(new MosaicCallbacks()) {
 }
 
 MosaicForm::~MosaicForm() {
 	m_last = nullptr;
+	delete m_callbacks;
 }
 
 void MosaicForm::setupUi(QWidget *form) {
@@ -69,8 +55,10 @@ void MosaicForm::setupUi(QWidget *form) {
 	connect(spnThreads, SIGNAL(valueChanged(int)), this, SLOT(threadsChanged(int)));
 	connect(btnOrderUp, SIGNAL(clicked()), this, SLOT(upClicked()));
 	connect(btnOrderDown, SIGNAL(clicked()), this, SLOT(downClicked()));
-	connect(this, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
-	connect(this, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
+	connect((MosaicCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
+	connect((MosaicCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
+	connect(&m_workerThread, SIGNAL(finished()), this, SLOT(done()));
+
 }
 
 void MosaicForm::upClicked() {
@@ -110,47 +98,25 @@ void MosaicForm::fileListSelectionChanged() {
 }
 
 void MosaicForm::destFileClicked() {
-	QFileDialog d(m_form);
-	d.setDirectory(*m_last);
-	d.setNameFilter(QString("GeoTiff Files (*.tif)"));
-	if(d.exec()) {
-		m_destFile = d.selectedFiles()[0].toStdString();
-	} else {
-		m_destFile = "";
-	}
+	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last->path(), "GeoTiff (*.tif *.tiff)");
+	m_destFile = res.toStdString();
+	m_last->setPath(res);
 	txtDestFile->setText(QString(m_destFile.c_str()));
 	checkRun();
 }
 
-void MosaicForm::setFileStatus(float status) {
-	emit fileProgress((int) std::round(status * 100));
-}
-
-void MosaicForm::setOverallStatus(float status) {
-	emit overallProgress((int) std::round(status * 100));
-}
-
 void MosaicForm::runClicked() {
-	try {
-		btnRun->setEnabled(false);
-		btnCancel->setEnabled(false);
-		g_loglevel(G_LOG_DEBUG);
-		g_debug("run");
-		callbackForm = this;
-		geotools::raster::Mosaic m;
-		m.setOverallCallback(overallCallback);
-		m.setFileCallback(fileCallback);
-		m.mosaic(m_tifFiles, m_destFile, m_distance, m_tileSize, m_threads);
-		checkRun();
-		btnCancel->setEnabled(true);
-	} catch(const std::exception &e) {
-		QMessageBox err(this);
-		err.setText("Error");
-		err.setInformativeText(QString(e.what()));
-		err.exec();
-		checkRun();
-		btnCancel->setEnabled(true);
-	}
+	if(m_workerThread.isRunning())
+		return;
+	btnRun->setEnabled(false);
+	btnCancel->setEnabled(false);
+	m_workerThread.init(this, m_callbacks, m_tifFiles, m_destFile, m_distance, m_tileSize, m_threads);
+	m_workerThread.start();
+}
+
+void MosaicForm::done() {
+	checkRun();
+	btnCancel->setEnabled(true);
 }
 
 void MosaicForm::cancelClicked() {

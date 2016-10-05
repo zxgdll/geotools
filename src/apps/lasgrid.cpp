@@ -52,14 +52,17 @@ int main(int argc, char **argv) {
 		Bounds bounds;
 		std::set<int> classes;
 		std::vector<std::string> files;
+		bool gui = false;
 
+		g_loglevel(0);
+		
 		for(int i = 1; i < argc; ++i) {
 			std::string s(argv[i]);
 			if(s == "-h") {
 				usage();
 				return 0;
 			} else if(s == "-gui") {
-				return runWithUI(argc, argv);
+				gui = true;
 			} else if(s == "-o") {
 				dstFile = argv[++i];
 			} else if(s == "-s") {
@@ -89,8 +92,12 @@ int main(int argc, char **argv) {
 			}
 		}
 
-		LasGrid lg;
-		lg.lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit, fill);
+		if(gui) {
+			return runWithUI(argc, argv);
+		} else {
+			LasGrid lg;
+			lg.lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit, fill);
+		}
 
 	} catch(const std::exception &ex) {
 		g_error(ex.what());

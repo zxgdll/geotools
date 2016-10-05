@@ -117,13 +117,13 @@ namespace geotools {
 			 * Return a reference to the value held at the given index in the grid.
 			 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
 			 */
-			virtual T &get(size_t idx) =0;
+			virtual T get(size_t idx) =0;
 
 			/**
 			 * Return a reference to the value held at the given column and row.
 			 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
 			 */
-			virtual T &get(int col, int row) =0;
+			virtual T get(int col, int row) =0;
 
 			/**
 			 * Set the value held at  the given index in the grid.
@@ -139,7 +139,7 @@ namespace geotools {
 			 * Get or set the value held at the given index in the grid.
 			 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
 			 */
-			virtual T &operator[](size_t idx) =0;
+			virtual T operator[](size_t idx) =0;
 			
 			/* 
 			 * Return true if the dataset contains the given element.
@@ -429,9 +429,9 @@ namespace geotools {
 			 * Return a reference to the value held at
 			 * the given index in the grid.
 			 */
-			T &get(size_t idx);
+			T get(size_t idx);
 
-			T &get(int col, int row);
+			T get(int col, int row);
 
 			bool isNoData(int col, int row);
 
@@ -448,7 +448,7 @@ namespace geotools {
 			/**
 			 * Return the element at the given index.
 			 */
-			T &operator[](size_t idx);
+			T operator[](size_t idx);
 
 			bool isSquare() const;
 
@@ -576,6 +576,16 @@ namespace geotools {
 			T* getBlock(int col, int row, bool forWrite);
 
 			/**
+			 * Get the value from the cache.
+			 */
+			T get(int col, int row);
+
+			/**
+			 * Set the value in the cache. Implies a dirty block.
+			 */
+			void set(int col, int row, T value);
+
+			/**
 			 * Flush all blocks to disk.
 			 */
 			void flush();
@@ -597,18 +607,12 @@ namespace geotools {
 			bool m_writable;			// True if the raster is writable
 			GDALDataset *m_ds;			// GDAL dataset
 			GDALRasterBand *m_band;		// GDAL band
-			T *m_block;					// Block storage
 			GDALDataType m_type;		// GDALDataType -- limits the possible template types.
 			T m_nodata;					// Nodata value.
 			double m_trans[6];			// Raster transform
 			bool m_inited = false;		// True if the instance is initialized.
 			std::string m_filename;		// Raster filename
 			BlockCache<T> m_cache;		// Block cache.
-
-			/**
-			 * Loads the block that contains the given row and column.
-			 */
-			void loadBlock(int col, int row, bool forWrite);
 
 			/**
 			 * Get the GDAL type for the given c++ type.
@@ -903,13 +907,13 @@ namespace geotools {
 			
 			bool hasGrid() const;
 
-			T &get(double x, double y);
+			T get(double x, double y);
 
-			T &get(int col, int row);
+			T get(int col, int row);
 
-			T &get(size_t idx);
+			T get(size_t idx);
 
-			T &operator[](size_t idx);
+			T operator[](size_t idx);
 
 			void set(int col, int row, T v);
 

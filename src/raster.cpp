@@ -256,6 +256,7 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
 
 }
 
+
 // Implementations for MemRaster
 template <class T>
 void MemRaster<T>::checkInit() const {
@@ -275,7 +276,6 @@ template <class T>
 MemRaster<T>::MemRaster(int cols, int rows) : MemRaster() {
 	init(cols, rows);
 }
-
 
 template <class T>
 MemRaster<T>::~MemRaster() {
@@ -338,7 +338,7 @@ void MemRaster<T>::fill(const T value) {
 }
 
 template <class T>
-T &MemRaster<T>::get(size_t idx) {
+T MemRaster<T>::get(size_t idx) {
 	checkInit();
 	if(idx >= size())
 		g_argerr("Index out of bounds.");
@@ -346,7 +346,7 @@ T &MemRaster<T>::get(size_t idx) {
 }
 
 template <class T>
-T &MemRaster<T>::get(int col, int row) {
+T MemRaster<T>::get(int col, int row) {
 	size_t idx = (size_t) row * m_cols + col;
 	return get(idx);
 }
@@ -386,7 +386,7 @@ bool MemRaster<T>::has(size_t idx) const {
 }
 
 template <class T>
-T &MemRaster<T>::operator[](size_t idx) {
+T MemRaster<T>::operator[](size_t idx) {
 	checkInit();
 	if(idx >= size())
 		g_argerr("Index out of bounds.");
@@ -485,19 +485,20 @@ void MemRaster<T>::readBlock(Grid<T> &block) {
 	readBlock(0, 0, block, 0, 0, block.cols(), block.rows());
 }
 
+
 // Implementations for BlockCache
 template <class T>
 void BlockCache<T>::flushBlock(size_t idx) {
 	if(hasBlock(idx) && m_band->GetDataset()->GetAccess() == GA_Update) {
 		T *blk = m_blocks[idx];
-		#pragma omp critical(__gdal_io)
-		{
-			if(blk != nullptr) {
+		if(blk != nullptr) {
+			#pragma omp critical(__gdal_io)
+			{
 				if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
 					g_runerr("Failed to flush block.");
 			}
+			m_dirty[idx] = false;
 		}
-		m_dirty[idx] = false;
 	}
 }
 
@@ -518,12 +519,13 @@ int BlockCache<T>::toRow(size_t idx) {
 
 template <class T>
 T* BlockCache<T>::freeOldest() {
+	T *blk = nullptr;
 	auto it = m_time_idx.rbegin();
 	size_t time = it->first;
 	size_t idx = it->second;
 	if(m_dirty[idx])
 		flushBlock(idx);
-	T *blk = m_blocks[idx];
+	blk = m_blocks[idx];
 	m_blocks.erase(idx);
 	m_idx_time.erase(idx);
 	m_time_idx.erase(time);
@@ -578,13 +580,21 @@ bool BlockCache<T>::hasBlock(int col, int row) {
 
 template <class T>
 bool BlockCache<T>::hasBlock(size_t idx) {
-	return m_blocks.find(idx) != m_blocks.end();
+	bool has = false;
+	#pragma omp critical(__blockcache)
+	{
+		has = m_blocks.find(idx) != m_blocks.end();
+	}
+	return has;
 }
 
 template <class T>
 void BlockCache<T>::setSize(size_t size) {
-	while(m_blocks.size() > size)
-		freeOne();
+	#pragma omp critical(__blockcache)
+	{
+		while(m_blocks.size() > size)
+			freeOne();
+	}
 	m_size = size;
 }
 
@@ -596,39 +606,62 @@ size_t BlockCache<T>::getSize() {
 template <class T>
 T* BlockCache<T>::getBlock(int col, int row, bool forWrite) {
 	size_t idx = toIdx(col, row);
-	if(!hasBlock(idx)) {
-		T *blk = freeOne();
-		if(blk == nullptr)
-			blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
-		#pragma omp critical(__gdal_io)
-		{
-			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
-				g_runerr("Failed to read block.");
+	T *blk = nullptr;
+	#pragma omp critical(__blockcache)
+	{
+		if(m_blocks.find(idx) == m_blocks.end()) {
+			T *blk = freeOne();
+			if(blk == nullptr)
+				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
+			#pragma omp critical(__gdal_io)
+			{
+				if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
+					g_runerr("Failed to read block.");
+			}
+			m_blocks[idx] = blk;
 		}
-		m_blocks[idx] = blk;
+		++m_time; // TODO: No provision for rollover
+		m_time_idx.erase(m_idx_time[idx]);
+		m_time_idx[m_time] = idx;
+		m_idx_time[idx] = m_time;
+		if(forWrite)
+			m_dirty[idx] = true;
+		blk = m_blocks[idx];
 	}
-	++m_time; // TODO: No provision for rollover
-	m_time_idx.erase(m_idx_time[idx]);
-	m_time_idx[m_time] = idx;
-	m_idx_time[idx] = m_time;
-	if(forWrite)
-		m_dirty[idx] = true;
-	return m_blocks[idx];
+	return blk;
+}
+
+template <class T>
+T BlockCache<T>::get(int col, int row) {
+	T *blk = getBlock(col, row, false);
+	return blk[toIdx(col, row)];
+}
+
+template <class T>
+void BlockCache<T>::set(int col, int row, T value) {
+	T *blk = getBlock(col, row, true);
+	blk[toIdx(col, row)] = value;
 }
 
 template <class T>
 void BlockCache<T>::flush() {
-	for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it)
-		flushBlock(it->first);
+	#pragma omp critical(__blockcache)
+	{
+		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it)
+			flushBlock(it->first);
+	}
 }
 
 template <class T>
 void BlockCache<T>::close() {
 	flush();
-	for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
-		if(it->second != nullptr) {
-			free(it->second);
-			it->second = nullptr;
+	#pragma omp critical(__blockcache)
+	{
+		for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
+			if(it->second != nullptr) {
+				free(it->second);
+				it->second = nullptr;
+			}
 		}
 	}
 }
@@ -640,17 +673,6 @@ BlockCache<T>::~BlockCache() {
 
 
 // Implementations for Raster
-template <class T>
-void Raster<T>::loadBlock(int col, int row, bool forWrite) {
-	if(!m_inited)
-		g_runerr("Not inited before attempted read.");
-	if(!has(col, row))
-		g_argerr("Row or column out of bounds:" << col << ", " << row);
-	m_block = m_cache.getBlock(col, row, forWrite);
-	if(!m_block)
-		g_runerr("Failed to load block from cache.");
-}
-
 template <class T>
 GDALDataType Raster<T>::getType(unsigned long v) {
 	(void) v;
@@ -732,7 +754,7 @@ Raster<T>::Raster() :
 	m_cols(-1), m_rows(-1),
 	m_bandn(1),
 	m_writable(false),
-	m_ds(nullptr), m_band(nullptr), m_block(nullptr),
+	m_ds(nullptr), m_band(nullptr),
 	m_type(getType()) {
 }
 
@@ -905,6 +927,7 @@ bool Raster<T>::inited() const {
 
 template <class T>
 void Raster<T>::fill(T value) {
+	m_cache.flush();
 	MemRaster<T> grd(m_cache.blockWidth(), m_cache.blockHeight());
 	grd.fill(value);
 	#pragma omp critical(__gdal_io)
@@ -1188,25 +1211,24 @@ bool Raster<T>::hasGrid() const {
 }
 
 template <class T>
-T &Raster<T>::get(double x, double y) {
+T Raster<T>::get(double x, double y) {
 	return get(toCol(x), toRow(y));
 }
 
 template <class T>
-T &Raster<T>::get(int col, int row) {
-	loadBlock(col, row, false);
-	return m_block[m_cache.toBlockIdx(col, row)];
+T Raster<T>::get(int col, int row) {
+	return m_cache.get(col, row);
 }
 
 template <class T>
-T &Raster<T>::get(size_t idx) {
+T Raster<T>::get(size_t idx) {
 	if(idx >= size())
 		g_argerr("Index out of bounds.");
 	return get(idx % m_cols, (int) idx / m_cols);
 }
 
 template <class T>
-T &Raster<T>::operator[](size_t idx) {
+T Raster<T>::operator[](size_t idx) {
 	return get(idx);
 }
 
@@ -1214,8 +1236,7 @@ template <class T>
 void Raster<T>::set(int col, int row, T v) {
 	if(!m_writable)
 		g_runerr("This raster is not writable.");
-	loadBlock(col, row, true);
-	m_block[m_cache.toBlockIdx(col, row)] = v;
+	m_cache.set(col, row, v);
 }
 
 template <class T>

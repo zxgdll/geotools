@@ -58,11 +58,10 @@ namespace geotools {
 
 		class LasGrid {
 		private:
-			void (*m_fileCallback)(float);
-			void (*m_overallCallback)(float);
+			geotools::util::Callbacks *m_callbacks;
+			
 		public:
-			void setFileCallback(void (*callback)(float));
-			void setOverallCallback(void (*callback)(float));
+			void setCallbacks(geotools::util::Callbacks *callbacks);
 
 			void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
 				int crs, int attribute, int type, double radius,

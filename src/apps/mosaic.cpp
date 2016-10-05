@@ -49,14 +49,17 @@ int main(int argc, char **argv) {
 	 	std::string outfile;
 	 	int threads = 0;
 	 	int tileSize = 1024;
+	 	bool gui = false;
+
+	 	g_loglevel(0);
 
 	 	for(int i = 1; i < argc; ++i) {
 	 		std::string arg(argv[i]);
 	 		if(arg == "-d") {
 	 			distance = atof(argv[++i]);
 	 		} else if(arg == "-gui") {
-	 			return runWithUI(argc, argv);
-	 		} else if(arg == "-o") {
+	 			gui = true;
+			} else if(arg == "-o") {
 	 			outfile = argv[++i];
 			} else if(arg == "-v") {
 				g_loglevel(G_LOG_DEBUG);
@@ -69,8 +72,12 @@ int main(int argc, char **argv) {
 	 		}
 	 	}
 
-	 	geotools::raster::Mosaic m;
- 		m.mosaic(files, outfile, distance, tileSize, threads);
+	 	if(gui) {
+	 		return runWithUI(argc, argv);
+	 	} else {
+	 		geotools::raster::Mosaic m;
+ 			m.mosaic(files, outfile, distance, tileSize, threads);
+ 		}
 
  	} catch(const std::exception &e) {
  		g_error(e.what());

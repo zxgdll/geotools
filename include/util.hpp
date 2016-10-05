@@ -11,6 +11,13 @@ namespace geotools {
 
 	namespace util {
 
+		class Callbacks {
+		public:
+			virtual ~Callbacks()=0;
+			virtual void fileCallback(float status)=0;
+			virtual void overallCallback(float status)=0;
+		};
+
 		class Point {
                 public:
 			double x, y, z;

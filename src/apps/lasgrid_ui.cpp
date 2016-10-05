@@ -8,21 +8,8 @@
 #include "crs_selector_ui.hpp"
 
 using namespace geotools::ui;
+using namespace geotools::las;
 using namespace geotools::las::lasgrid_config;
-
-/**
- * Utility methods for status callbacks.
- */
- LasgridForm *callbackForm;
-
-void fileCallback(float status) {
-	callbackForm->setFileStatus(status);
-}
-
-void overallCallback(float status) {
-	callbackForm->setOverallStatus(status);
-}
-
 
 
 LasgridForm::LasgridForm(QWidget *p) : 
@@ -99,8 +86,9 @@ void LasgridForm::setupUi(QWidget *form) {
 	connect(spnQuantile, SIGNAL(valueChanged(int)), SLOT(quantileChanged(int)));
 	connect(spnQuantiles, SIGNAL(valueChanged(int)), SLOT(quantilesChanged(int)));
 	connect(spnMaxAngle, SIGNAL(valueChanged(int)), SLOT(maxAngleChanged(int)));
-	connect(this, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
-	connect(this, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
+	connect((LasCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
+	connect((LasCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
+	connect(&m_workerThread, SIGNAL(finished()), this, SLOT(done()));
 
 }
 
@@ -171,59 +159,27 @@ void LasgridForm::fileListSelectionChanged() {
 }
 
 void LasgridForm::destFileClicked() {
-	QFileDialog d(m_form);
-	d.setDirectory(*m_last);
-	//d.setFileMode(QFileDialog::ExistingFile);
-	d.setNameFilter(QString("GeoTiff Files (*.tif)"));
-	if(d.exec()) {
-		m_destFile = d.selectedFiles()[0].toStdString();
-	} else {
-		m_destFile = "";
-	}
-	txtDestFile->setText(QString(m_destFile.c_str()));
+	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last->path(), "GeoTiff (*.tif *.tiff)");
+	m_destFile = res.toStdString();
+	m_last->setPath(res);
+	txtDestFile->setText(res);
 	checkRun();
 }
 
-void LasgridForm::setFileStatus(float status) {
-	emit fileProgress((int) std::round(status * 100));
-}
-
-void LasgridForm::setOverallStatus(float status) {
-	emit overallProgress((int) std::round(status * 100));
-}
-
 void LasgridForm::runClicked() {
-	g_trace("run");
 
-	using namespace geotools::las;
-	using namespace geotools::util;
-
-	Bounds bounds;
-
-	m_angleLimit = 100;
+	if(m_workerThread.isRunning())
+		return;
+	btnRun->setEnabled(false);
+	btnCancel->setEnabled(false);
 
 	// TODO: Bounds
-	// TODO: Angle limit
-	// TODO: Compound CRS
-	try {
-		btnRun->setEnabled(false);
-		btnCancel->setEnabled(false);
-		callbackForm = this;
-		LasGrid lg;
-		lg.setFileCallback(fileCallback);
-		lg.setOverallCallback(overallCallback);
-		lg.lasgrid(m_destFile, m_lasFiles, m_classes, m_hsrid, m_attribute, m_type, m_radius, m_resolution, 
+	Bounds bounds;
+
+	m_workerThread.init(this, m_callbacks, m_lasFiles, m_destFile, m_classes, m_hsrid, m_attribute, m_type, m_radius, m_resolution, 
 			bounds, m_angleLimit, m_fill, m_snap);
-		checkRun();
-		btnCancel->setEnabled(true);
-	} catch(const std::exception &e) {
-		QMessageBox err(this);
-		err.setText("Error");
-		err.setInformativeText(QString(e.what()));
-		err.exec();
-		checkRun();
-		btnCancel->setEnabled(true);
-	}
+	m_workerThread.start();
+
 }
 
 void LasgridForm::cancelClicked() {
