@@ -20,18 +20,22 @@ MosaicForm::MosaicForm(QWidget *p) :
 }
 
 MosaicForm::~MosaicForm() {
-	m_last = nullptr;
 	delete m_callbacks;
+	if(m_workerThread) {
+		m_workerThread->exit(0);
+		delete m_workerThread;
+	}
 }
 
 void MosaicForm::setupUi(QWidget *form) {
 
 	Ui::MosaicForm::setupUi(form);
 
-	g_loglevel(G_LOG_TRACE);
-
 	m_form = form;
-	m_last = new QDir(QDir::home());
+	m_last = QDir::home();
+
+	m_workerThread = new WorkerThread();
+	m_callbacks = new MosaicCallbacks();
 
 	// TODO: Set from defaults -- see lasgrid_config
 	spnThreads->setValue(m_threads);
@@ -57,7 +61,7 @@ void MosaicForm::setupUi(QWidget *form) {
 	connect(btnOrderDown, SIGNAL(clicked()), this, SLOT(downClicked()));
 	connect((MosaicCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
 	connect((MosaicCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
-	connect(&m_workerThread, SIGNAL(finished()), this, SLOT(done()));
+	connect(m_workerThread, SIGNAL(finished()), this, SLOT(done()));
 
 }
 
@@ -98,20 +102,20 @@ void MosaicForm::fileListSelectionChanged() {
 }
 
 void MosaicForm::destFileClicked() {
-	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last->path(), "GeoTiff (*.tif *.tiff)");
+	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last.path(), "GeoTiff (*.tif *.tiff)");
 	m_destFile = res.toStdString();
-	m_last->setPath(res);
+	m_last.setPath(res);
 	txtDestFile->setText(QString(m_destFile.c_str()));
 	checkRun();
 }
 
 void MosaicForm::runClicked() {
-	if(m_workerThread.isRunning())
+	if(m_workerThread->isRunning())
 		return;
 	btnRun->setEnabled(false);
 	btnCancel->setEnabled(false);
-	m_workerThread.init(this, m_callbacks, m_tifFiles, m_destFile, m_distance, m_tileSize, m_threads);
-	m_workerThread.start();
+	m_workerThread->init(this);
+	m_workerThread->start();
 }
 
 void MosaicForm::done() {
@@ -161,12 +165,12 @@ void MosaicForm::clearFilesClicked() {
 
 void MosaicForm::selectFilesClicked() {
 	QFileDialog d(m_form);
-	d.setDirectory(*m_last);
+	d.setDirectory(m_last);
 	d.setFileMode(QFileDialog::ExistingFiles);
 	d.setNameFilter(QString("TIFF Files (*.tif)"));
 	if(d.exec()) {
 		QStringList files = d.selectedFiles();
-		*m_last = d.directory();
+		m_last = d.directory();
 		std::set<std::string> tmp(m_tifFiles.begin(), m_tifFiles.end());
 		for(int i = 0; i < files.size(); ++i)
 			tmp.insert(files[i].toStdString());

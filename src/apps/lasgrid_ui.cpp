@@ -18,7 +18,10 @@ LasgridForm::LasgridForm(QWidget *p) :
 }
 
 LasgridForm::~LasgridForm() {
-	m_last = nullptr;
+	if(m_workerThread) {
+		m_workerThread->exit(0);
+		delete m_workerThread;
+	}
 }
 
 void LasgridForm::setupUi(QWidget *form) {
@@ -28,7 +31,7 @@ void LasgridForm::setupUi(QWidget *form) {
 	g_loglevel(G_LOG_DEBUG);
 
 	m_form = form;
-	m_last = new QDir(QDir::home());
+	m_last = QDir::home();
 
 	m_radius = defaultRadius;
 	m_resolution = defaultResolution;
@@ -37,6 +40,9 @@ void LasgridForm::setupUi(QWidget *form) {
 	spnRadius->setValue(m_radius);
 	spnMaxAngle->setValue(m_angleLimit);
 
+	m_workerThread = new WorkerThread();
+	m_callbacks = new LasCallbacks();
+	
 	m_type = defaultType;
 	int i = 0;
 	int defaultIdx = -1;
@@ -88,7 +94,7 @@ void LasgridForm::setupUi(QWidget *form) {
 	connect(spnMaxAngle, SIGNAL(valueChanged(int)), SLOT(maxAngleChanged(int)));
 	connect((LasCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
 	connect((LasCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
-	connect(&m_workerThread, SIGNAL(finished()), this, SLOT(done()));
+	connect(m_workerThread, SIGNAL(finished()), this, SLOT(done()));
 
 }
 
@@ -159,27 +165,32 @@ void LasgridForm::fileListSelectionChanged() {
 }
 
 void LasgridForm::destFileClicked() {
-	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last->path(), "GeoTiff (*.tif *.tiff)");
+	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last.path(), "GeoTiff (*.tif *.tiff)");
 	m_destFile = res.toStdString();
-	m_last->setPath(res);
+	m_last.setPath(res);
 	txtDestFile->setText(res);
 	checkRun();
 }
 
 void LasgridForm::runClicked() {
 
-	if(m_workerThread.isRunning())
+	if(m_workerThread->isRunning())
 		return;
+
 	btnRun->setEnabled(false);
 	btnCancel->setEnabled(false);
 
 	// TODO: Bounds
 	Bounds bounds;
 
-	m_workerThread.init(this, m_callbacks, m_lasFiles, m_destFile, m_classes, m_hsrid, m_attribute, m_type, m_radius, m_resolution, 
-			bounds, m_angleLimit, m_fill, m_snap);
-	m_workerThread.start();
+	m_workerThread->init(this, bounds);
+	m_workerThread->start();
 
+}
+
+void LasgridForm::done() {
+	checkRun();
+	btnCancel->setEnabled(true);
 }
 
 void LasgridForm::cancelClicked() {
@@ -222,12 +233,12 @@ void LasgridForm::clearFilesClicked() {
 
 void LasgridForm::selectFilesClicked() {
 	QFileDialog d(m_form);
-	d.setDirectory(*m_last);
+	d.setDirectory(m_last);
 	d.setFileMode(QFileDialog::ExistingFiles);
 	d.setNameFilter(QString("LAS Files (*.las)"));
 	if(d.exec()) {
 		QStringList files = d.selectedFiles();
-		*m_last = d.directory();
+		m_last = d.directory();
 		std::set<std::string> tmp(m_lasFiles.begin(), m_lasFiles.end());
 		for(int i = 0; i < files.size(); ++i)
 			tmp.insert(files[i].toStdString());

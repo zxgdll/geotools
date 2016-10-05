@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>733</width>
-    <height>502</height>
+    <width>736</width>
+    <height>526</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,7 +19,7 @@
      <x>10</x>
      <y>14</y>
      <width>711</width>
-     <height>487</height>
+     <height>501</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0,1,0">
@@ -239,12 +239,19 @@
          </widget>
         </item>
         <item row="9" column="1">
-         <widget class="QSpinBox" name="spnMaxAngle"/>
+         <widget class="QSpinBox" name="spnMaxAngle">
+          <property name="maximum">
+           <number>180</number>
+          </property>
+          <property name="value">
+           <number>180</number>
+          </property>
+         </widget>
         </item>
         <item row="9" column="0">
          <widget class="QLabel" name="lblMaxAngle">
           <property name="text">
-           <string>TextLabel</string>
+           <string>Max Angle</string>
           </property>
          </widget>
         </item>
@@ -284,7 +291,7 @@
       <item>
        <widget class="QPushButton" name="btnCancel">
         <property name="text">
-         <string>Cancel</string>
+         <string>Close</string>
         </property>
        </widget>
       </item>

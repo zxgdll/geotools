@@ -39,59 +39,10 @@ namespace geotools {
 	namespace ui {
 
 
-		class WorkerThread : public QThread {
-		public:
-			void init(QWidget *parent, geotools::las::LasCallbacks *callbacks, const std::vector<std::string> &lasFiles, 
-				const std::string &destFile, const std::set<int> &classes, int hsrid, int attribute, int type, 
-				double radius, double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill, bool snap) {
-				m_callbacks = callbacks;
-				m_lasFiles = lasFiles;
-				m_destFile = destFile;
-				m_classes = classes;
-				m_hsrid = hsrid;
-				m_attribute = attribute;
-				m_type = type;
-				m_radius = radius;
-				m_resolution = resolution;
-				m_bounds = bounds;
-				m_angleLimit = angleLimit;
-				m_fill = fill;
-				m_snap = snap;
-			}
-
-		private:
-			std::vector<std::string> m_lasFiles;
-			std::string m_destFile;
-			std::set<int> m_classes;
-			int m_hsrid;
-			int m_attribute;
-			int m_type;
-			double m_radius;
-			double m_resolution;
-			geotools::util::Bounds m_bounds;
-			unsigned char m_angleLimit;
-			bool m_fill;
-			bool m_snap;
-			geotools::las::LasCallbacks *m_callbacks;
-			QWidget *m_parent;
-
-			void run() {
-				geotools::las::LasGrid l;
-				l.setCallbacks(m_callbacks);
-				try {
-					l.lasgrid(m_destFile, m_lasFiles, m_classes, m_hsrid, m_attribute, m_type, m_radius, m_resolution, 
-						m_bounds, m_angleLimit, m_fill, m_snap);
-				} catch(const std::exception &e) {
-					QMessageBox err(m_parent);
-					err.setText("Error");
-					err.setInformativeText(QString(e.what()));
-					err.exec();
-				}
-			}
-		};
-
+		class WorkerThread;
 
 		class LasgridForm : public QWidget, public Ui::LasgridForm {
+		friend class WorkerThread;
 			Q_OBJECT
 		private:
 			QWidget *m_form;
@@ -109,9 +60,9 @@ namespace geotools {
 			double m_radius;
 			int m_quantile;
 			int m_quantiles;
-			QDir *m_last;
-			geotools::las::LasCallbacks *m_callbacks;
-			WorkerThread m_workerThread;
+			QDir m_last;
+			geotools::util::Callbacks *m_callbacks;
+			WorkerThread *m_workerThread;
 
 			void updateFileList();
 			void updateFileButtons();
@@ -139,7 +90,35 @@ namespace geotools {
 			void snapToGridChanged(bool);
 			void resolutionChanged(double);
 			void maxAngleChanged(int);
+			void done();
 
+		};
+
+
+		class WorkerThread : public QThread {
+		private:
+			geotools::util::Bounds m_bounds;
+			LasgridForm *m_parent;
+
+			void run() {
+				geotools::las::LasGrid l;
+				l.setCallbacks(m_parent->m_callbacks);
+				try {
+					l.lasgrid(m_parent->m_destFile, m_parent->m_lasFiles, m_parent->m_classes, m_parent->m_hsrid, 
+						m_parent->m_attribute, m_parent->m_type, m_parent->m_radius, m_parent->m_resolution, 
+						m_bounds, m_parent->m_angleLimit, m_parent->m_fill, m_parent->m_snap);
+				} catch(const std::exception &e) {
+					QMessageBox err((QWidget *) m_parent);
+					err.setText("Error");
+					err.setInformativeText(QString(e.what()));
+					err.exec();
+				}
+			}
+		public:
+			void init(LasgridForm *parent, const geotools::util::Bounds &bounds) {
+				m_parent = parent;
+				m_bounds = bounds;
+			}
 		};
 
 	}

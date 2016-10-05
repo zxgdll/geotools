@@ -466,9 +466,8 @@ namespace geotools {
 				Raster<int> rast(dstFile, 1, bounds, resolution, -resolution, -1, crs);
 				rast.writeBlock(counts);
 			} else {
-				Raster<float> rast(dstFile, 1, bounds, resolution, -resolution, -9999.0, crs);
-				// Cast the double grid to float for writing.
-				grid1.convert(rast);
+				Raster<double> rast(dstFile, 1, bounds, resolution, -resolution, -9999.0, crs);
+				rast.writeBlock(grid1);
 				//if(fill)
 				//	rast.voidFillIDW(resolution);
 			}

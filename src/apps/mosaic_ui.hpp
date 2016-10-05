@@ -39,49 +39,16 @@ namespace geotools {
 
 	namespace ui {
 
-		class WorkerThread : public QThread {
-		public:
-			void init(QWidget *parent, geotools::raster::MosaicCallbacks *callbacks, const std::vector<std::string> &tifFiles, 
-				const std::string &destFile, double distance, int tileSize, int threads) {
-				m_callbacks = callbacks;
-				m_tifFiles = tifFiles;
-				m_destFile = destFile;
-				m_distance = distance;
-				m_tileSize = tileSize;
-				m_threads = threads;
-				m_parent = parent;
-			}
-
-		private:
-			std::vector<std::string> m_tifFiles;
-			std::string m_destFile;
-			double m_distance;
-			int m_tileSize;
-			int m_threads;
-			geotools::raster::MosaicCallbacks *m_callbacks;
-			QWidget *m_parent;
-
-			void run() {
-				geotools::raster::Mosaic m;
-				m.setCallbacks(m_callbacks);
-				try {
-					m.mosaic(m_tifFiles, m_destFile, m_distance, m_tileSize, m_threads);
-				} catch(const std::exception &e) {
-					QMessageBox err(m_parent);
-					err.setText("Error");
-					err.setInformativeText(QString(e.what()));
-					err.exec();
-				}
-			}
-		};
+		class WorkerThread;
 
 		class MosaicForm : public QWidget, public Ui::MosaicForm {
 			Q_OBJECT
+		friend class WorkerThread;
 		private:
 			QWidget *m_form;
 			std::string m_destFile;
 			std::vector<std::string> m_tifFiles;
-			QDir *m_last;
+			QDir m_last;
 			int m_tileSize;
 			double m_distance;
 			int m_threads;
@@ -89,7 +56,7 @@ namespace geotools {
 			void updateFileButtons();
 			void checkRun();
 			geotools::raster::MosaicCallbacks *m_callbacks;
-			WorkerThread m_workerThread;
+			WorkerThread *m_workerThread;
 
 		public:
 			MosaicForm(QWidget *p = Q_NULLPTR);
@@ -111,6 +78,32 @@ namespace geotools {
 			void tileSizeChanged(QString);
 			void done();
 		};
+
+
+		class WorkerThread : public QThread {
+		private:
+			MosaicForm *m_parent;
+
+			void run() {
+				geotools::raster::Mosaic m;
+				m.setCallbacks(m_parent->m_callbacks);
+				try {
+					m.mosaic(m_parent->m_tifFiles, m_parent->m_destFile, m_parent->m_distance, 
+						m_parent->m_tileSize, m_parent->m_threads);
+				} catch(const std::exception &e) {
+					QMessageBox err((QWidget *) m_parent);
+					err.setText("Error");
+					err.setInformativeText(QString(e.what()));
+					err.exec();
+				}
+			}
+
+		public:
+			void init(MosaicForm *parent) {
+				m_parent = parent;
+			}
+		};
+
 
 	}
 
