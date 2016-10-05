@@ -18,6 +18,7 @@ LasgridForm::LasgridForm(QWidget *p) :
 }
 
 LasgridForm::~LasgridForm() {
+	delete m_callbacks;
 	if(m_workerThread) {
 		m_workerThread->exit(0);
 		delete m_workerThread;
@@ -42,7 +43,7 @@ void LasgridForm::setupUi(QWidget *form) {
 
 	m_workerThread = new WorkerThread();
 	m_callbacks = new LasCallbacks();
-	
+
 	m_type = defaultType;
 	int i = 0;
 	int defaultIdx = -1;
