@@ -247,6 +247,15 @@ namespace geotools {
 			T variance();
 
 			/**
+			 * Convert a Grid to some other type.
+			 */
+			template <class U>
+			void convert(Grid<U> &g) {
+				for(size_t i = 0; i < size(); ++i)
+					g.set(i, (U) get(i));
+			}
+
+			/**
 			 * Fill the grid, beginning with the target cell, where any contiguous cell
 			 * satisfies the given FillOperator. The other grid is actually filled,
 			 * and the present grid is unchanged *unless* the present grid is passed
@@ -358,11 +367,11 @@ namespace geotools {
 		template <class T>
 		class MemRaster : public Grid<T> {
 		private:
+			T *m_grid;
 			int m_cols;
 			int m_rows;
-			T *m_grid;
-			T m_nodata;
 			void (*m_item_dealloc)(T);
+			T m_nodata;
 
 			/**
 			 * Checks if the grid has been initialized. Throws exception otherwise.
@@ -393,16 +402,6 @@ namespace geotools {
 			T *grid();
 
 			bool hasGrid() const;
-
-			/**
-			 * Cas a MemRaster to some other type.
-			 */
-			template <class U>
-			void convert(MemRaster<U> &g) {
-				g.init(cols(), rows());
-				for(size_t i = 0; i < size(); ++i)
-					g.set(i, (U) get(i));
-			}
 
 			int rows() const;
 
@@ -480,15 +479,15 @@ namespace geotools {
 		template <class T>
 		class BlockCache {
 		private: 
+			GDALRasterBand *m_band;
 			size_t m_size;
+			size_t m_time;
 			int m_bw;
 			int m_bh;
-			GDALRasterBand *m_band;
 			std::unordered_map<size_t, T*> m_blocks;       // idx, block
 			std::unordered_map<size_t, size_t> m_idx_time; // idx, time
 			std::unordered_map<size_t, bool> m_dirty;      // idx, bool
 			std::map<size_t, size_t> m_time_idx;           // time, idx
-			size_t m_time;
 
 			/**
 			 * Flush the block at the given index to disk, if it is dirty.
@@ -593,16 +592,16 @@ namespace geotools {
 		template <class T>
 		class Raster : public Grid<T> {
 		private:
-			int m_cols, m_rows;		// Raster cols/rows
-			int m_bandn;			// The band number
-			bool m_writable;		// True if the raster is writable
-			T m_nodata;			// Nodata value.
-			T *m_block;			// Block storage
-			GDALDataset *m_ds;		// GDAL dataset
+			int m_cols, m_rows;			// Raster cols/rows
+			int m_bandn;				// The band number
+			bool m_writable;			// True if the raster is writable
+			GDALDataset *m_ds;			// GDAL dataset
 			GDALRasterBand *m_band;		// GDAL band
-			double m_trans[6];		// Raster transform
-			bool m_inited = false;		// True if the instance is initialized.
+			T *m_block;					// Block storage
 			GDALDataType m_type;		// GDALDataType -- limits the possible template types.
+			T m_nodata;					// Nodata value.
+			double m_trans[6];			// Raster transform
+			bool m_inited = false;		// True if the instance is initialized.
 			std::string m_filename;		// Raster filename
 			BlockCache<T> m_cache;		// Block cache.
 

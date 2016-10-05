@@ -13,7 +13,9 @@ namespace geotools {
 	namespace ui {
 
 		class LasgridForm : public QWidget, public Ui::LasgridForm {
+			
 			Q_OBJECT
+
 		private:
 			QWidget *m_form;
 			std::string m_destFile;
@@ -28,16 +30,23 @@ namespace geotools {
 			bool m_snap;
 			double m_resolution;
 			double m_radius;
+			int m_quantile;
+			int m_quantiles;
 			QDir *m_last;
 			void updateFileList();
 			void updateFileButtons();
 			void checkRun();
+
 		public:
 			LasgridForm(QWidget *p = Q_NULLPTR);
 			void setupUi(QWidget *Form);
 			~LasgridForm();
 			void setFileStatus(float);
 			void setOverallStatus(float);
+
+		signals:
+			void fileProgress(int);
+			void overallProgress(int);
 
 		public slots:
 			void fileListSelectionChanged();
@@ -49,6 +58,14 @@ namespace geotools {
 			void destFileClicked();
 			void crsConfigClicked();
 			void typeSelected(int);
+			void quantileChanged(int);
+			void quantilesChanged(int);
+			void attributeSelected(int);
+			void radiusChanged(double);
+			void snapToGridChanged(bool);
+			void resolutionChanged(double);
+			void maxAngleChanged(int);
+
 		};
 
 	}

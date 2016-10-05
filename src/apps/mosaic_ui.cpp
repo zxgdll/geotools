@@ -123,7 +123,6 @@ void MosaicForm::destFileClicked() {
 }
 
 void MosaicForm::setFileStatus(float status) {
-	g_debug("file " << status);
 	emit fileProgress((int) std::round(status * 100));
 }
 
@@ -161,7 +160,7 @@ void MosaicForm::cancelClicked() {
 void MosaicForm::updateFileList() {
 	while(lstFiles->count())
 		lstFiles->takeItem(0);
-	for(int i = 0; i < m_tifFiles.size(); ++i)
+	for(unsigned int i = 0; i < m_tifFiles.size(); ++i)
 		lstFiles->addItem(QString(m_tifFiles[i].c_str()));
 	updateFileButtons();
 	checkRun();

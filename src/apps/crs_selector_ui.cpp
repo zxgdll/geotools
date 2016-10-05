@@ -32,7 +32,7 @@ void CRSSelector::loadCrs(std::map<int, std::string> &target, const std::string 
 }
 
 void CRSSelector::initUi() {
-	Ui:CRSSelector::setupUi((QDialog *) this);
+	Ui::CRSSelector::setupUi((QDialog *) this);
 
 	loadCrs(m_vcrs, "vertcs.csv");
 	loadCrs(m_vcrs, "vertcs.override.csv");

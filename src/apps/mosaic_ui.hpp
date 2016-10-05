@@ -21,9 +21,9 @@ namespace geotools {
 			std::string m_destFile;
 			std::vector<std::string> m_tifFiles;
 			QDir *m_last;
-			int m_threads;
-			double m_distance;
 			int m_tileSize;
+			double m_distance;
+			int m_threads;
 			void updateFileList();
 			void updateFileButtons();
 			void checkRun();

@@ -45,6 +45,7 @@ namespace geotools {
 			bool defaultSnapToGrid = true;
 			int defaultType = TYPE_MEAN;
 			int defaultAttribute = ATT_HEIGHT;
+			unsigned char defaultAngleLimit = 180;
 			std::set<int> defaultClasses = {2}; 
 			std::map<std::string, int> types = {
 				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
@@ -251,13 +252,14 @@ namespace geotools {
 
 			// Process files
 			for(unsigned int j = 0; j < indices.size(); ++j) {
+
 				unsigned int i = indices[j];
 				std::ifstream in(files[i].c_str());
 				liblas::Reader reader = rf.CreateWithStream(in);
 				liblas::Header header = reader.GetHeader();
 
 				if(m_overallCallback)
-					m_overallCallback((float) j / indices.size() * 100.0);
+					m_overallCallback(((j + 0.5f) / indices.size()) * 0.75f);
 
 				size_t curPt = 0;
 				size_t numPts = header.GetPointRecordsCount();
@@ -266,7 +268,7 @@ namespace geotools {
 					liblas::Point pt = reader.GetPoint();
 
 					if(curPt % 1000 == 0)
-						m_fileCallback((float) curPt / numPts * 100.0);
+						m_fileCallback((curPt + 1.0) / numPts);
 					++curPt;
 
 					if(g_abs(pt.GetScanAngleRank()) > angleLimit)
@@ -303,7 +305,7 @@ namespace geotools {
 								continue;
 							// Compute the grid index. The rows are assigned from the bottom.
 							int idx = (rows - rr - 1) * cols + cc;
-							g_debug("idx: " << idx);
+							//g_debug("idx: " << idx);
 							counts.set(idx, counts.get(idx) + 1);
 
 							switch(type){
@@ -336,12 +338,15 @@ namespace geotools {
 				}
 
 				if(m_fileCallback)
-					m_fileCallback(100.0);
+					m_fileCallback(1.0f);
+
+				if(m_overallCallback)
+					m_overallCallback(((j + 1.0f) / indices.size()) * 0.75f);
 
 			}
 
 			if(m_overallCallback)
-				m_overallCallback(100.0);
+				m_overallCallback(0.75f);
 
 			// Calculate cells or set nodata.
 			// Welford's method for variance.
@@ -358,7 +363,7 @@ namespace geotools {
 						double m = 0;
 						double s = 0;
 						int k = 1;
-						for(int j = 0; j < qGrid[i]->size(); ++j) {
+						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
 							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
@@ -377,7 +382,7 @@ namespace geotools {
 						double m = 0;
 						double s = 0;
 						int k = 1;
-						for(int j = 0; j < qGrid[i]->size(); ++j) {
+						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
 							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
@@ -396,7 +401,7 @@ namespace geotools {
 						double m = 0;
 						double s = 0;
 						int k = 1;
-						for(int j = 0; j < qGrid[i]->size(); ++j) {
+						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
 							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
@@ -415,7 +420,7 @@ namespace geotools {
 						double m = 0;
 						double s = 0;
 						int k = 1;
-						for(int j = 0; j < qGrid[i]->size(); ++j) {
+						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
 							double v = qGrid[i]->at(j);
 							double oldm = m;
 							m = m + (v - m) / k;
@@ -456,6 +461,9 @@ namespace geotools {
 				break;
 			}
 
+			if(m_overallCallback)
+				m_overallCallback(0.85f);
+
 			if(type == TYPE_COUNT) {
 				// TODO: Determine resolution sign properly.
 				Raster<int> rast(dstFile, 1, bounds, resolution, -resolution, -1, crs);
@@ -463,13 +471,13 @@ namespace geotools {
 			} else {
 				Raster<float> rast(dstFile, 1, bounds, resolution, -resolution, -9999.0, crs);
 				// Cast the double grid to float for writing.
-				MemRaster<float> tmp;
-				grid1.convert(tmp);
-				tmp.nodata(rast.nodata());
-				if(fill)
-					tmp.voidFillIDW(resolution);
-				rast.writeBlock(tmp);
+				grid1.convert(rast);
+				//if(fill)
+				//	rast.voidFillIDW(resolution);
 			}
+
+			if(m_overallCallback)
+				m_overallCallback(1.0f);
 
 		}
 

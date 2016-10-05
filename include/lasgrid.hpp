@@ -37,6 +37,7 @@ namespace geotools {
 			extern double defaultRadius;
 			extern bool defaultSnapToGrid;
 			extern int defaultType;
+			extern unsigned char defaultAngleLimit;
 			extern std::set<int> defaultClasses;
 			extern std::map<std::string, int> types;
 			extern std::map<std::string, int> attributes;

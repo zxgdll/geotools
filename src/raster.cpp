@@ -189,7 +189,7 @@ void Grid<T>::voidFillIDW(double radius, int count, double exp) {
 
 template <class T>
 void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
-        g_trace("Smoothing grid...");
+        g_debug("Smoothing grid...");
         Util::status(0, 1, "Smoothing grid...");
         if(sigma <= 0)
                 g_argerr("Sigma must be > 0.");
@@ -201,16 +201,16 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int size) {
         }
 
         // Guess at a good number of rows for each strip. Say 64MB each
-        int bufRows = g_max(1, g_min(rows(), (64 * 1024 * 1024) / sizeof(T) / cols()));
-        g_trace(" - buffer rows: " << bufRows);
+        int bufRows = g_max((int) 1, g_min(rows(), (int) ((64 * 1024 * 1024) / sizeof(T) / cols())));
+        g_debug(" - buffer rows: " << bufRows);
 
         double nd = nodata();
         size_t completed = 0;
 
         #pragma omp parallel for
         for(int row = 0; row < rows(); row += bufRows - size) {
-                double weights[size * size];
-                gaussianWeights(weights, size, sigma);
+                MemRaster<double> weights(size, size);
+                gaussianWeights(weights.grid(), size, sigma);
                 MemRaster<T> strip(cols(), g_min(bufRows, rows() - row));
                 MemRaster<T> smooth(cols(), g_min(bufRows, rows() - row));
                 MemRaster<T> buf(size, size);
@@ -492,8 +492,10 @@ void BlockCache<T>::flushBlock(size_t idx) {
 		T *blk = m_blocks[idx];
 		#pragma omp critical(__gdal_io)
 		{
-			if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
-				g_runerr("Failed to flush block.");
+			if(blk != nullptr) {
+				if(m_band->WriteBlock(toCol(idx) / m_bw, toRow(idx) / m_bh, blk) != CE_None)
+					g_runerr("Failed to flush block.");
+			}
 		}
 		m_dirty[idx] = false;
 	}
@@ -596,7 +598,7 @@ T* BlockCache<T>::getBlock(int col, int row, bool forWrite) {
 	size_t idx = toIdx(col, row);
 	if(!hasBlock(idx)) {
 		T *blk = freeOne();
-		if(!blk)
+		if(blk == nullptr)
 			blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
 		#pragma omp critical(__gdal_io)
 		{
@@ -624,7 +626,7 @@ template <class T>
 void BlockCache<T>::close() {
 	flush();
 	for(auto it = m_blocks.begin(); it != m_blocks.end(); ++it) {
-		if(it->second) {
+		if(it->second != nullptr) {
 			free(it->second);
 			it->second = nullptr;
 		}

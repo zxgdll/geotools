@@ -118,13 +118,13 @@ namespace geotools {
 
 			class Tile {
 			public:
+				int id;
+				int tileSize;
+				int buffer;
 				int iCol;
 				int iRow;
 				int oCol;
 				int oRow;
-				int tileSize;
-				int buffer;
-				int id;
 
 				Tile(int tileSize, int buffer, int iCol, int iRow, int oCol, int oRow) :
 					id(++__tile_id),
@@ -236,7 +236,7 @@ namespace geotools {
 			Raster<float> base(files[0]);
 	
 			// Check some properties of other files for compatibility.
-			for(int i = 1; i < files.size(); ++i) {
+			for(unsigned int i = 1; i < files.size(); ++i) {
 				Raster<float> check(files[i]);
 				if(check.resolutionX() != base.resolutionX() || check.resolutionY() != base.resolutionY())
 					g_argerr("Resolution of " << files[i] << " doesn't match base.")
@@ -255,7 +255,7 @@ namespace geotools {
 				}
 			}
 
-			for(int i = 1; i < files.size(); ++i) {
+			for(unsigned int i = 1; i < files.size(); ++i) {
 
 				if(m_overallCallback)
 					m_overallCallback((i - 0.5) / (files.size() - 1));
@@ -271,8 +271,6 @@ namespace geotools {
 				int iEndRow = input.toRow(input.positiveY() ? bounds.maxy() : bounds.miny());
 				int oStartCol = base.toCol(output.positiveX() ? bounds.minx() : bounds.maxx());
 				int oStartRow = base.toRow(output.positiveY() ? bounds.miny() : bounds.maxy());
-				int oEndCol = base.toCol(output.positiveX() ? bounds.maxx() : bounds.minx());
-				int oEndRow = base.toRow(output.positiveY() ? bounds.maxy() : bounds.miny());
 
 				// Get the minimum absolute resolution.			
 				double res = g_min(g_abs(base.resolutionX()), g_abs(base.resolutionY()));
@@ -311,7 +309,7 @@ namespace geotools {
 					float inNodata = input.nodata();
 					
 					#pragma omp for nowait
-					for(int t = 0; t < tiles.size(); ++t) {
+					for(unsigned int t = 0; t < tiles.size(); ++t) {
 
 						#pragma omp atomic
 						tileStatus++;

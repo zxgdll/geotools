@@ -36,9 +36,9 @@ Bounds::Bounds(double minx, double miny, double maxx, double maxy) :
 }
 
 Bounds::Bounds(double minx, double miny, double maxx, double maxy, double minz, double maxz) :
-	m_minx(minx), m_miny(miny), 
-	m_maxx(maxx), m_maxy(maxy),
-	m_minz(minz), m_maxz(maxz) {
+	m_minx(minx), m_miny(miny), m_minz(minz), 
+	m_maxx(maxx), m_maxy(maxy), m_maxz(maxz) {
+	
 }
 
 bool Bounds::contains(double x, double y) const {

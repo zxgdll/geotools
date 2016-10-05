@@ -1,5 +1,6 @@
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QFileDialog>
+#include <QMessageBox>
 
 #include "geotools.h"
 #include "lasgrid.hpp"
@@ -37,15 +38,17 @@ void LasgridForm::setupUi(QWidget *form) {
 
 	Ui::LasgridForm::setupUi(form);
 
-	g_loglevel(G_LOG_TRACE);
+	g_loglevel(G_LOG_DEBUG);
 
 	m_form = form;
 	m_last = new QDir(QDir::home());
 
 	m_radius = defaultRadius;
 	m_resolution = defaultResolution;
+	m_angleLimit = defaultAngleLimit;
 	spnResolution->setValue(m_resolution);
 	spnRadius->setValue(m_radius);
+	spnMaxAngle->setValue(m_angleLimit);
 
 	m_type = defaultType;
 	int i = 0;
@@ -89,6 +92,52 @@ void LasgridForm::setupUi(QWidget *form) {
 	connect(lstFiles, SIGNAL(itemSelectionChanged()), this, SLOT(fileListSelectionChanged()));
 	connect(btnCRSConfig, SIGNAL(clicked()), this, SLOT(crsConfigClicked()));
 	connect(cboType, SIGNAL(currentIndexChanged(int)), this, SLOT(typeSelected(int)));
+	connect(spnResolution, SIGNAL(valueChanged(double)), this, SLOT(resolutionChanged(double)));
+	connect(chkSnapToGrid, SIGNAL(toggled(bool)), this, SLOT(snapToGridChanged(bool)));
+	connect(spnRadius, SIGNAL(valueChanged(double)), this, SLOT(radiusChanged(double)));
+	connect(cboAttribute, SIGNAL(currentIndexChanged(int)), this, SLOT(attributeSelected(int)));
+	connect(spnQuantile, SIGNAL(valueChanged(int)), SLOT(quantileChanged(int)));
+	connect(spnQuantiles, SIGNAL(valueChanged(int)), SLOT(quantilesChanged(int)));
+	connect(spnMaxAngle, SIGNAL(valueChanged(int)), SLOT(maxAngleChanged(int)));
+	connect(this, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
+	connect(this, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
+
+}
+
+void LasgridForm::maxAngleChanged(int q) {
+	m_angleLimit = q;
+	checkRun();
+}
+
+void LasgridForm::quantileChanged(int q) {
+	m_quantile = q;
+	checkRun();
+}
+
+void LasgridForm::quantilesChanged(int q) {
+	m_quantiles = q;
+	checkRun();
+}
+
+void LasgridForm::attributeSelected(int index) {
+	std::string att = cboAttribute->itemText(index).toStdString();
+	m_attribute = attributes[att];
+	checkRun();
+}
+
+void LasgridForm::radiusChanged(double radius) {
+	m_radius = radius;
+	checkRun();
+}
+
+void LasgridForm::snapToGridChanged(bool state) {
+	m_snap = state;
+	checkRun();
+}
+
+void LasgridForm::resolutionChanged(double res) {
+	m_resolution = res;
+	checkRun();
 }
 
 void LasgridForm::typeSelected(int index) {
@@ -136,11 +185,11 @@ void LasgridForm::destFileClicked() {
 }
 
 void LasgridForm::setFileStatus(float status) {
-	prgFile->setValue((int) status);
+	emit fileProgress((int) std::round(status * 100));
 }
 
 void LasgridForm::setOverallStatus(float status) {
-	prgOverall->setValue((int) status);
+	emit overallProgress((int) std::round(status * 100));
 }
 
 void LasgridForm::runClicked() {
@@ -157,14 +206,23 @@ void LasgridForm::runClicked() {
 	// TODO: Angle limit
 	// TODO: Compound CRS
 	try {
+		btnRun->setEnabled(false);
+		btnCancel->setEnabled(false);
 		callbackForm = this;
 		LasGrid lg;
 		lg.setFileCallback(fileCallback);
 		lg.setOverallCallback(overallCallback);
 		lg.lasgrid(m_destFile, m_lasFiles, m_classes, m_hsrid, m_attribute, m_type, m_radius, m_resolution, 
 			bounds, m_angleLimit, m_fill, m_snap);
+		checkRun();
+		btnCancel->setEnabled(true);
 	} catch(const std::exception &e) {
-		std::cerr << e.what() << std::endl;
+		QMessageBox err(this);
+		err.setText("Error");
+		err.setInformativeText(QString(e.what()));
+		err.exec();
+		checkRun();
+		btnCancel->setEnabled(true);
 	}
 }
 
@@ -176,7 +234,7 @@ void LasgridForm::cancelClicked() {
 void LasgridForm::updateFileList() {
 	while(lstFiles->count())
 		lstFiles->takeItem(0);
-	for(int i = 0; i < m_lasFiles.size(); ++i)
+	for(unsigned int i = 0; i < m_lasFiles.size(); ++i)
 		lstFiles->addItem(QString(m_lasFiles[i].c_str()));
 	updateFileButtons();
 	checkRun();
