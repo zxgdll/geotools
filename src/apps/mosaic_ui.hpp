@@ -8,7 +8,7 @@
 
 #include <QtWidgets/QWidget>
 #include <QDir>
-#include <QTCore>
+#include <QtCore>
 #include <QMessageBox>
 
 #include "mosaic.hpp"

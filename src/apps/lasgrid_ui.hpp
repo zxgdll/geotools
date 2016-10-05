@@ -7,7 +7,7 @@
 #include <QtWidgets/QWidget>
 #include <QDir>
 #include <QMessageBox>
-#include <QTCore>
+#include <QtCore>
 
 #include "util.hpp"
 #include "lasgrid.hpp"
