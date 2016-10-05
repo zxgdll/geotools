@@ -629,7 +629,7 @@ namespace geotools {
 								g_runerr("Failed to read band raster.");
 							for(int i = 0; i < rows * cols; ++i) {
 								if(id == dg[i])
-									fg[i] = values[b];
+									fg.set(i, values[b]);
 							}
 							if(0 != band->RasterIO(GF_Write, 0, 0, cols, rows, fg.grid(), cols, rows, GDT_Float32, 0, 0))
 								g_runerr("Failed to write band raster.");
