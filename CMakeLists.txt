@@ -88,8 +88,8 @@ add_executable (spectral-app src/apps/spectral.cpp)
 target_link_libraries (spectral-app PUBLIC spectral)
 
 
-add_library(lasgrid SHARED src/lasgrid.cpp src/lasutil.cpp)
-target_link_libraries (lasgrid gdal laszip las boost_system boost_filesystem raster util geotools)
+add_library(lasgrid SHARED src/lasgrid.cpp src/lasutil.cpp src/sortedpointstream.cpp)
+target_link_libraries (lasgrid gdal geos laszip las boost_system boost_filesystem raster util geotools)
 add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp src/apps/crs_selector_ui.cpp)
 target_link_libraries (lasgrid-app PUBLIC lasgrid Qt5::Gui Qt5::Core Qt5::Widgets raster)
 

@@ -27,6 +27,8 @@
 
 #include "lasgrid.hpp"
 #include "lasutil.hpp"
+#include "sortedpointstream.hpp"
+#include "simplegeom.hpp"
 
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
@@ -34,6 +36,7 @@ namespace alg = boost::algorithm;
 using namespace geotools::util;
 using namespace geotools::raster;
 using namespace geotools::las;
+using namespace geotools::geom;
 
 namespace geotools {
 
@@ -282,6 +285,28 @@ namespace geotools {
 
 		};
 
+		class Cell {
+		public:
+			std::unique_ptr<geos::geom::Polygon> circle;
+			double x;
+			double y;
+			double radius;
+			std::list<Point> points;
+
+			Cell(double x, double y, double radius) :
+				x(x), y(y), radius(radius) {
+				circle = std::move(SimpleGeom::createCircle(geos::geom::Coordinate(x, y), radius));
+			}
+
+			bool contains(double x, double y) {
+				return circle->contains(SimpleGeom::createPoint(x, y, 0.0).get());
+			}
+		};
+
+		double compute(const Cell *cell) {
+			return 0.0;
+		}
+
 		void LASGrid::lasgrid(const LASGridConfig &config) {
 
 			checkConfig(config);
@@ -300,28 +325,18 @@ namespace geotools {
 				workBounds.snap(config.resolution);
 				g_debug("Snapped work bounds: " << workBounds.print());
 			}
-			
+
+			// To keep track of completed work.
+			std::unique_ptr<geos::geom::Geometry> geom;
+
+			// To store cells.
+			std::unordered_map<unsigned long, std::unique_ptr<Cell> > cells;
+
 			// Prepare the grid
 			// TODO: Only works with UTM north.
 			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
 				-config.resolution, -9999, config.hsrid);
 			g_debug("Raster size: " << grid.cols() << ", " << grid.rows());
-
-			double radius = g_max(workBounds.width(), workBounds.height()) / 2.0;
-			{
-				double r0 = config.radius;
-				while(r0 < radius)
-					r0 *= 2.0;
-				radius = r0;
-			}
-
-			// Build a circular tree to locate cell regions.
-			Tree tree(workBounds.minx() + workBounds.width() * 0.5, 
-				workBounds.miny() + workBounds.height() * 0.5, 
-				radius, config.radius);
-
-			Bounds lasBounds;
-			liblas::ReaderFactory rf;
 
 			// Iterate over selected files to produce grid
 			float idx = 0.0f;
@@ -330,19 +345,19 @@ namespace geotools {
 				if(m_callbacks)
 					m_callbacks->overallCallback((idx + 0.5f) / files.size());
 
-				std::ifstream in(file.c_str(), std::ios::in|std::ios::binary);
-				liblas::Reader reader = rf.CreateWithStream(in);
-				liblas::Header header = reader.GetHeader();
-
-				lasBounds.collapse();
-				if(!LasUtil::computeLasBounds(header, lasBounds, 2))
-					LasUtil::computeLasBounds(reader, lasBounds, 2); // If the header bounds are bogus.
+				SortedPointStream pts(file, 100, SortedPointStream::xyz);
+				Bounds lasBounds = pts.fileBounds();
+				
+				if(geom.get() == nullptr)
+					geom = std::move(SimpleGeom::createPolygon(lasBounds));
 
 				unsigned int curPt = 0;
-				unsigned int numPts = header.GetPointRecordsCount();
+				unsigned int numPts = pts.pointCount();
 
-				while(reader.ReadNextPoint()) {
-					liblas::Point pt = reader.GetPoint();
+				Point pt;
+				geos::geom::Geometry *g = geom.get();
+
+				while(pts.next(pt, &g)) {
 
 					if(curPt % 1000 == 0) {
 						if(m_callbacks) 
@@ -351,37 +366,37 @@ namespace geotools {
 					++curPt;
 
 					// If the point is outside the scan angle range, skip it.
-					if(g_abs(pt.GetScanAngleRank()) > config.angleLimit)
-						continue;
+					//if(g_abs(pt.GetScanAngleRank()) > config.angleLimit)
+					//	continue;
 
 					// If this point is not in the class list, skip it.
-					unsigned char cls = pt.GetClassification().GetClass();
-					if(config.classes.find(cls) != config.classes.end())
-						continue;
+					//unsigned char cls = pt.GetClassification().GetClass();
+					//if(config.classes.find(cls) != config.classes.end())
+					//	continue;
 
-					// Get the point coordinates.
-					double px = pt.GetX();
-					double py = pt.GetY();
-					double pz;
-					switch(config.attribute) {
-					case ATT_INTENSITY:
-						pz = pt.GetIntensity();
-					default: // ATT_HEIGHT
-						pz = pt.GetZ();
+					int col = (int) (((pt.x - grid.minx()) / grid.width()) * grid.resolutionX());
+					int row = (int) (((pt.y - grid.miny()) / grid.height()) * grid.resolutionY());
+					unsigned long idx = ((unsigned long) col << 32) | ((unsigned long) row);
+
+					if(cells.find(idx) == cells.end()) {
+						std::unique_ptr<Cell> c(new Cell(grid.toX(col) + grid.resolutionX() * 0.5, grid.toY(row) + grid.resolutionY() * 0.5, config.radius));
+						cells[idx] = std::move(c);
 					}
+					
+					if(cells[idx]->contains(pt.x, pt.y))
+						cells[idx]->points.push_back(pt);
 
-					tree.add(px, py, pz);
 				}
 
-				std::list<Tree*> trees;
-				tree.getContained(lasBounds, trees);
-
-				for(const Tree *t : trees) {
-					double sum = 0.0;
-					for(const Point &p : t->points)
-						sum += p.z;
-					grid.set(grid.toCol(t->tx), grid.toRow(t->ty), sum / t->points.size());
+				std::set<unsigned long> rem;
+				for(const auto &it : cells) {
+					if(g->contains(it.second->circle.get())) {
+						grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second.get()));
+						rem.insert(it.first);
+					}
 				}
+				for(const unsigned long &idx : rem)
+					cells.erase(idx);
 
 				if(m_callbacks)
 					m_callbacks->overallCallback((idx + 1.0f) / files.size());
