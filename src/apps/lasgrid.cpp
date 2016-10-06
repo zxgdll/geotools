@@ -7,7 +7,6 @@
 
 using namespace geotools::util;
 using namespace geotools::las;
-using namespace geotools::las::lasgrid_util;
 
 void usage() {
 	std::cerr << "Usage: lasgrid <options> <file [file [file]]>\n"
@@ -43,15 +42,15 @@ int main(int argc, char **argv) {
 
 		std::string dstFile;
 		int crs = 0;
-		int type = TYPE_MEAN;
-		int att = ATT_HEIGHT;
+		std::string type = "mean";
+		std::string att = "height";
 		bool fill = false;
 		double resolution = 2.0;
 		double radius = -1.0;
 		unsigned char angleLimit = 100;
 		Bounds bounds;
-		std::set<int> classes;
-		std::vector<std::string> files;
+		std::set<unsigned char> classes;
+		std::list<std::string> files;
 		bool gui = false;
 
 		g_loglevel(0);
@@ -70,13 +69,13 @@ int main(int argc, char **argv) {
 			} else if(s == "-f") {
 				fill = true;
 			} else if(s == "-t") {
-				type = parseType(argv[++i]);
+				type = argv[++i];
 			} else if(s == "-r") {
 				resolution = atof(argv[++i]);
 			} else if(s == "-c") {
 				Util::intSplit(classes, argv[++i]);
 			} else if(s == "-a") {
-				att = parseAtt(argv[++i]);
+				att = argv[++i];
 			} else if(s == "-d") {
 				radius = atof(argv[++i]);
 			} else if(s == "-v") {
@@ -95,8 +94,21 @@ int main(int argc, char **argv) {
 		if(gui) {
 			return runWithUI(argc, argv);
 		} else {
-			LasGrid lg;
-			lg.lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit, fill);
+			LASGrid lg;
+			LASGridConfig config;
+			config.dstFile = dstFile;
+			config.lasFiles = files;
+			config.classes = classes;
+			config.hsrid = crs;
+			config.parseAtt(att);
+			config.parseType(type);
+			config.radius = radius;
+			config.resolution = resolution;
+			config.bounds = bounds;
+			config.angleLimit = angleLimit;
+			config.fill = fill;
+			config.snap = true; // TODO: Snap
+			lg.lasgrid(config);
 		}
 
 	} catch(const std::exception &ex) {

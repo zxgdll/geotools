@@ -819,6 +819,16 @@ namespace geotools {
 			double maxx() const;
 
 			/**
+			 * The left x.
+			 */
+			double leftx() const;
+
+			/**
+			 * The right x.
+			 */
+			double rightx() const;
+
+			/**
 			 * The minimum bounding y.
 			 */
 			double miny() const;
@@ -827,6 +837,16 @@ namespace geotools {
 			 * The maximum bounding y.
 			 */
 			double maxy() const;
+
+			/**
+			 * The top y.
+			 */
+			double topy() const;
+
+			/**
+			 * The bottom y.
+			 */
+			double bottomy() const;
 
 			/**
 			 * The width of the raster in map units.

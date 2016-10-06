@@ -299,6 +299,14 @@ void Util::intSplit(std::set<int> &values, const char *str) {
 		values.insert(atoi(item.c_str()));
 }
 
+// TODO: Template
+void Util::intSplit(std::set<unsigned char> &values, const char *str) {
+	std::stringstream ss(str);
+	std::string item;
+	while(std::getline(ss, item, ','))
+		values.insert((unsigned char) atoi(item.c_str()));
+}
+
 /**
  * Split a comma-delimited string into a set of unique integers.
  */

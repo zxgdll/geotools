@@ -33,6 +33,7 @@ namespace alg = boost::algorithm;
 
 using namespace geotools::util;
 using namespace geotools::raster;
+using namespace geotools::las;
 
 namespace geotools {
 
@@ -43,62 +44,22 @@ namespace geotools {
 			double defaultResolution = 2.0; 
 			double defaultRadius = std::sqrt(g_sq(defaultResolution / 2.0) * 2.0); 
 			bool defaultSnapToGrid = true;
-			int defaultType = TYPE_MEAN;
-			int defaultAttribute = ATT_HEIGHT;
+			unsigned char defaultType = TYPE_MEAN;
+			unsigned char defaultAttribute = ATT_HEIGHT;
 			unsigned char defaultAngleLimit = 180;
-			std::set<int> defaultClasses = {2}; 
-			std::map<std::string, int> types = {
+			std::set<unsigned char> defaultClasses = {2}; 
+			std::map<std::string, unsigned char> types = {
 				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
 				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
 				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
 			};
-			std::map<std::string, int> attributes = {
+			std::map<std::string, unsigned char> attributes = {
 				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
 			};
 
 		} // config
 		
 		namespace lasgrid_util {
-
-			/**
-			 * Interpret the value of a string attribute name, return the constant int value.
-			 */
-			int parseAtt(char *attStr) {
-				if(!strcmp("intensity", attStr)) {
-					return ATT_INTENSITY;
-				} else if(!strcmp("height", attStr)) {
-					return ATT_HEIGHT;
-				} 
-				return 0;
-			}
-
-			/**
-			 * Interpret the output type and return the constant int value.
-			 */
-			int parseType(char *typeStr) {
-				if(!strcmp("min", typeStr)) {
-					return TYPE_MIN;
-				} else if(!strcmp("max", typeStr)) {
-					return TYPE_MAX;
-				} else if(!strcmp("mean", typeStr)) {
-					return TYPE_MEAN;
-				} else if(!strcmp("density", typeStr)) {
-					return TYPE_DENSITY;
-				} else if(!strcmp("variance", typeStr)) {
-					return TYPE_VARIANCE;
-				} else if(!strcmp("stddev", typeStr)) {
-					return TYPE_STDDEV;
-				} else if(!strcmp("pvariance", typeStr)) {
-					return TYPE_PVARIANCE;
-				} else if(!strcmp("pstddev", typeStr)) {
-					return TYPE_PSTDDEV;
-				} else if(!strcmp("count", typeStr)) {
-					return TYPE_COUNT;
-				} else if(!strcmp("median", typeStr)) {
-					return TYPE_MEDIAN;
-				}
-				return 0;
-			}
 
 			/**
 			 * Comparator for sorting doubles.
@@ -137,339 +98,295 @@ namespace geotools {
 
 		} // util
 
-		void LasGrid::setCallbacks(geotools::util::Callbacks *callbacks) {
-			m_callbacks = callbacks;
+		unsigned char LASGridConfig::parseAtt(const std::string &attStr) {
+			if("intensity" == attStr) {
+				return ATT_INTENSITY;
+			} else if("height" == attStr) {
+				return ATT_HEIGHT;
+			} 
+			return 0;
 		}
 
-		void LasGrid::lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
-					int crs, int attribute, int type, double radius,
-					double resolution, Bounds &bounds, unsigned char angleLimit, bool fill, bool snap) {
-
-			if(resolution <= 0.0)
-				g_argerr("Resolution must be > 0.");
-			if(radius <= 0.0) {
-				radius = std::sqrt(g_sq(resolution / 2.0) * 2.0);
-				g_warn("Radius invalid; using " << radius);
+		unsigned char LASGridConfig::parseType(const std::string &typeStr) {
+			if("min" == typeStr) {
+				return TYPE_MIN;
+			} else if("max" == typeStr) {
+				return TYPE_MAX;
+			} else if("mean" == typeStr) {
+				return TYPE_MEAN;
+			} else if("density" == typeStr) {
+				return TYPE_DENSITY;
+			} else if("variance" == typeStr) {
+				return TYPE_VARIANCE;
+			} else if("stddev" == typeStr) {
+				return TYPE_STDDEV;
+			} else if("pvariance" == typeStr) {
+				return TYPE_PVARIANCE;
+			} else if("pstddev" == typeStr) {
+				return TYPE_PSTDDEV;
+			} else if("count" == typeStr) {
+				return TYPE_COUNT;
+			} else if("median" == typeStr) {
+				return TYPE_MEDIAN;
+			} else if("skew" == typeStr) {
+				return TYPE_SKEW;
+			} else if("rugosity" == typeStr) {
+				return TYPE_RUGOSITY;
+			} else if("kurtosis" == typeStr) {
+				return TYPE_KURTOSIS;
 			}
-			if(files.size() == 0)
+			return 0;
+		}
+
+		void LASGrid::setCallbacks(Callbacks *callbacks) {
+			m_callbacks.reset(callbacks);
+		}
+
+		void LASGrid::checkConfig(const LASGridConfig &config) {
+			if(config.resolution <= 0.0)
+				g_argerr("Resolution must be > 0: " << config.resolution);
+			if(config.radius <= 0.0)
+				g_argerr("Radius invalid: " << config.radius);
+			if(config.lasFiles.size() == 0)
 				g_argerr("At least one input file is required.");
-			if(dstFile.empty()) 
+			if(config.dstFile.empty()) 
 				g_argerr("An output file is required.");
-			if(attribute <= 0)
+			if(config.attribute == 0)
 				g_argerr("An attribute is required.");
-			if(type <= 0)
+			if(config.type == 0)
 				g_argerr("A valid type is required.");
-			if(classes.size() == 0)
+			if(config.classes.size() == 0)
 				g_warn("No classes given. Matching all classes.");
-			if(angleLimit <= 0)
+			if(config.angleLimit <= 0)
 				g_argerr("Angle limit must be greater than zero.");
 
-			g_debug("Radius: " << radius);
-			g_debug("Resolution: " << resolution);
-			g_debug("Files: " << files.size());
-			g_debug("Destination: " << dstFile);
-			g_debug("Attribute: " << attribute);
-			g_debug("Type: " << type);
-			g_debug("Classes: " << classes.size());
-			g_debug("Angle Limit: " << angleLimit);
-			
-			using namespace geotools::las::lasgrid_util;
+			g_debug("Radius: " << config.radius);
+			g_debug("Resolution: " << config.resolution);
+			g_debug("Files: " << config.lasFiles.size());
+			g_debug("Destination: " << config.dstFile);
+			g_debug("Attribute: " << config.attribute);
+			g_debug("Type: " << config.type);
+			g_debug("Classes: " << config.classes.size());
+			g_debug("Angle Limit: " << config.angleLimit);
+		}
 
-			MemRaster<double> grid1;
-			MemRaster<int> counts;
-			MemRaster<std::vector<double>* > qGrid;
-
+		void LASGrid::computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds,
+			std::set<std::string> &selectedFiles, Bounds &workBounds) {
+			g_debug("Work bounds initial: " << workBounds.print());
 			liblas::ReaderFactory rf;
-			std::vector<unsigned int> indices;
-			Bounds bounds1;
-			bounds1.collapse();
-			g_debug("Total bounds initial: " << bounds1.print());
-	
-			for(unsigned int i=0; i<files.size(); ++i) {
-				g_debug("Checking file " << files[i]);
-				std::ifstream in(files[i].c_str(), std::ios::in|std::ios::binary);
+			for(const std::string &file : files) {
+				g_debug("Checking file " << file);
+				std::ifstream in(file.c_str(), std::ios::in|std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
-				Bounds bounds0;
-				if(!LasUtil::computeLasBounds(h, bounds0, 2))
-					LasUtil::computeLasBounds(r, bounds0, 2); // If the header bounds are bogus.
-				g_debug("File bounds " << files[i] << ": " << bounds0.print());
+				Bounds lasBounds;
+				if(!LasUtil::computeLasBounds(h, lasBounds, 2))
+					LasUtil::computeLasBounds(r, lasBounds, 2); // If the header bounds are bogus.
+				g_debug("File bounds " << file << ": " << lasBounds.print());
 				in.close();
-				if(bounds.intersects(bounds0, 2)) {
-					indices.push_back(i);
-					bounds1.extend(bounds0);
-					g_debug("Total bounds: " << bounds1.print());
+				if(bounds.intersects(lasBounds, 2)) {
+					selectedFiles.insert(file);
+					workBounds.extend(lasBounds);
+				}
+			}
+			g_debug("Work bounds final: " << workBounds.print());
+		}
+
+		class Tree {
+		public:
+			double tx;
+			double ty;
+			double radius;
+			double minRadius;
+			std::list<Point> points;
+
+			Tree *tl;
+			Tree *tr;
+			Tree *bl;
+			Tree *br;
+
+			Tree(double x, double y, double radius, double minRadius) :
+				tx(x), ty(y), radius(radius), minRadius(minRadius),
+				tl(nullptr), tr(nullptr), bl(nullptr), br(nullptr) {
+
+			}
+
+			void getContained(Bounds &cbounds, std::list<Tree*> &trees) {
+				if(radius <= minRadius) {
+					if(cbounds.contains(tx - radius, ty - radius)
+						&& cbounds.contains(tx + radius, ty + radius)
+						&& points.size() > 0) {
+						trees.push_back(this);
+					}
+				} else {
+					if(tl != nullptr) tl->getContained(cbounds, trees);
+					if(bl != nullptr) bl->getContained(cbounds, trees);
+					if(tr != nullptr) tr->getContained(cbounds, trees);
+					if(br != nullptr) br->getContained(cbounds, trees);
 				}
 			}
 
-			bounds.collapse();
-			bounds.extend(bounds1);
-			
-			if(snap)
-				bounds.snap(resolution);
-			
-			g_debug(bounds.print());
-
-			// Prepare grid
-			int cols = bounds.cols(resolution);
-			int rows = bounds.rows(resolution);
-
-			g_debug("Raster size: " << cols << ", " << rows << "; Cell radius: " << radius);
-			
-			// For types other than count, we need a double grid to manage sums.
-			if(type != TYPE_COUNT) {
-				grid1.init(cols, rows);
-				grid1.fill(-9999.0);
-				g_debug("Created grid1: " << cols << ", " << rows);
+			bool contains(double x, double y) {
+				return std::sqrt(g_sq(x - tx) + g_sq(y - ty)) <= radius;
 			}
 
-			// For the median grid.
-			switch(type) {
-			case TYPE_VARIANCE:
-			case TYPE_STDDEV:
-			case TYPE_PVARIANCE:
-			case TYPE_PSTDDEV:
-			case TYPE_QUANTILE:
-			case TYPE_MEDIAN:
-				qGrid.init(cols, rows);
-				qGrid.setDeallocator(&vector_dealloc);
-				for(size_t i = 0; i < qGrid.size(); ++i)
-					qGrid.set(i, new std::vector<double>());
-				g_debug("Created qGrid: " << cols << ", " << rows);
-				break;
+			void getContains(double x, double y, std::list<Tree*> &trees) {
+				if(contains(x, y)) {
+					if(radius <= minRadius) {
+						trees.push_back(this);
+					} else {
+						if(tl != nullptr) tl->getContains(x, y, trees);
+						if(tr != nullptr) tr->getContains(x, y, trees);
+						if(bl != nullptr) bl->getContains(x, y, trees);
+						if(br != nullptr) br->getContains(x, y, trees);
+					}
+				}
 			}
 
-			// Create a grid for maintaining counts.
-			g_debug("Creating counts grid: " << cols << ", " << rows);
-			counts.init(cols, rows);
-			counts.fill(0);
+			void add(double x, double y, double z) {
+				if(contains(x, y)) {
+					if(radius <= minRadius) {
+						g_debug(" -- add point: " << x << "," << y << "," << z);
+						points.push_back(Point(x, y, z));
+					} else {
+						if(tl == nullptr) {
+							tl = new Tree(std::cos(G_PI * 0.375) * radius / 2.0, 
+								std::sin(G_PI * 0.375) * radius / 2.0, radius / 2.0, minRadius);
+						}
+						tl->add(x, y, z);
+						if(bl == nullptr) {
+							bl = new Tree(std::cos(G_PI * 0.625) * radius / 2.0, 
+								std::sin(G_PI * 0.625) * radius / 2.0, radius / 2.0, minRadius);
+						}
+						bl->add(x, y, z);
+						if(tr == nullptr) {
+							tr = new Tree(std::cos(G_PI * 0.125) * radius / 2.0, 
+								std::sin(G_PI * 0.125) * radius / 2.0, radius / 2.0, minRadius);
+						}
+						tr->add(x, y, z);
+						if(br == nullptr) {
+							br = new Tree(std::cos(G_PI * 0.875) * radius / 2.0, 
+								std::sin(G_PI * 0.875) * radius / 2.0, radius / 2.0, minRadius);
+						}
+						br->add(x, y, z);
+					}
+				}
+			}
 
-			g_debug("Using " << indices.size() << " of " << files.size() << " files.");
+			~Tree() {
+				if(tl) delete tl;
+				if(tr) delete tr;
+				if(bl) delete bl;
+				if(br) delete br;
+			}
 
-			// Process files
-			for(unsigned int j = 0; j < indices.size(); ++j) {
+		};
 
-				unsigned int i = indices[j];
-				std::ifstream in(files[i].c_str());
+		void LASGrid::lasgrid(const LASGridConfig &config) {
+
+			checkConfig(config);
+			
+			// Stores the selected files.
+			std::set<std::string> files;
+			// Stores the bounds of the work area.
+			Bounds workBounds;
+			workBounds.collapse();
+
+			// Compute the work bounds and indices.
+			computeWorkBounds(config.lasFiles, config.bounds, files, workBounds);
+
+			// Snap the bounds if necessary.
+			if(config.snap) {
+				workBounds.snap(config.resolution);
+				g_debug("Snapped work bounds: " << workBounds.print());
+			}
+			
+			// Prepare the grid
+			// TODO: Only works with UTM north.
+			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
+				-config.resolution, -9999, config.hsrid);
+			g_debug("Raster size: " << grid.cols() << ", " << grid.rows());
+
+			double radius = g_max(workBounds.width(), workBounds.height()) / 2.0;
+			{
+				double r0 = config.radius;
+				while(r0 < radius)
+					r0 *= 2.0;
+				radius = r0;
+			}
+
+			// Build a circular tree to locate cell regions.
+			Tree tree(workBounds.minx() + workBounds.width() * 0.5, 
+				workBounds.miny() + workBounds.height() * 0.5, 
+				radius, config.radius);
+
+			Bounds lasBounds;
+			liblas::ReaderFactory rf;
+
+			// Iterate over selected files to produce grid
+			float idx = 0.0f;
+			for(const std::string &file : files) {
+
+				if(m_callbacks)
+					m_callbacks->overallCallback((idx + 0.5f) / files.size());
+
+				std::ifstream in(file.c_str(), std::ios::in|std::ios::binary);
 				liblas::Reader reader = rf.CreateWithStream(in);
 				liblas::Header header = reader.GetHeader();
 
-				if(m_callbacks)
-					m_callbacks->overallCallback(((j + 0.5f) / indices.size()) * 0.75f);
+				lasBounds.collapse();
+				if(!LasUtil::computeLasBounds(header, lasBounds, 2))
+					LasUtil::computeLasBounds(reader, lasBounds, 2); // If the header bounds are bogus.
 
-				size_t curPt = 0;
-				size_t numPts = header.GetPointRecordsCount();
+				unsigned int curPt = 0;
+				unsigned int numPts = header.GetPointRecordsCount();
 
 				while(reader.ReadNextPoint()) {
 					liblas::Point pt = reader.GetPoint();
 
 					if(curPt % 1000 == 0) {
 						if(m_callbacks) 
-							m_callbacks->fileCallback((curPt + 1.0) / numPts);
+							m_callbacks->fileCallback((curPt + 1.0f) / numPts);
 					}
 					++curPt;
 
-					if(g_abs(pt.GetScanAngleRank()) > angleLimit)
+					// If the point is outside the scan angle range, skip it.
+					if(g_abs(pt.GetScanAngleRank()) > config.angleLimit)
 						continue;
 
+					// If this point is not in the class list, skip it.
+					unsigned char cls = pt.GetClassification().GetClass();
+					if(config.classes.find(cls) != config.classes.end())
+						continue;
+
+					// Get the point coordinates.
 					double px = pt.GetX();
 					double py = pt.GetY();
-
-					// Check if in bounds, but only if clipping is desired.
-					if(!bounds.contains(px, py)) 
-						continue;
-					// If this point is not in the class list, skip it.
-					if(!Util::inList(classes, pt.GetClassification().GetClass()))
-						continue;
-
-					// Get either the height or intensity value.
 					double pz;
-					if(attribute == ATT_INTENSITY) {
+					switch(config.attribute) {
+					case ATT_INTENSITY:
 						pz = pt.GetIntensity();
-					} else { // ATT_HEIGHT
+					default: // ATT_HEIGHT
 						pz = pt.GetZ();
 					}
 
-					// Convert x and y, to col and row.
-					int c = (int) ((px - bounds.minx()) / resolution);
-					int r = (int) ((py - bounds.miny()) / resolution);
-
-					// If the radius is > 0, compute the size of the window.
-					int offset = (int) (radius * 2) / resolution;
-					for(int cc = g_max(0, c - offset); cc < g_min(cols, c + offset + 1); ++cc) {
-						for(int rr = g_max(0, r - offset); rr < g_min(rows, r + offset + 1); ++rr) {
-							// If the coordinate is out of the cell's radius, continue.
-							if(!inRadius(px, py, cc, rr, radius, resolution, bounds)) 
-								continue;
-							// Compute the grid index. The rows are assigned from the bottom.
-							int idx = (rows - rr - 1) * cols + cc;
-							//g_debug("idx: " << idx);
-							counts.set(idx, counts.get(idx) + 1);
-
-							switch(type){
-							case TYPE_MIN:
-								if(counts[idx] == 1 || pz < grid1[idx])
-									grid1.set(idx, pz);
-								break;
-							case TYPE_MAX:
-								if(counts[idx] == 1 || pz > grid1[idx])
-									grid1.set(idx, pz);
-								break;
-							case TYPE_MEAN:
-								if(counts[idx] == 1) {
-									grid1.set(idx, pz);
-								} else {
-									grid1.set(idx, grid1.get(idx) + pz);
-								}
-								break;
-							case TYPE_VARIANCE:
-							case TYPE_STDDEV:
-							case TYPE_PVARIANCE:
-							case TYPE_PSTDDEV:
-							case TYPE_QUANTILE:
-							case TYPE_MEDIAN:
-								qGrid[idx]->push_back(pz);
-								break;
-							}
-						}
-					}
+					tree.add(px, py, pz);
 				}
 
-				if(m_callbacks) {
-					m_callbacks->fileCallback(1.0f);
-					m_callbacks->overallCallback(((j + 1.0f) / indices.size()) * 0.75f);
+				std::list<Tree*> trees;
+				tree.getContained(lasBounds, trees);
+
+				for(const Tree *t : trees) {
+					double sum = 0.0;
+					for(const Point &p : t->points)
+						sum += p.z;
+					grid.set(grid.toCol(t->tx), grid.toRow(t->ty), sum / t->points.size());
 				}
 
-			}
+				if(m_callbacks)
+					m_callbacks->overallCallback((idx + 1.0f) / files.size());
 
-			if(m_callbacks)
-				m_callbacks->overallCallback(0.75f);
-
-			// Calculate cells or set nodata.
-			// Welford's method for variance.
-			switch(type) {
-			case TYPE_MEAN:
-				for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-					if(counts[i] > 0)
-						grid1.set(i, grid1.get(i) / counts.get(i));
-				}
-				break;
-			case TYPE_PVARIANCE:
-				for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-					if(counts[i] > 1) {
-						double m = 0;
-						double s = 0;
-						int k = 1;
-						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = qGrid[i]->at(j);
-							double oldm = m;
-							m = m + (v - m) / k;
-							s = s + (v - m) * (v - oldm);
-							++k;
-						}
-						grid1.set(i, s / qGrid[i]->size());
-					} else {
-						grid1.set(i, 0);
-					}
-				}
-				break;
-			case TYPE_VARIANCE:
-				for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-					if(counts[i] > 1) {
-						double m = 0;
-						double s = 0;
-						int k = 1;
-						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = qGrid[i]->at(j);
-							double oldm = m;
-							m = m + (v - m) / k;
-							s = s + (v - m) * (v - oldm);
-							++k;
-						}
-						grid1.set(i, s / (qGrid[i]->size() - 1));
-					} else {
-						grid1.set(i, 0);
-					}
-				}
-				break;
-			case TYPE_PSTDDEV:
-				for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-					if(counts[i] > 1) {
-						double m = 0;
-						double s = 0;
-						int k = 1;
-						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = qGrid[i]->at(j);
-							double oldm = m;
-							m = m + (v - m) / k;
-							s = s + (v - m) * (v - oldm);
-							++k;
-						}
-						grid1.set(i, std::sqrt(s / qGrid[i]->size()));
-					} else {
-						grid1.set(i, 0);
-					}
-				}
-				break;
-			case TYPE_STDDEV:
-				for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-					if(counts[i] > 1) {
-						double m = 0;
-						double s = 0;
-						int k = 1;
-						for(unsigned int j = 0; j < qGrid[i]->size(); ++j) {
-							double v = qGrid[i]->at(j);
-							double oldm = m;
-							m = m + (v - m) / k;
-							s = s + (v - m) * (v - oldm);
-							++k;
-						}
-						grid1.set(i, std::sqrt(s / (qGrid[i]->size() - 1)));
-					} else {
-						grid1.set(i, 0);
-					}
-				}
-				break;
-			case TYPE_DENSITY:
-				{
-					double r2 = g_sq(resolution);
-					for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-						if(counts[i] > 0) {
-							grid1.set(i, (double) counts[i] / r2);
-						} else {
-							grid1.set(i, 0.0);
-						}
-					}
-				}
-				break;
-			case TYPE_MEDIAN:
-				for(size_t i = 0; i < (size_t) cols * rows; ++i) {
-					if(counts[i] > 0) {
-						std::sort(qGrid[i]->begin(), qGrid[i]->end());
-						int size = qGrid[i]->size();
-						if(size % 2 == 0) {
-							int idx = size / 2;
-							grid1.set(i, (qGrid[i]->at(idx - 1) + qGrid[i]->at(idx)) / 2.0);
-						} else {
-							grid1.set(i, (qGrid[i]->at(size / 2.0)));
-						}
-					}
-				}
-				break;
-			}
-
-			if(m_callbacks)
-				m_callbacks->overallCallback(0.85f);
-
-			if(type == TYPE_COUNT) {
-				// TODO: Determine resolution sign properly.
-				Raster<int> rast(dstFile, 1, bounds, resolution, -resolution, -1, crs);
-				rast.writeBlock(counts);
-			} else {
-				Raster<double> rast(dstFile, 1, bounds, resolution, -resolution, -9999.0, crs);
-				rast.writeBlock(grid1);
-				//if(fill)
-				//	rast.voidFillIDW(resolution);
+				idx += 1.0f;
 			}
 
 			if(m_callbacks)

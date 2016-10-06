@@ -1102,6 +1102,26 @@ double Raster<T>::maxy() const {
 }
 
 template <class T>
+double Raster<T>::leftx() const {
+	return resolutionX() > 0 ? minx() : maxx();
+}
+
+template <class T>
+double Raster<T>::rightx() const {
+	return resolutionX() < 0 ? minx() : maxx();
+}
+
+template <class T>
+double Raster<T>::topy() const {
+	return resolutionY() > 0 ? miny() : maxy();
+}
+
+template <class T>
+double Raster<T>::bottomy() const {
+	return resolutionY() < 0 ? miny() : maxy();
+}
+
+template <class T>
 double Raster<T>::width() const {
 	return maxx() - minx();
 }

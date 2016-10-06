@@ -131,6 +131,7 @@ namespace geotools {
 			 */
 			static void intSplit(std::vector<int> &values, const char *str);
 
+			static void intSplit(std::set<unsigned char> &values, const char *str);
 			/**
 			 * Return true if the integer is in the set, or the set is empty.
 			 */

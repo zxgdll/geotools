@@ -202,8 +202,8 @@ void LasgridForm::cancelClicked() {
 void LasgridForm::updateFileList() {
 	while(lstFiles->count())
 		lstFiles->takeItem(0);
-	for(unsigned int i = 0; i < m_lasFiles.size(); ++i)
-		lstFiles->addItem(QString(m_lasFiles[i].c_str()));
+	for(const std::string &file : m_lasFiles)
+		lstFiles->addItem(QString(file.c_str()));
 	updateFileButtons();
 	checkRun();
 }
@@ -215,10 +215,12 @@ void LasgridForm::updateFileButtons() {
 
 void LasgridForm::removeFilesClicked() {
 	std::vector<std::string> lst;
-	for(int i = 0; i < lstFiles->count(); ++i) {
+	unsigned int i = 0;
+	for(const std::string &file : m_lasFiles) {
 		QListWidgetItem *item = lstFiles->item(i);
 		if(!item->isSelected())
-			lst.push_back(m_lasFiles[i]);
+			lst.push_back(file);
+		++i;
 	}
 	m_lasFiles.clear();
 	m_lasFiles.assign(lst.begin(), lst.end());

@@ -5,6 +5,7 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <memory>
 
 #include "geotools.h"
 #include "raster.hpp"
@@ -21,6 +22,9 @@
 #define TYPE_COUNT 9
 #define TYPE_QUANTILE 10
 #define TYPE_MEDIAN 11
+#define TYPE_SKEW 12
+#define TYPE_KURTOSIS 13
+#define TYPE_RUGOSITY 14
 
 #define LAS_EXT ".las"
 
@@ -36,36 +40,73 @@ namespace geotools {
 			extern double defaultResolution;
 			extern double defaultRadius;
 			extern bool defaultSnapToGrid;
-			extern int defaultType;
+			extern unsigned char defaultType;
 			extern unsigned char defaultAngleLimit;
-			extern std::set<int> defaultClasses;
-			extern std::map<std::string, int> types;
-			extern std::map<std::string, int> attributes;
-			extern int defaultAttribute;
+			extern unsigned char defaultAttribute;
+			extern std::set<unsigned char> defaultClasses;
+			extern std::map<std::string, unsigned char> types;
+			extern std::map<std::string, unsigned char> attributes;
 
 		}
 
-		namespace lasgrid_util {
+		/**
+		 * Contains configuration values for running the lasgrid process.
+		 */
+		class LASGridConfig {
+		public:
+			std::string dstFile;
+			std::list<std::string> lasFiles;
+			std::set<unsigned char> classes;
+			geotools::util::Bounds bounds;
+			double radius;
+			double resolution;
+			unsigned short hsrid;
+			unsigned short vsrid;
+			unsigned char attribute;
+			unsigned char type;
+			unsigned char angleLimit;
+			bool fill;
+			bool snap;
 
-			int parseAtt(char *attStr);
+			/**
+			 * Interpret the attribute and  return the constant int value.
+			 */
+			unsigned char parseAtt(const std::string &attStr);
 
 			/**
 			 * Interpret the output type and return the constant int value.
 			 */
-			int parseType(char *typeStr);
+			unsigned char parseType(const std::string &typeStr);
+		};
 
-		}
-
-		class LasGrid {
+		class LASGrid {
 		private:
-			geotools::util::Callbacks *m_callbacks;
-			
+			std::shared_ptr<geotools::util::Callbacks> m_callbacks;
+			std::shared_ptr<geotools::las::LASGridConfig> m_config;
+
+			/**
+			 * Check the configuration for validity. 
+			 * Throw an exception if it's invalid or absent.
+			 */
+			void checkConfig(const LASGridConfig &config);
+
+			/**
+			 * Compute the working bounds and the selection of files
+			 * to include in the working set.
+			 */
+			void computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds, 
+				std::set<std::string> &selectedFiles, Bounds &workBounds);
+
 		public:
+			/**
+			 * Add a callbacks object to receive progress notifications.
+			 */
 			void setCallbacks(geotools::util::Callbacks *callbacks);
 
-			void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
-				int crs, int attribute, int type, double radius,
-				double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill, bool snap = true);
+			/**
+			 * Execute the gridding process.
+			 */
+			void lasgrid(const LASGridConfig &config);
 		};
 
 	} // las

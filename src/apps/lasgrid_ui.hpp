@@ -47,8 +47,8 @@ namespace geotools {
 		private:
 			QWidget *m_form;
 			std::string m_destFile;
-			std::vector<std::string> m_lasFiles;
-			std::set<int> m_classes;
+			std::list<std::string> m_lasFiles;
+			std::set<unsigned char> m_classes;
 			int m_vsrid;
 			int m_hsrid;
 			int m_attribute;
@@ -101,12 +101,25 @@ namespace geotools {
 			LasgridForm *m_parent;
 
 			void run() {
-				geotools::las::LasGrid l;
+				geotools::las::LASGrid l;
 				l.setCallbacks(m_parent->m_callbacks);
 				try {
-					l.lasgrid(m_parent->m_destFile, m_parent->m_lasFiles, m_parent->m_classes, m_parent->m_hsrid, 
-						m_parent->m_attribute, m_parent->m_type, m_parent->m_radius, m_parent->m_resolution, 
-						m_bounds, m_parent->m_angleLimit, m_parent->m_fill, m_parent->m_snap);
+
+					geotools::las::LASGridConfig config;
+					config.dstFile = m_parent->m_destFile;
+					config.lasFiles = m_parent->m_lasFiles;
+					config.classes = m_parent->m_classes;
+					config.hsrid = m_parent->m_hsrid;
+					config.attribute = m_parent->m_attribute;
+					config.type = m_parent->m_type;
+					config.radius = m_parent->m_radius;
+					config.resolution = m_parent->m_resolution;
+					config.bounds = m_bounds;
+					config.angleLimit = m_parent->m_angleLimit;
+					config.fill = m_parent->m_fill;
+					config.snap = m_parent->m_snap;
+
+					l.lasgrid(config);
 				} catch(const std::exception &e) {
 					QMessageBox err((QWidget *) m_parent);
 					err.setText("Error");
