@@ -77,6 +77,14 @@ namespace geotools {
 			 * Interpret the output type and return the constant int value.
 			 */
 			unsigned char parseType(const std::string &typeStr);
+
+			/**
+			 * Returns true if the classes set contains the class.
+			 */
+			bool hasClass(unsigned char cls) const {
+				return classes.find(cls) != classes.end();
+			}
+
 		};
 
 		class LASGrid {

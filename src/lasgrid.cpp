@@ -23,6 +23,8 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 
+#include "geos/index/quadtree/Quadtree.h"
+
 #include <liblas/liblas.hpp>
 
 #include "lasgrid.hpp"
@@ -195,95 +197,6 @@ namespace geotools {
 			g_debug("Work bounds final: " << workBounds.print());
 		}
 
-		class Tree {
-		public:
-			double tx;
-			double ty;
-			double radius;
-			double minRadius;
-			std::list<Point> points;
-
-			Tree *tl;
-			Tree *tr;
-			Tree *bl;
-			Tree *br;
-
-			Tree(double x, double y, double radius, double minRadius) :
-				tx(x), ty(y), radius(radius), minRadius(minRadius),
-				tl(nullptr), tr(nullptr), bl(nullptr), br(nullptr) {
-
-			}
-
-			void getContained(Bounds &cbounds, std::list<Tree*> &trees) {
-				if(radius <= minRadius) {
-					if(cbounds.contains(tx - radius, ty - radius)
-						&& cbounds.contains(tx + radius, ty + radius)
-						&& points.size() > 0) {
-						trees.push_back(this);
-					}
-				} else {
-					if(tl != nullptr) tl->getContained(cbounds, trees);
-					if(bl != nullptr) bl->getContained(cbounds, trees);
-					if(tr != nullptr) tr->getContained(cbounds, trees);
-					if(br != nullptr) br->getContained(cbounds, trees);
-				}
-			}
-
-			bool contains(double x, double y) {
-				return std::sqrt(g_sq(x - tx) + g_sq(y - ty)) <= radius;
-			}
-
-			void getContains(double x, double y, std::list<Tree*> &trees) {
-				if(contains(x, y)) {
-					if(radius <= minRadius) {
-						trees.push_back(this);
-					} else {
-						if(tl != nullptr) tl->getContains(x, y, trees);
-						if(tr != nullptr) tr->getContains(x, y, trees);
-						if(bl != nullptr) bl->getContains(x, y, trees);
-						if(br != nullptr) br->getContains(x, y, trees);
-					}
-				}
-			}
-
-			void add(double x, double y, double z) {
-				if(contains(x, y)) {
-					if(radius <= minRadius) {
-						g_debug(" -- add point: " << x << "," << y << "," << z);
-						points.push_back(Point(x, y, z));
-					} else {
-						if(tl == nullptr) {
-							tl = new Tree(std::cos(G_PI * 0.375) * radius / 2.0, 
-								std::sin(G_PI * 0.375) * radius / 2.0, radius / 2.0, minRadius);
-						}
-						tl->add(x, y, z);
-						if(bl == nullptr) {
-							bl = new Tree(std::cos(G_PI * 0.625) * radius / 2.0, 
-								std::sin(G_PI * 0.625) * radius / 2.0, radius / 2.0, minRadius);
-						}
-						bl->add(x, y, z);
-						if(tr == nullptr) {
-							tr = new Tree(std::cos(G_PI * 0.125) * radius / 2.0, 
-								std::sin(G_PI * 0.125) * radius / 2.0, radius / 2.0, minRadius);
-						}
-						tr->add(x, y, z);
-						if(br == nullptr) {
-							br = new Tree(std::cos(G_PI * 0.875) * radius / 2.0, 
-								std::sin(G_PI * 0.875) * radius / 2.0, radius / 2.0, minRadius);
-						}
-						br->add(x, y, z);
-					}
-				}
-			}
-
-			~Tree() {
-				if(tl) delete tl;
-				if(tr) delete tr;
-				if(bl) delete bl;
-				if(br) delete br;
-			}
-
-		};
 
 		class Cell {
 		public:
@@ -291,7 +204,7 @@ namespace geotools {
 			double x;
 			double y;
 			double radius;
-			std::list<Point> points;
+			std::list<LASPoint> points;
 
 			Cell(double x, double y, double radius) :
 				x(x), y(y), radius(radius) {
@@ -304,7 +217,11 @@ namespace geotools {
 		};
 
 		double compute(const Cell *cell) {
-			return 0.0;
+			double sum = 0.0;
+			int count = cell->points.size();
+			for(const LASPoint &pt : cell->points)
+				sum += pt.z;
+			return count > 0 ? sum / cell->points.size() : 1000.0;
 		}
 
 		void LASGrid::lasgrid(const LASGridConfig &config) {
@@ -323,86 +240,108 @@ namespace geotools {
 			// Snap the bounds if necessary.
 			if(config.snap) {
 				workBounds.snap(config.resolution);
-				g_debug("Snapped work bounds: " << workBounds.print());
+				g_debug(" -- lasgrid - snapped work bounds: " << workBounds.print());
 			}
 
 			// To keep track of completed work.
-			std::unique_ptr<geos::geom::Geometry> geom;
+			geos::geom::Geometry *geom = nullptr;
 
 			// To store cells.
-			std::unordered_map<unsigned long, std::unique_ptr<Cell> > cells;
+			std::unordered_map<unsigned long, Cell*> cells;
 
 			// Prepare the grid
 			// TODO: Only works with UTM north.
 			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
 				-config.resolution, -9999, config.hsrid);
-			g_debug("Raster size: " << grid.cols() << ", " << grid.rows());
+			g_debug(" -- lasgrid - raster size: " << grid.cols() << ", " << grid.rows());
+
+			geos::index::quadtree::Quadtree tree;
 
 			// Iterate over selected files to produce grid
-			float idx = 0.0f;
+			float curFile = 0.0f;
 			for(const std::string &file : files) {
 
+				g_debug(" -- lasgrid - processing " << file);
+
 				if(m_callbacks)
-					m_callbacks->overallCallback((idx + 0.5f) / files.size());
+					m_callbacks->overallCallback((curFile + 0.5f) / files.size());
 
-				SortedPointStream pts(file, 100, SortedPointStream::xyz);
-				Bounds lasBounds = pts.fileBounds();
+				SortedPointStream pts(file, 100);
+				pts.init();
 				
-				if(geom.get() == nullptr)
-					geom = std::move(SimpleGeom::createPolygon(lasBounds));
-
+				LASPoint pt;
 				unsigned int curPt = 0;
-				unsigned int numPts = pts.pointCount();
+				while(pts.next(pt, &geom)) {
 
-				Point pt;
-				geos::geom::Geometry *g = geom.get();
-
-				while(pts.next(pt, &g)) {
-
-					if(curPt % 1000 == 0) {
+					if(curPt++ % 1000 == 0) {
 						if(m_callbacks) 
-							m_callbacks->fileCallback((curPt + 1.0f) / numPts);
+							m_callbacks->fileCallback((curPt + 1.0f) / pts.pointCount());
 					}
-					++curPt;
 
 					// If the point is outside the scan angle range, skip it.
-					//if(g_abs(pt.GetScanAngleRank()) > config.angleLimit)
-					//	continue;
+					if(g_abs(pt.angle) > config.angleLimit || !config.hasClass(pt.cls))
+						continue;
 
-					// If this point is not in the class list, skip it.
-					//unsigned char cls = pt.GetClassification().GetClass();
-					//if(config.classes.find(cls) != config.classes.end())
-					//	continue;
-
-					int col = (int) (((pt.x - grid.minx()) / grid.width()) * grid.resolutionX());
-					int row = (int) (((pt.y - grid.miny()) / grid.height()) * grid.resolutionY());
+					int col = grid.toCol(pt.x); 
+					int row = grid.toRow(pt.y); 
 					unsigned long idx = ((unsigned long) col << 32) | ((unsigned long) row);
 
+					//g_debug(" -- lasgrid - idx " << idx);
 					if(cells.find(idx) == cells.end()) {
-						std::unique_ptr<Cell> c(new Cell(grid.toX(col) + grid.resolutionX() * 0.5, grid.toY(row) + grid.resolutionY() * 0.5, config.radius));
-						cells[idx] = std::move(c);
+						//g_debug(" -- lasgrid - new cell at " << col << "," << row);
+						Cell *c = new Cell(
+							grid.toX(col) + grid.resolutionX() * 0.5, 
+							grid.toY(row) + grid.resolutionY() * 0.5, 
+							config.radius
+						);
+						tree.insert(c->circle->getEnvelopeInternal(), c);
+						cells[idx] = c;
 					}
 					
-					if(cells[idx]->contains(pt.x, pt.y))
-						cells[idx]->points.push_back(pt);
+					// find cells in tree that contain the point
+					// add point to cells
+					std::vector<void*> res;
+					geos::geom::Envelope e(pt.x, pt.y, pt.x, pt.y);
+					tree.query(&e, res);
 
-				}
+					g_debug(" -- lasgrid - found " << res.size() << " cells for point " << pt.x << "," << pt.y);
+					for(const void *c : res)
+						((Cell *) c)->points.push_back(pt);
 
-				std::set<unsigned long> rem;
-				for(const auto &it : cells) {
-					if(g->contains(it.second->circle.get())) {
-						grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second.get()));
-						rem.insert(it.first);
+					if(curPt % 1000 == 0 || curPt == pts.pointCount()) {
+						g_debug(" -- lasgrid - finalizing cells");
+						std::set<unsigned long> rem;
+						for(const auto &it : cells) {
+							if(geom->contains(it.second->circle.get())) {
+								grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second));
+								rem.insert(it.first);
+								tree.remove(it.second->circle->getEnvelopeInternal(), it.second);
+							}
+						}
+						g_debug(" -- lasgrid - removing " << rem.size() << " items");
+						for(const unsigned long &idx : rem)
+							cells.erase(idx);
 					}
+
 				}
-				for(const unsigned long &idx : rem)
-					cells.erase(idx);
 
 				if(m_callbacks)
-					m_callbacks->overallCallback((idx + 1.0f) / files.size());
-
-				idx += 1.0f;
+					m_callbacks->overallCallback((curFile + 1.0f) / files.size());
+				curFile += 1.0f;
 			}
+
+			g_debug(" -- lasgrid - finalizing cells");
+			std::set<unsigned long> rem;
+			for(const auto &it : cells) {
+				if(geom->contains(it.second->circle.get())) {
+					grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second));
+					rem.insert(it.first);
+					tree.remove(it.second->circle->getEnvelopeInternal(), it.second);
+				}
+			}
+			g_debug(" -- lasgrid - removing " << rem.size() << " items");
+			for(const unsigned long &idx : rem)
+				cells.erase(idx);
 
 			if(m_callbacks)
 				m_callbacks->overallCallback(1.0f);

@@ -12,55 +12,57 @@
 
 namespace util = geotools::util;
 
+using namespace geos::geom;
+using namespace geos::util;
+
 namespace geotools {
 	namespace geom {
 
-		const geos::geom::GeometryFactory gf;
-		geos::util::GeometricShapeFactory gsf(&gf);
-		
-		class SimpleGeom {
-		private:
+		static const GeometryFactory *gf = GeometryFactory::getDefaultInstance();
+		static GeometricShapeFactory *gsf = new GeometricShapeFactory(gf);
 
+		class SimpleGeom {
 		public:
 
 			static std::unique_ptr<geos::geom::Point> createPoint(double x, double y, double z) {
-				const geos::geom::Coordinate c(x, y, z);
-				geos::geom::Point *p = gf.createPoint(c);
+				const Coordinate c(x, y, z);
+				geos::geom::Point *p = gf->createPoint(c);
 				std::unique_ptr<geos::geom::Point> pt(p);
 				return std::move(pt);
 			}
 
-			static std::unique_ptr<geos::geom::Polygon> createCircle(const geos::geom::Coordinate &coord, double radius) {
-				gsf.setBase(coord);
-				gsf.setSize(radius * 2.0);
-				std::unique_ptr<geos::geom::Polygon> circle(gsf.createCircle());
+			static std::unique_ptr<Polygon> createCircle(const Coordinate &coord, double radius) {
+				gsf->setBase(coord);
+				gsf->setSize(radius * 2.0);
+				std::unique_ptr<Polygon> circle(gsf->createCircle());
 				return std::move(circle);
 			}
 
-			static std::unique_ptr<geos::geom::Polygon> createPolygon(const std::list<geos::geom::Coordinate> &coords, 
-					const std::list<std::list<geos::geom::Coordinate> > &holes) {
-				geos::geom::CoordinateSequence *cs = gf.getCoordinateSequenceFactory()->create(nullptr, 3);
-				for(const geos::geom::Coordinate &coord : coords)
+			static std::unique_ptr<Polygon> createPolygon(const std::list<Coordinate> &coords, 
+					const std::list<std::list<Coordinate> > &holes) {
+				CoordinateSequence *cs = gf->getCoordinateSequenceFactory()->create(nullptr, 3);
+				for(const Coordinate &coord : coords)
 					cs->add(coord, false);
+				cs->add(coords.front(), false);
 				// TODO: Holes
-				geos::geom::LinearRing ring(cs, &gf);
-				geos::geom::Polygon *ply = gf.createPolygon(&ring, nullptr);
-				std::unique_ptr<geos::geom::Polygon> poly(ply);
+				LinearRing *ring = new LinearRing(cs, gf);
+				Polygon *ply = gf->createPolygon(ring, nullptr);
+				std::unique_ptr<Polygon> poly(ply);
 				return std::move(poly);
 			}
 
-			static std::unique_ptr<geos::geom::Polygon> createPolygon(const std::list<geos::geom::Coordinate> &coords) {
-				std::list<std::list<geos::geom::Coordinate> > holes;
+			static std::unique_ptr<Polygon> createPolygon(const std::list<Coordinate> &coords) {
+				std::list<std::list<Coordinate> > holes;
 				return std::move(createPolygon(coords, holes));
 			}
 
-			static std::unique_ptr<geos::geom::Polygon> createPolygon(const geotools::util::Bounds &bounds) {
-				std::list<geos::geom::Coordinate> coords {
-					geos::geom::Coordinate(bounds.minx(), bounds.miny()),
-					geos::geom::Coordinate(bounds.maxx(), bounds.miny()),
-					geos::geom::Coordinate(bounds.maxx(), bounds.maxy()),
-					geos::geom::Coordinate(bounds.minx(), bounds.maxy()),
-					geos::geom::Coordinate(bounds.minx(), bounds.miny())
+			static std::unique_ptr<Polygon> createPolygon(const geotools::util::Bounds &bounds) {
+				std::list<Coordinate> coords {
+					Coordinate(bounds.minx(), bounds.miny()),
+					Coordinate(bounds.maxx(), bounds.miny()),
+					Coordinate(bounds.maxx(), bounds.maxy()),
+					Coordinate(bounds.minx(), bounds.maxy()),
+					Coordinate(bounds.minx(), bounds.miny())
 				};
 				return std::move(createPolygon(coords));
 			}

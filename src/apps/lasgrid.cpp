@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 			} else if(s == "-d") {
 				radius = atof(argv[++i]);
 			} else if(s == "-v") {
-				g_loglevel(G_LOG_TRACE);
+				g_loglevel(G_LOG_DEBUG);
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
 			} else if(s == "-b") {
@@ -100,8 +100,8 @@ int main(int argc, char **argv) {
 			config.lasFiles = files;
 			config.classes = classes;
 			config.hsrid = crs;
-			config.parseAtt(att);
-			config.parseType(type);
+			config.attribute = config.parseAtt(att);
+			config.type = config.parseType(type);
 			config.radius = radius;
 			config.resolution = resolution;
 			config.bounds = bounds;
