@@ -5,6 +5,7 @@
 #include <string>
 #include <fstream>
 #include <memory>
+#include <unordered_map>
 
 #include "geos/geom/Geometry.h"
 
@@ -82,7 +83,8 @@ namespace geotools {
 			unsigned int m_numBlocks;
 			std::string m_file;
 			std::map<unsigned int, std::unique_ptr<std::ifstream> > m_cacheFiles;
-			std::map<unsigned int, unsigned int> m_cacheCounts;
+			std::unordered_map<unsigned int, unsigned int> m_cacheCounts;
+			std::unordered_map<unsigned int, std::string> m_blockFilenames;
 			geotools::util::Bounds m_fileBounds;
 			geotools::util::Bounds m_currentBounds;
 			unsigned int m_currentBlock;

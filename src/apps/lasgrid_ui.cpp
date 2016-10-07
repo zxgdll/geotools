@@ -1,6 +1,7 @@
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QFileDialog>
 #include <QMessageBox>
+#include <QSettings>
 
 #include "geotools.h"
 #include "lasgrid.hpp"
@@ -11,6 +12,8 @@ using namespace geotools::ui;
 using namespace geotools::las;
 using namespace geotools::las::lasgrid_config;
 
+QSettings _settings("LASGrid", "Geotools");
+QString _last_dir("last_dir");
 
 LasgridForm::LasgridForm(QWidget *p) : 
 	QWidget(p),
@@ -29,10 +32,12 @@ void LasgridForm::setupUi(QWidget *form) {
 
 	Ui::LasgridForm::setupUi(form);
 
-	g_loglevel(G_LOG_DEBUG);
-
 	m_form = form;
-	m_last = QDir::home();
+	if(_settings.contains(_last_dir)) {
+		m_last.setPath(_settings.value(_last_dir).toString());
+	} else {
+		m_last = QDir::home();
+	}
 
 	m_radius = defaultRadius;
 	m_resolution = defaultResolution;
@@ -169,6 +174,7 @@ void LasgridForm::destFileClicked() {
 	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last.path(), "GeoTiff (*.tif *.tiff)");
 	m_destFile = res.toStdString();
 	m_last.setPath(res);
+	_settings.setValue(_last_dir, m_last.path());
 	txtDestFile->setText(res);
 	checkRun();
 }
@@ -242,6 +248,7 @@ void LasgridForm::selectFilesClicked() {
 	if(d.exec()) {
 		QStringList files = d.selectedFiles();
 		m_last = d.directory();
+		_settings.setValue(_last_dir, m_last.path());
 		std::set<std::string> tmp(m_lasFiles.begin(), m_lasFiles.end());
 		for(int i = 0; i < files.size(); ++i)
 			tmp.insert(files[i].toStdString());

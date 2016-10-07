@@ -15,6 +15,7 @@
 #include <cstring>
 #include <math.h>
 #include <exception>
+#include <unordered_set>
 
 #include <ogr_spatialref.h>
 #include <gdal_priv.h>
@@ -200,7 +201,7 @@ namespace geotools {
 
 		class Cell {
 		public:
-			std::unique_ptr<geos::geom::Polygon> circle;
+			geos::geom::Polygon *circle;
 			double x;
 			double y;
 			double radius;
@@ -208,11 +209,18 @@ namespace geotools {
 
 			Cell(double x, double y, double radius) :
 				x(x), y(y), radius(radius) {
-				circle = std::move(SimpleGeom::createCircle(geos::geom::Coordinate(x, y), radius));
+				circle = SimpleGeom::createCircle(geos::geom::Coordinate(x, y), radius);
+			}
+
+			~Cell() {
+				delete circle;
 			}
 
 			bool contains(double x, double y) {
-				return circle->contains(SimpleGeom::createPoint(x, y, 0.0).get());
+				geos::geom::Point *p = SimpleGeom::createPoint(x, y, 0.0);
+				bool cont = circle->contains(p);
+				delete p;
+				return cont;
 			}
 		};
 
@@ -304,24 +312,30 @@ namespace geotools {
 					geos::geom::Envelope e(pt.x, pt.y, pt.x, pt.y);
 					tree.query(&e, res);
 
-					g_debug(" -- lasgrid - found " << res.size() << " cells for point " << pt.x << "," << pt.y);
+					//g_debug(" -- lasgrid - found " << res.size() << " cells for point " << pt.x << "," << pt.y);
 					for(const void *c : res)
 						((Cell *) c)->points.push_back(pt);
 
-					if(curPt % 1000 == 0 || curPt == pts.pointCount()) {
-						g_debug(" -- lasgrid - finalizing cells");
-						std::set<unsigned long> rem;
+					if(geom != nullptr && (curPt % 1000 == 0 || curPt == pts.pointCount())) {
+						g_debug(" -- lasgrid - finalizing cells 1");
+						std::unordered_set<unsigned long> rem;
 						for(const auto &it : cells) {
-							if(geom->contains(it.second->circle.get())) {
+							if(geom->contains(it.second->circle)) {
 								grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second));
-								rem.insert(it.first);
 								tree.remove(it.second->circle->getEnvelopeInternal(), it.second);
+								rem.insert(it.first);
 							}
 						}
 						g_debug(" -- lasgrid - removing " << rem.size() << " items");
-						for(const unsigned long &idx : rem)
+						for(const unsigned long &idx : rem) {
+							Cell *c = cells[idx];
 							cells.erase(idx);
+							delete c;
+						}
 					}
+
+					if(curPt > 2000)
+						break;
 
 				}
 
@@ -330,18 +344,19 @@ namespace geotools {
 				curFile += 1.0f;
 			}
 
-			g_debug(" -- lasgrid - finalizing cells");
-			std::set<unsigned long> rem;
+			g_debug(" -- lasgrid - finalizing cells 2");
+			std::unordered_set<unsigned long> rem;
 			for(const auto &it : cells) {
-				if(geom->contains(it.second->circle.get())) {
-					grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second));
-					rem.insert(it.first);
-					tree.remove(it.second->circle->getEnvelopeInternal(), it.second);
-				}
+				grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second));
+				tree.remove(it.second->circle->getEnvelopeInternal(), it.second);
+				rem.insert(it.first);
 			}
 			g_debug(" -- lasgrid - removing " << rem.size() << " items");
-			for(const unsigned long &idx : rem)
+			for(const unsigned long &idx : rem) {
+				Cell *c = cells[idx];
 				cells.erase(idx);
+				delete c;
+			}
 
 			if(m_callbacks)
 				m_callbacks->overallCallback(1.0f);

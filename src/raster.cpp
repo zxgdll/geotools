@@ -607,40 +607,49 @@ template <class T>
 T* BlockCache<T>::getBlock(int col, int row, bool forWrite) {
 	size_t idx = toIdx(col, row);
 	T *blk = nullptr;
-	#pragma omp critical(__blockcache)
-	{
-		if(m_blocks.find(idx) == m_blocks.end()) {
-			T *blk = freeOne();
-			if(blk == nullptr)
-				blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
-			#pragma omp critical(__gdal_io)
-			{
-				if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
-					g_runerr("Failed to read block.");
-			}
-			m_blocks[idx] = blk;
+	if(m_blocks.find(idx) == m_blocks.end()) {
+		//g_debug(" -- cache - new block");
+		T *blk = freeOne();
+		if(blk == nullptr)
+			blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
+		#pragma omp critical(__gdal_io)
+		{
+			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
+				g_runerr("Failed to read block.");
 		}
-		++m_time; // TODO: No provision for rollover
-		m_time_idx.erase(m_idx_time[idx]);
-		m_time_idx[m_time] = idx;
-		m_idx_time[idx] = m_time;
-		if(forWrite)
-			m_dirty[idx] = true;
-		blk = m_blocks[idx];
+		m_blocks[idx] = blk;
 	}
+	//g_debug(" -- cache - update time");
+	++m_time; // TODO: No provision for rollover
+	m_time_idx.erase(m_idx_time[idx]);
+	m_time_idx[m_time] = idx;
+	m_idx_time[idx] = m_time;
+	if(forWrite)
+		m_dirty[idx] = true;
+	blk = m_blocks[idx];
+	//g_debug(" -- cache - return block");
 	return blk;
 }
 
 template <class T>
 T BlockCache<T>::get(int col, int row) {
-	T *blk = getBlock(col, row, false);
-	return blk[toIdx(col, row)];
+	T v;
+	#pragma omp critical(__blockcache)
+	{
+		T *blk = getBlock(col, row, false);
+		v = blk[toBlockIdx(col, row)];
+	}
+	return v;
 }
 
 template <class T>
 void BlockCache<T>::set(int col, int row, T value) {
-	T *blk = getBlock(col, row, true);
-	blk[toIdx(col, row)] = value;
+	#pragma omp critical(__blockcache)
+	{	
+		//g_debug(" -- cache set " << col << "," << row << "; " << value);
+		T *blk = getBlock(col, row, true);
+		blk[toBlockIdx(col, row)] = value;
+	}
 }
 
 template <class T>

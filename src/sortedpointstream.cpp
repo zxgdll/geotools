@@ -3,6 +3,7 @@
 #include <map>
 #include <string>
 #include <memory>
+#include <cstdio>
 
 #include "geos/geom/Geometry.h"
 #include "geos/geom/Polygon.h"
@@ -31,7 +32,13 @@ SortedPointStream::SortedPointStream(const std::string &file, unsigned int numBl
 }
 
 SortedPointStream::~SortedPointStream() {
-	// close streams
+	for(const auto &it : m_blockFilenames) {
+		try {
+			std::remove(it.second.c_str());
+		} catch(...) {
+			g_warn("Failed to delete " << it.second);
+		}
+	}
 }
 
 unsigned int SortedPointStream::pointCount() {
@@ -67,7 +74,7 @@ void SortedPointStream::init() {
 				std::string file = fs.str();
 				std::unique_ptr<std::ofstream> os(new std::ofstream(file, std::ios::out|std::ios::binary));
 				blockFiles[i] = std::move(os);
-				blockFilenames[i] = file;
+				m_blockFilenames[i] = file;
 			}
 
 			LASPoint pt;
@@ -84,7 +91,7 @@ void SortedPointStream::init() {
 			g_debug(" -- init opening in files");
 			for(unsigned int i = 0; i < m_numBlocks; ++i) {
 				blockFiles[i]->close();
-				std::unique_ptr<std::ifstream> is(new std::ifstream(blockFilenames[i], std::ios::in|std::ios::binary));
+				std::unique_ptr<std::ifstream> is(new std::ifstream(m_blockFilenames[i], std::ios::in|std::ios::binary));
 				m_cacheFiles[i] = std::move(is);
 			}
 
@@ -116,15 +123,19 @@ bool SortedPointStream::next(LASPoint &pt, geos::geom::Geometry **geom) {
 
 	if(m_cacheCounts[m_currentBlock] == 0) {
 		g_debug(" -- next - switching to next block " << m_currentBlock);
-		std::unique_ptr<geos::geom::Polygon> poly = std::move(SimpleGeom::createPolygon(m_fileBounds));
+		geos::geom::Geometry *poly = (geos::geom::Geometry *) SimpleGeom::createPolygon(m_fileBounds);
 		if(*geom == nullptr) {
-			*geom = (geos::geom::Geometry *) poly.release();
+			*geom = poly;
 		} else {
-			const geos::geom::Geometry *g = (geos::geom::Geometry *) poly.release();
-			if((*geom)->intersects(g)) {
-				*geom = (*geom)->intersection(g);
+			geos::geom::Geometry *tmp;
+			if((*geom)->intersects(poly)) {
+				tmp = *geom;
+				*geom = (*geom)->intersection(poly);
+				delete tmp;
 			} else {
-				*geom = (*geom)->Union(g);
+				tmp = *geom;
+				*geom = (*geom)->Union(poly);
+				delete geom;
 			}
 		}
 		m_currentBlock++;
