@@ -489,7 +489,7 @@ void MemRaster<T>::readBlock(Grid<T> &block) {
 // Implementations for BlockCache
 template <class T>
 void BlockCache<T>::flushBlock(size_t idx) {
-	if(hasBlock(idx) && m_band->GetDataset()->GetAccess() == GA_Update) {
+	if(m_blocks.find(idx) != m_blocks.end() && m_band->GetDataset()->GetAccess() == GA_Update) {
 		T *blk = m_blocks[idx];
 		if(blk != nullptr) {
 			#pragma omp critical(__gdal_io)
