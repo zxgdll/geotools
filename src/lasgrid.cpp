@@ -13,6 +13,7 @@
 #include <climits>
 #include <memory>
 #include <cstring>
+#include <cstdio>
 #include <math.h>
 #include <exception>
 #include <unordered_set>
@@ -24,14 +25,9 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 
-#include "geos/index/quadtree/Quadtree.h"
-
-#include <liblas/liblas.hpp>
-
 #include "lasgrid.hpp"
 #include "lasutil.hpp"
-#include "sortedpointstream.hpp"
-#include "simplegeom.hpp"
+#include "pointstream.hpp"
 
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
@@ -39,7 +35,6 @@ namespace alg = boost::algorithm;
 using namespace geotools::util;
 using namespace geotools::raster;
 using namespace geotools::las;
-using namespace geotools::geom;
 
 namespace geotools {
 
@@ -70,14 +65,10 @@ namespace geotools {
 			/**
 			 * Comparator for sorting doubles.
 			 */
-			int _fcmp(const void * a, const void * b) {
+			int fcmp(const void * a, const void * b) {
 				const double * aa = (const double *) a;
 				const double * bb = (const double *) b;
 				return (*aa > *bb) - (*bb > *aa);
-			}
-
-			void vector_dealloc(std::vector<double> *item) {
-				delete item;
 			}
 
 			/**
@@ -177,85 +168,47 @@ namespace geotools {
 		}
 
 		void LASGrid::computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds,
-			std::set<std::string> &selectedFiles, Bounds &workBounds) {
+			std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount) {
 			g_debug("Work bounds initial: " << workBounds.print());
 			liblas::ReaderFactory rf;
+			unsigned long count = 0;
 			for(const std::string &file : files) {
 				g_debug("Checking file " << file);
-				std::ifstream in(file.c_str(), std::ios::in|std::ios::binary);
-				liblas::Reader r = rf.CreateWithStream(in);
-				liblas::Header h = r.GetHeader();
-				Bounds lasBounds;
-				if(!LasUtil::computeLasBounds(h, lasBounds, 2))
-					LasUtil::computeLasBounds(r, lasBounds, 2); // If the header bounds are bogus.
-				g_debug("File bounds " << file << ": " << lasBounds.print());
-				in.close();
-				if(bounds.intersects(lasBounds, 2)) {
+				PointStream ps(file);
+				count += ps.pointCount();
+				if(bounds.intersects(ps.fileBounds(), 2)) {
 					selectedFiles.insert(file);
-					workBounds.extend(lasBounds);
+					workBounds.extend(ps.fileBounds());
 				}
 			}
+			*pointCount = count;
 			g_debug("Work bounds final: " << workBounds.print());
 		}
 
-
-		class Cell {
-		public:
-			geos::geom::Polygon *circle;
-			double x;
-			double y;
-			double radius;
-			std::list<LASPoint> points;
-
-			Cell(double x, double y, double radius) :
-				x(x), y(y), radius(radius) {
-				circle = SimpleGeom::createCircle(geos::geom::Coordinate(x, y), radius);
-			}
-
-			~Cell() {
-				delete circle;
-			}
-
-			bool contains(double x, double y) {
-				geos::geom::Point *p = SimpleGeom::createPoint(x, y, 0.0);
-				bool cont = circle->contains(p);
-				delete p;
-				return cont;
-			}
-		};
-
-		double compute(const Cell *cell) {
+		double computeMean(const std::list<double> &values) {
+			if(values.size() == 0)
+				return -9999.0;
 			double sum = 0.0;
-			int count = cell->points.size();
-			for(const LASPoint &pt : cell->points)
-				sum += pt.z;
-			return count > 0 ? sum / cell->points.size() : 1000.0;
+			for(const double &v : values)
+				sum += v;
+			return sum / values.size();
 		}
 
 		void LASGrid::lasgrid(const LASGridConfig &config) {
 
 			checkConfig(config);
 			
-			// Stores the selected files.
+			// Compute the work bounds, and store the list
+			// of relevant files. Snap the bounds if necessary.
 			std::set<std::string> files;
-			// Stores the bounds of the work area.
+			unsigned int pointCount;
 			Bounds workBounds;
 			workBounds.collapse();
-
-			// Compute the work bounds and indices.
-			computeWorkBounds(config.lasFiles, config.bounds, files, workBounds);
-
-			// Snap the bounds if necessary.
+			computeWorkBounds(config.lasFiles, config.bounds, files, workBounds, &pointCount);
 			if(config.snap) {
 				workBounds.snap(config.resolution);
 				g_debug(" -- lasgrid - snapped work bounds: " << workBounds.print());
 			}
-
-			// To keep track of completed work.
-			geos::geom::Geometry *geom = nullptr;
-
-			// To store cells.
-			std::unordered_map<unsigned long, Cell*> cells;
 
 			// Prepare the grid
 			// TODO: Only works with UTM north.
@@ -263,103 +216,90 @@ namespace geotools {
 				-config.resolution, -9999, config.hsrid);
 			g_debug(" -- lasgrid - raster size: " << grid.cols() << ", " << grid.rows());
 
-			geos::index::quadtree::Quadtree tree;
+			// Double the estimated density; use this value to dictate buffer file row length.
+			unsigned int pointsPerCell = ((int) ((double) pointCount / (grid.cols() * grid.rows())) + 1) * 2;
 
-			// Iterate over selected files to produce grid
-			float curFile = 0.0f;
-			for(const std::string &file : files) {
+			std::string tmpfile = "/tmp/lasgrid.tmp";
 
-				g_debug(" -- lasgrid - processing " << file);
+			{
+				g_debug(" -- lasgrid - building tmp file")
+				std::ofstream tmp(tmpfile, std::ios::binary);
 
-				if(m_callbacks)
-					m_callbacks->overallCallback((curFile + 0.5f) / files.size());
+				// Zero the file.
+				double *row = (double *) calloc(pointsPerCell + 1, sizeof(double));
+				for(unsigned long i = 0; i < (unsigned long) grid.rows() * grid.cols(); ++i)
+					tmp.write((char *) row, sizeof(double) * (pointsPerCell + 1));
 
-				SortedPointStream pts(file, 100);
-				pts.init();
-				
-				LASPoint pt;
-				unsigned int curPt = 0;
-				while(pts.next(pt, &geom)) {
+				for(const std::string &file : files) {
 
-					if(curPt++ % 1000 == 0) {
-						if(m_callbacks) 
-							m_callbacks->fileCallback((curPt + 1.0f) / pts.pointCount());
-					}
+					LASPoint pt;
+					PointStream ps(file);
 
-					// If the point is outside the scan angle range, skip it.
-					if(g_abs(pt.angle) > config.angleLimit || !config.hasClass(pt.cls))
-						continue;
+					while(ps.next(pt)) {
+						unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
+						//((unsigned long) grid.toCol(pt.x) << 32) | ((unsigned long) grid.toRow(pt.y));
+						double val = 0;
 
-					int col = grid.toCol(pt.x); 
-					int row = grid.toRow(pt.y); 
-					unsigned long idx = ((unsigned long) col << 32) | ((unsigned long) row);
-
-					//g_debug(" -- lasgrid - idx " << idx);
-					if(cells.find(idx) == cells.end()) {
-						//g_debug(" -- lasgrid - new cell at " << col << "," << row);
-						Cell *c = new Cell(
-							grid.toX(col) + grid.resolutionX() * 0.5, 
-							grid.toY(row) + grid.resolutionY() * 0.5, 
-							config.radius
-						);
-						tree.insert(c->circle->getEnvelopeInternal(), c);
-						cells[idx] = c;
-					}
-					
-					// find cells in tree that contain the point
-					// add point to cells
-					std::vector<void*> res;
-					geos::geom::Envelope e(pt.x, pt.y, pt.x, pt.y);
-					tree.query(&e, res);
-
-					//g_debug(" -- lasgrid - found " << res.size() << " cells for point " << pt.x << "," << pt.y);
-					for(const void *c : res)
-						((Cell *) c)->points.push_back(pt);
-
-					if(geom != nullptr && (curPt % 1000 == 0 || curPt == pts.pointCount())) {
-						g_debug(" -- lasgrid - finalizing cells 1");
-						std::unordered_set<unsigned long> rem;
-						for(const auto &it : cells) {
-							if(geom->contains(it.second->circle)) {
-								grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second));
-								tree.remove(it.second->circle->getEnvelopeInternal(), it.second);
-								rem.insert(it.first);
-							}
+						switch(config.attribute) {
+						case ATT_INTENSITY: 
+							val = (double) pt.intensity;
+							break;
+						default: 
+							val = pt.z;
+							break;
 						}
-						g_debug(" -- lasgrid - removing " << rem.size() << " items");
-						for(const unsigned long &idx : rem) {
-							Cell *c = cells[idx];
-							cells.erase(idx);
-							delete c;
-						}
+
+						// Seek to begining of row
+						unsigned long offset = idx * (pointsPerCell + 1) * sizeof(double);
+						tmp.seekp(offset);
+
+						// Read the point count
+						unsigned long count;
+						tmp.read((char *) &count, sizeof(double));
+
+						// Increment and write the count
+						++count;
+						tmp.seekp(offset);
+						tmp.write((char *) &count, sizeof(double));
+
+						// Seek to the new position and write the value.
+						tmp.seekp(offset + count * sizeof(double));
+						tmp.write((char *) &val, sizeof(double));
 					}
-
-					if(curPt > 2000)
-						break;
-
 				}
-
-				if(m_callbacks)
-					m_callbacks->overallCallback((curFile + 1.0f) / files.size());
-				curFile += 1.0f;
 			}
 
-			g_debug(" -- lasgrid - finalizing cells 2");
-			std::unordered_set<unsigned long> rem;
-			for(const auto &it : cells) {
-				grid.set(grid.toCol(it.second->x), grid.toRow(it.second->y), compute(it.second));
-				tree.remove(it.second->circle->getEnvelopeInternal(), it.second);
-				rem.insert(it.first);
-			}
-			g_debug(" -- lasgrid - removing " << rem.size() << " items");
-			for(const unsigned long &idx : rem) {
-				Cell *c = cells[idx];
-				cells.erase(idx);
-				delete c;
+			{
+				g_debug(" -- lasgrid - computing results")
+				std::ifstream tmp(tmpfile, std::ios::binary);
+				for(unsigned long i = 0; i < (unsigned long) grid.rows() * grid.cols(); ++i) {
+
+					tmp.seekp(i * (pointsPerCell + 1) * sizeof(double));
+
+					unsigned long count;
+					tmp.read((char *) &count, sizeof(double));
+
+					if(count > 0) {
+						double val;
+						std::list<double> values;
+						for(unsigned int j = 0; j < count; ++j) {
+							tmp.read((char *) &val, sizeof(double));
+							values.push_back(val);
+						}
+						grid.set(i, computeMean(values));
+					}
+				}
+				std::remove(tmpfile.c_str());
 			}
 
-			if(m_callbacks)
-				m_callbacks->overallCallback(1.0f);
+
+//				if(m_callbacks)
+//					m_callbacks->overallCallback((curFile + 0.5f) / files.size());
+
+//						if(m_callbacks) 
+//							m_callbacks->fileCallback((curPt + 1.0f) / pts.pointCount());
+//			if(m_callbacks)
+//				m_callbacks->overallCallback(1.0f);
 
 		}
 

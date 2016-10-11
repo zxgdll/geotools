@@ -81,12 +81,17 @@ void SortedPointStream::init() {
 			unsigned int block;
 
 			g_debug(" -- init writing points");
+			int cnt = 0;
 			while(lasReader.ReadNextPoint()) {
+				++cnt;
 				pt.update(lasReader.GetPoint());
 				block = (unsigned int) ((pt.y - m_fileBounds.miny()) / m_fileBounds.height() * m_numBlocks);
 				pt.write(*(blockFiles[block].get()));
 				m_cacheCounts[block]++;
 			}
+
+			for(const auto &it : m_cacheCounts)
+				g_debug(" -- init block " << it.first << "; count " << it.second);
 
 			g_debug(" -- init opening in files");
 			for(unsigned int i = 0; i < m_numBlocks; ++i) {

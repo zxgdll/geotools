@@ -103,7 +103,7 @@ namespace geotools {
 			 * to include in the working set.
 			 */
 			void computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds, 
-				std::set<std::string> &selectedFiles, Bounds &workBounds);
+				std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount);
 
 		public:
 			/**
