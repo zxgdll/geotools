@@ -93,6 +93,119 @@ namespace geotools {
 				return r <= radius;
 			}
 
+			double cellArea;
+
+			double computeDensity(const std::list<double> &values) {
+				if(values.size() == 0)
+					return -9999.0;
+				return values.size() / cellArea;
+			}
+
+			double computeMean(const std::list<double> &values) {
+				if(values.size() == 0)
+					return -9999.0;
+				double sum = 0.0;
+				for(const double &v : values)
+					sum += v;
+				return sum / values.size();
+			}
+
+			double computeCount(const std::list<double> &values) {
+				return values.size();
+			}
+
+			double computeMedian(const std::list<double> &values) {
+				if(values.size() <= 1)
+					return -9999.0;
+				std::vector<double> v(values.begin(), values.end());
+				std::sort(v.begin(), v.end());
+				unsigned int size = v.size();
+				if(size % 2 == 0) {
+					return (v[(int) size / 2] - v[(int) size / 2 - 1]) / 2.0;
+				} else {
+					return v[(int) size / 2];
+				}
+			}
+
+			double computeMin(const std::list<double> &values) {
+				if(values.size() <= 1)
+					return -9999.0;
+				double min = *(values.begin());
+				for(const double &v : values) {
+					if(v < min)
+						min = v;
+				}
+				return min;
+			}
+
+			double computeMax(const std::list<double> &values) {
+				if(values.size() <= 1)
+					return -9999.0;
+				double max = *(values.begin());
+				for(const double &v : values) {
+					if(v > max)
+						max = v;
+				}
+				return max;
+			}
+
+			double computeVariance(const std::list<double> &values) {
+				if(values.size() <= 1)
+					return -9999.0;			
+				double mean = lasgrid_util::computeMean(values);
+				double sum = 0;
+				for(const double &v : values)
+					sum += g_sq(g_abs(v - mean));
+				return sum / (values.size() - 1);
+			}
+
+			double computePVariance(const std::list<double> &values) {
+				if(values.size() <= 1)
+					return -9999.0;			
+				double mean = lasgrid_util::computeMean(values);
+				double sum = 0;
+				for(const double &v : values)
+					sum += g_sq(g_abs(v - mean));
+				return sum / values.size();
+			}
+
+			double computeStdDev(const std::list<double> &values) {
+				if(values.size() == 0)
+					return -9999.0;
+				return std::sqrt(lasgrid_util::computeVariance(values));
+			}
+
+			double computePStdDev(const std::list<double> &values) {
+				if(values.size() == 0)
+					return -9999.0;
+				return std::sqrt(lasgrid_util::computePVariance(values));
+			}
+
+			double computeSkew(const std::list<double> &values) {
+				if(values.size() == 0)
+					return -9999.0;
+				// Fisher-Pearson
+				double mean = lasgrid_util::computeMean(values);
+				double sum = 0.0;
+				unsigned int count = values.size();
+				for(const double &v : values)
+					sum += std::pow(v - mean, 3.0) / count;
+				return sum / std::pow(lasgrid_util::computeStdDev(values), 3.0);
+			}
+
+			double computeKurtosis(const std::list<double> &values) {
+				if(values.size() == 0)
+					return -9999.0;
+				double mean = lasgrid_util::computeMean(values);
+				double sum = 0.0;
+				unsigned int count = values.size();
+				for(const double &v : values)
+					sum += std::pow(v - mean, 4.0) / count;
+				return sum / std::pow(lasgrid_util::computePStdDev(values), 4.0);
+			}
+
+
+
 		} // util
 
 		unsigned char LASGridConfig::parseAtt(const std::string &attStr) {
@@ -169,11 +282,11 @@ namespace geotools {
 
 		void LASGrid::computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds,
 			std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount) {
-			g_debug("Work bounds initial: " << workBounds.print());
+			g_debug(" -- computeWorkBounds - work bounds initial: " << workBounds.print());
 			liblas::ReaderFactory rf;
 			unsigned long count = 0;
 			for(const std::string &file : files) {
-				g_debug("Checking file " << file);
+				g_debug(" -- computeWorkBounds - checking file " << file);
 				PointStream ps(file);
 				count += ps.pointCount();
 				if(bounds.intersects(ps.fileBounds(), 2)) {
@@ -182,16 +295,7 @@ namespace geotools {
 				}
 			}
 			*pointCount = count;
-			g_debug("Work bounds final: " << workBounds.print());
-		}
-
-		double computeMean(const std::list<double> &values) {
-			if(values.size() == 0)
-				return -9999.0;
-			double sum = 0.0;
-			for(const double &v : values)
-				sum += v;
-			return sum / values.size();
+			g_debug(" -- computeWorkBounds - work bounds final: " << workBounds.print() << "; point count " << *pointCount);
 		}
 
 		void LASGrid::lasgrid(const LASGridConfig &config) {
@@ -201,7 +305,7 @@ namespace geotools {
 			// Compute the work bounds, and store the list
 			// of relevant files. Snap the bounds if necessary.
 			std::set<std::string> files;
-			unsigned int pointCount;
+			unsigned long pointCount;
 			Bounds workBounds;
 			workBounds.collapse();
 			computeWorkBounds(config.lasFiles, config.bounds, files, workBounds, &pointCount);
@@ -214,30 +318,74 @@ namespace geotools {
 			// TODO: Only works with UTM north.
 			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
 				-config.resolution, -9999, config.hsrid);
+			grid.fill(-9999.0);
+
 			g_debug(" -- lasgrid - raster size: " << grid.cols() << ", " << grid.rows());
 
-			// Double the estimated density; use this value to dictate buffer file row length.
-			unsigned int pointsPerCell = ((int) ((double) pointCount / (grid.cols() * grid.rows())) + 1) * 2;
+			std::vector<std::string> filesv(files.size());
+			filesv.assign(files.begin(), files.end());
 
-			std::string tmpfile = "/tmp/lasgrid.tmp";
+			g_debug(" -- lasgrid - " << filesv.size() << " files");
 
+			double (* compute)(const std::list<double>&) = nullptr;
+			switch(config.type) {
+			case TYPE_MEAN:
+				compute = &lasgrid_util::computeMean;
+				break;
+			case TYPE_MEDIAN:
+				compute = &lasgrid_util::computeMedian;
+				break;
+			case TYPE_COUNT:
+				compute = &lasgrid_util::computeCount;
+				break;
+			case TYPE_PSTDDEV:
+				compute = &lasgrid_util::computePStdDev;
+				break;
+			case TYPE_VARIANCE:
+				compute = &lasgrid_util::computeVariance;
+				break;
+			case TYPE_PVARIANCE:
+				compute = &lasgrid_util::computePVariance;
+				break;
+			case TYPE_STDDEV:
+				compute = &lasgrid_util::computeStdDev;
+				break;
+			case TYPE_DENSITY:
+				lasgrid_util::cellArea = g_abs(grid.resolutionX() * grid.resolutionY());
+				compute = &lasgrid_util::computeDensity;
+				break;
+			case TYPE_RUGOSITY:
+				break;
+			case TYPE_MAX:
+				compute = &lasgrid_util::computeMax;
+				break;
+			case TYPE_MIN:
+				compute = &lasgrid_util::computeMin;
+				break;
+			case TYPE_KURTOSIS:
+				compute = &lasgrid_util::computeKurtosis;
+				break;
+			case TYPE_SKEW:
+				compute = &lasgrid_util::computeSkew;
+				break;
+			case TYPE_QUANTILE:
+				break;
+			}
+
+			#pragma omp parallel
 			{
-				g_debug(" -- lasgrid - building tmp file")
-				std::ofstream tmp(tmpfile, std::ios::binary);
+			
+				#pragma omp for
+				for(unsigned int i = 0; i < filesv.size(); ++i) {
+					const std::string &file = filesv[i];
 
-				// Zero the file.
-				double *row = (double *) calloc(pointsPerCell + 1, sizeof(double));
-				for(unsigned long i = 0; i < (unsigned long) grid.rows() * grid.cols(); ++i)
-					tmp.write((char *) row, sizeof(double) * (pointsPerCell + 1));
-
-				for(const std::string &file : files) {
+					std::unordered_map<unsigned long, std::list<double> > values;
 
 					LASPoint pt;
 					PointStream ps(file);
 
 					while(ps.next(pt)) {
 						unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-						//((unsigned long) grid.toCol(pt.x) << 32) | ((unsigned long) grid.toRow(pt.y));
 						double val = 0;
 
 						switch(config.attribute) {
@@ -249,47 +397,19 @@ namespace geotools {
 							break;
 						}
 
-						// Seek to begining of row
-						unsigned long offset = idx * (pointsPerCell + 1) * sizeof(double);
-						tmp.seekp(offset);
-
-						// Read the point count
-						unsigned long count;
-						tmp.read((char *) &count, sizeof(double));
-
-						// Increment and write the count
-						++count;
-						tmp.seekp(offset);
-						tmp.write((char *) &count, sizeof(double));
-
-						// Seek to the new position and write the value.
-						tmp.seekp(offset + count * sizeof(double));
-						tmp.write((char *) &val, sizeof(double));
+						values[idx].push_back(val);
 					}
+
+					std::set<unsigned long> ids;
+					for(const auto &it : values)
+						ids.insert(it.first);
+
+					g_debug(" -- lasgrid - computing results");
+					for(const unsigned long &id : ids)
+						grid.set(id, compute(values[id]));
 				}
-			}
 
-			{
-				g_debug(" -- lasgrid - computing results")
-				std::ifstream tmp(tmpfile, std::ios::binary);
-				for(unsigned long i = 0; i < (unsigned long) grid.rows() * grid.cols(); ++i) {
 
-					tmp.seekp(i * (pointsPerCell + 1) * sizeof(double));
-
-					unsigned long count;
-					tmp.read((char *) &count, sizeof(double));
-
-					if(count > 0) {
-						double val;
-						std::list<double> values;
-						for(unsigned int j = 0; j < count; ++j) {
-							tmp.read((char *) &val, sizeof(double));
-							values.push_back(val);
-						}
-						grid.set(i, computeMean(values));
-					}
-				}
-				std::remove(tmpfile.c_str());
 			}
 
 

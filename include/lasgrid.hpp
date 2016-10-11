@@ -22,8 +22,8 @@
 #define TYPE_COUNT 9
 #define TYPE_QUANTILE 10
 #define TYPE_MEDIAN 11
-#define TYPE_SKEW 12
-#define TYPE_KURTOSIS 13
+#define TYPE_SKEW 16
+#define TYPE_KURTOSIS 15
 #define TYPE_RUGOSITY 14
 
 #define LAS_EXT ".las"
