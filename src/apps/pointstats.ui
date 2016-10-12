@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>LasgridForm</class>
- <widget class="QWidget" name="LasgridForm">
+ <class>PointStatsForm</class>
+ <widget class="QWidget" name="PointStatsForm">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>LASGrid</string>
+   <string>PointStats</string>
   </property>
   <widget class="QWidget" name="verticalLayoutWidget">
    <property name="geometry">

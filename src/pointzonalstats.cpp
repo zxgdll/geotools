@@ -1,5 +1,5 @@
 /*
- * lasstats computes zonal statistics on a point
+ * pointzonalstats computes zonal statistics on a point
  * cloud for polygons defined in a Shapefile, or grid cells in a raster.
  *
  * If a shapefile is given, each polygon is updated with attributes for mean,
@@ -55,7 +55,7 @@ using namespace geotools::raster;
 
 namespace geotools {
 
-	namespace las {
+	namespace point {
 
 		namespace util {
 
@@ -308,19 +308,20 @@ namespace geotools {
 
 			};
 
-		} // Util	
+		} // util
 
-		void doVector(std::string &shapefile, std::string &outfile, std::string &layername,
-				std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType, int scanAngle) {
+		void doVector(const std::string &shapefile, const std::string &outfile, const std::string &layername,
+				const std::vector<std::string> &files, const std::vector<int> &classes, 
+				int numQuantiles, int outType, int scanAngle) {
 
-			using namespace geotools::las::util;
+			using namespace geotools::point::util;
 
 			const GEOSContextHandle_t gctx = OGRGeometry::createGEOSContext();
 			const geom::GeometryFactory *gf = geom::GeometryFactory::getDefaultInstance();
 			const geom::CoordinateSequenceFactory *cf = gf->getCoordinateSequenceFactory();
 			std::vector<Stat> stats;
 
-			g_trace("Opening " << shapefile);
+			g_debug(" -- doVector - opening " << shapefile);
 
 		 	OGRRegisterAll();
 
@@ -351,7 +352,7 @@ namespace geotools {
 			while((feat = layer->GetNextFeature()) != nullptr) {
 				// Export the geometry for querying.
 				geom::Geometry *geom = (geom::Geometry *) feat->GetGeometryRef()->exportToGEOS(gctx);
-				// Create a unioned geom to filter las files.
+				// Create a unioned geom to filter point files.
 				if(roi == nullptr) {
 					roi = geom;
 				} else {
@@ -368,14 +369,14 @@ namespace geotools {
 
 			// Iterate over LAS files, process each one.
 			liblas::ReaderFactory rf;
-			g_trace("Processing files.");
+			g_debug(" -- doVector - processing files.");
 			for(unsigned int i = 0; i < files.size(); ++i) {
 
 				std::ifstream in(files[i].c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 
-				g_trace("Processing file " << files[i]);
+				g_debug(" -- doVector - processing file " << files[i]);
 
 				// Build the boundary polygon.
 				std::vector<geom::Coordinate> coords = {
@@ -391,11 +392,11 @@ namespace geotools {
 
 				// If the boundary intersectes the region of interest..
 				if(roi->intersects(bounds)) {
-					g_trace("...file intersects.");
+					g_debug(" -- doVector - file intersects.");
 					while(r.ReadNextPoint()) {
 						liblas::Point pt = r.GetPoint();
 						// ... and this point has a class of interest.
-						if(!Util::inList(classes, pt.GetClassification().GetClass()))
+						if(std::find(classes.begin(), classes.end(), pt.GetClassification().GetClass()) == classes.end())
 							continue;
 						int sar = pt.GetScanAngleRank();
 						if(sar < -scanAngle || sar > scanAngle)
@@ -414,7 +415,7 @@ namespace geotools {
 			}
 
 			// Start building the output shapefile.
-			g_trace("Updating shapefile.");
+			g_debug(" -- doVector - updating shapefile.");
 			OGRRegisterAll();
 			OGRSFDriver *drv = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName("ESRI Shapefile");
 			if(drv == nullptr)
@@ -491,10 +492,11 @@ namespace geotools {
 			OGRDataSource::DestroyDataSource(dstDs);
 		}
 
-		void doRaster(std::string &raster, std::string &outfile, int band,
-				std::vector<std::string> &files, std::vector<int> &classes, int numQuantiles, int outType, int scanAngle) {
+		void doRaster(const std::string &raster, const std::string &outfile, int band,
+				const std::vector<std::string> &files, const std::vector<int> &classes, 
+				int numQuantiles, int outType, int scanAngle) {
 
-			using namespace geotools::las::util;
+			using namespace geotools::point::util;
 
 			GDALDataset *ds = (GDALDataset *) GDALOpen(raster.c_str(), GA_ReadOnly);
 			if(ds == nullptr)
@@ -524,20 +526,20 @@ namespace geotools {
 
 			// Iterate over LAS files, process each one.
 			liblas::ReaderFactory rf;
-			g_trace("Processing files.");
+			g_debug(" -- doRaster - processing files.");
 			for(unsigned int i = 0; i < files.size(); ++i) {
 
 				std::ifstream in(files[i].c_str(), std::ios::in | std::ios::binary);
 				liblas::Reader r = rf.CreateWithStream(in);
 				liblas::Header h = r.GetHeader();
 
-				g_trace("Processing file " << files[i]);
+				g_debug(" -- doRaster - processing file " << files[i]);
 
 				int cls;
 				while(r.ReadNextPoint()) {
 					liblas::Point pt = r.GetPoint();
 
-					if(!Util::inList(classes, (cls = pt.GetClassification().GetClass())))
+					if(std::find(classes.begin(), classes.end(), (cls = pt.GetClassification().GetClass())) == classes.end())
 						continue;
 					int sar = pt.GetScanAngleRank();
 					if(sar < -scanAngle || sar > scanAngle)
@@ -640,14 +642,14 @@ namespace geotools {
 			}
 		}
 
-	} // las
+	} // point
 
 } // geotools
 
 // TODO: If shapefile not given, computes stats for the entire point cloud.
 void usage() {
 	std::cerr << "Produces a zonal stats style output for points within polygons or a raster.\n"
-		<< "Usage: lasstats [options] <lasfiles*>\n"
+		<< "Usage: pointzonalstats [options] <pointfiles*>\n"
 		<< " -o Speficy an output file. This can be a shapefile (shp), a raster (tif) or a csv (csv).\n"
 		<< " -s Specify a shapefile. Stats are computed for each polygon.\n"
 		<< " -r Specify a raster file. Stats are computed for each unique cell ID.\n"
@@ -739,7 +741,7 @@ int main(int argc, char ** argv) {
 
 	GDALAllRegister();
 
-	using namespace geotools::las;
+	using namespace geotools::point;
 
 	try {
 		if(inType == RASTER) {

@@ -46,7 +46,7 @@ set (CPACK_COMPONENT_HEADERS_INSTALL_TYPES Full)
 
 set (CPACK_ALL_INSTALL_TYPES Full User)
 set (CPACK_COMPONENTS_ALL applications libraries headers)
-set (CPACK_INSTALL_CMAKE_PROJECTS /Users/robskelly/Documents/geotools/makefiles/lasgrid-app;lasgrid-app;ALL;/)
+set (CPACK_INSTALL_CMAKE_PROJECTS /Users/robskelly/Documents/geotools/makefiles/pointstats-app;pointstats-app;ALL;/)
 
 include (CPack)
 
@@ -88,10 +88,10 @@ add_executable (spectral-app src/apps/spectral.cpp)
 target_link_libraries (spectral-app PUBLIC spectral)
 
 
-add_library(lasgrid SHARED src/lasgrid.cpp src/lasutil.cpp src/pointstream.cpp)
-target_link_libraries (lasgrid gdal geos SFCGAL laszip las boost_system boost_filesystem raster util geotools)
-add_executable (lasgrid-app src/apps/lasgrid.cpp src/apps/lasgrid_ui.cpp src/apps/crs_selector_ui.cpp)
-target_link_libraries (lasgrid-app PUBLIC lasgrid Qt5::Gui Qt5::Core Qt5::Widgets raster)
+add_library(pointstats SHARED src/pointstats.cpp src/lasutil.cpp src/pointstream.cpp)
+target_link_libraries (pointstats gdal geos SFCGAL laszip las boost_system boost_filesystem raster util geotools)
+add_executable (pointstats-app src/apps/pointstats.cpp src/apps/pointstats_ui.cpp src/apps/crs_selector_ui.cpp)
+target_link_libraries (pointstats-app PUBLIC pointstats Qt5::Gui Qt5::Core Qt5::Widgets raster)
 
 
 add_executable (lasboundary src/lasboundary.cpp src/lasutil.cpp)
@@ -104,8 +104,8 @@ add_executable (lasvalidate-app src/apps/lasvalidate.cpp)
 target_link_libraries (lasvalidate-app lasvalidate)
 
 
-add_executable (lasstats src/lasstats.cpp src/lasutil.cpp)
-target_link_libraries (lasstats gdal las laszip geos boost_system boost_filesystem raster util geotools)
+add_executable (pointzonalstats src/pointzonalstats.cpp src/lasutil.cpp)
+target_link_libraries (pointzonalstats gdal las laszip geos boost_system boost_filesystem raster util geotools)
 
 
 add_executable (lasmerge src/lasmerge.cpp src/lasutil.cpp)
@@ -139,15 +139,15 @@ install (TARGETS rasterstats DESTINATION bin)
 
 install (TARGETS mosaic-app DESTINATION bin)
 
-install (TARGETS lasgrid DESTINATION lib COMPONENT libraries)
-install (TARGETS lasgrid-app RUNTIME DESTINATION bin COMPONENT applications)
-install (FILES include/lasgrid.hpp DESTINATION include COMPONENT headers)
+install (TARGETS pointstats DESTINATION lib COMPONENT libraries)
+install (TARGETS pointstats-app RUNTIME DESTINATION bin COMPONENT applications)
+install (FILES include/pointstats.hpp DESTINATION include COMPONENT headers)
 
 install (TARGETS lasvalidate DESTINATION lib)
 install (TARGETS lasvalidate-app DESTINATION bin)
 install (FILES include/lasvalidate.hpp DESTINATION include)
 
-install (TARGETS lasstats DESTINATION bin)
+install (TARGETS pointzonalstats DESTINATION bin)
 
 install (TARGETS lasmerge DESTINATION bin)
 

@@ -14,8 +14,8 @@ namespace geotools {
 		class Callbacks {
 		public:
 			virtual ~Callbacks()=0;
-			virtual void fileCallback(float status)=0;
-			virtual void overallCallback(float status)=0;
+			virtual void fileCallback(float status) const =0;
+			virtual void overallCallback(float status) const =0;
 		};
 
 		class Point {

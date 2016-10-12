@@ -10,28 +10,28 @@
 #include <QtCore>
 
 #include "util.hpp"
-#include "lasgrid.hpp"
-#include "ui_lasgrid.h"
+#include "pointstats.hpp"
+#include "ui_pointstats.h"
 
 namespace geotools {
 
-	namespace las {
+	namespace point {
 
 
-		class LasCallbacks : public QObject, public geotools::util::Callbacks {
+		class PointStatsCallbacks : public QObject, public geotools::util::Callbacks {
 			Q_OBJECT
 		public:
-			void fileCallback(float status) {
+			void fileCallback(float status) const {
 				emit fileProgress((int) std::round(status * 100));
 			}
 
-			void overallCallback(float status) {
+			void overallCallback(float status) const {
 				emit overallProgress((int) std::round(status * 100));
 			}
 
 		signals:
-			void fileProgress(int);
-			void overallProgress(int);
+			void fileProgress(int) const;
+			void overallProgress(int) const;
 		};
 
 	}
@@ -41,13 +41,13 @@ namespace geotools {
 
 		class WorkerThread;
 
-		class LasgridForm : public QWidget, public Ui::LasgridForm {
+		class PointStatsForm : public QWidget, public Ui::PointStatsForm {
 		friend class WorkerThread;
 			Q_OBJECT
 		private:
 			QWidget *m_form;
 			std::string m_destFile;
-			std::list<std::string> m_lasFiles;
+			std::list<std::string> m_sourceFiles;
 			std::set<unsigned char> m_classes;
 			int m_vsrid;
 			int m_hsrid;
@@ -69,9 +69,9 @@ namespace geotools {
 			void checkRun();
 
 		public:
-			LasgridForm(QWidget *p = Q_NULLPTR);
+			PointStatsForm(QWidget *p = Q_NULLPTR);
 			void setupUi(QWidget *Form);
-			~LasgridForm();
+			~PointStatsForm();
 
 		public slots:
 			void fileListSelectionChanged();
@@ -98,16 +98,15 @@ namespace geotools {
 		class WorkerThread : public QThread {
 		private:
 			geotools::util::Bounds m_bounds;
-			LasgridForm *m_parent;
+			PointStatsForm *m_parent;
 
 			void run() {
-				geotools::las::LASGrid l;
-				l.setCallbacks(m_parent->m_callbacks);
 				try {
-
-					geotools::las::LASGridConfig config;
+					geotools::point::PointStats l;
+					
+					geotools::point::PointStatsConfig config;
 					config.dstFile = m_parent->m_destFile;
-					config.lasFiles = m_parent->m_lasFiles;
+					config.sourceFiles = m_parent->m_sourceFiles;
 					config.classes = m_parent->m_classes;
 					config.hsrid = m_parent->m_hsrid;
 					config.attribute = m_parent->m_attribute;
@@ -119,7 +118,7 @@ namespace geotools {
 					config.fill = m_parent->m_fill;
 					config.snap = m_parent->m_snap;
 
-					l.lasgrid(config);
+					l.pointstats(config, m_parent->m_callbacks);
 				} catch(const std::exception &e) {
 					QMessageBox err((QWidget *) m_parent);
 					err.setText("Error");
@@ -128,7 +127,7 @@ namespace geotools {
 				}
 			}
 		public:
-			void init(LasgridForm *parent, const geotools::util::Bounds &bounds) {
+			void init(PointStatsForm *parent, const geotools::util::Bounds &bounds) {
 				m_parent = parent;
 				m_bounds = bounds;
 			}

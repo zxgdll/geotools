@@ -25,7 +25,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 
-#include "lasgrid.hpp"
+#include "pointstats.hpp"
 #include "lasutil.hpp"
 #include "pointstream.hpp"
 #include "simplegeom.hpp"
@@ -39,14 +39,14 @@ namespace alg = boost::algorithm;
 
 using namespace geotools::util;
 using namespace geotools::raster;
-using namespace geotools::las;
+using namespace geotools::point;
 using namespace geotools::geom;
 
 namespace geotools {
 
-	namespace las {
+	namespace point {
 
-		namespace lasgrid_config {
+		namespace pointstats_config {
 			
 			double defaultResolution = 2.0; 
 			double defaultRadius = std::sqrt(g_sq(defaultResolution / 2.0) * 2.0); 
@@ -67,7 +67,7 @@ namespace geotools {
 
 		} // config
 		
-		namespace lasgrid_util {
+		namespace pointstats_util {
 
 			/**
 			 * Comparator for sorting doubles.
@@ -305,7 +305,7 @@ namespace geotools {
 
 		} // util
 
-		unsigned char LASGridConfig::parseAtt(const std::string &attStr) {
+		unsigned char PointStatsConfig::parseAtt(const std::string &attStr) {
 			if("intensity" == attStr) {
 				return ATT_INTENSITY;
 			} else if("height" == attStr) {
@@ -314,7 +314,7 @@ namespace geotools {
 			return 0;
 		}
 
-		unsigned char LASGridConfig::parseType(const std::string &typeStr) {
+		unsigned char PointStatsConfig::parseType(const std::string &typeStr) {
 			if("min" == typeStr) {
 				return TYPE_MIN;
 			} else if("max" == typeStr) {
@@ -345,16 +345,12 @@ namespace geotools {
 			return 0;
 		}
 
-		void LASGrid::setCallbacks(Callbacks *callbacks) {
-			m_callbacks.reset(callbacks);
-		}
-
-		void LASGrid::checkConfig(const LASGridConfig &config) {
+		void PointStats::checkConfig(const PointStatsConfig &config) {
 			if(config.resolution <= 0.0)
 				g_argerr("Resolution must be > 0: " << config.resolution);
 			if(config.radius <= 0.0)
 				g_argerr("Radius invalid: " << config.radius);
-			if(config.lasFiles.size() == 0)
+			if(config.sourceFiles.size() == 0)
 				g_argerr("At least one input file is required.");
 			if(config.dstFile.empty()) 
 				g_argerr("An output file is required.");
@@ -369,7 +365,7 @@ namespace geotools {
 
 			g_debug("Radius: " << config.radius);
 			g_debug("Resolution: " << config.resolution);
-			g_debug("Files: " << config.lasFiles.size());
+			g_debug("Files: " << config.sourceFiles.size());
 			g_debug("Destination: " << config.dstFile);
 			g_debug("Attribute: " << config.attribute);
 			g_debug("Type: " << config.type);
@@ -377,14 +373,14 @@ namespace geotools {
 			g_debug("Angle Limit: " << config.angleLimit);
 		}
 
-		void LASGrid::computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds,
+		void PointStats::computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds,
 			std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount) {
 			g_debug(" -- computeWorkBounds - work bounds initial: " << workBounds.print());
 			liblas::ReaderFactory rf;
 			unsigned long count = 0;
 			for(const std::string &file : files) {
 				g_debug(" -- computeWorkBounds - checking file " << file);
-				PointStream ps(file);
+				geotools::las::PointStream ps(file);
 				count += ps.pointCount();
 				if(bounds.intersects(ps.fileBounds(), 2)) {
 					selectedFiles.insert(file);
@@ -395,8 +391,8 @@ namespace geotools {
 			g_debug(" -- computeWorkBounds - work bounds final: " << workBounds.print() << "; point count " << *pointCount);
 		}
 
-		geotools::las::lasgrid_util::CellStats* LASGrid::getComputer(const LASGridConfig &config) {
-			using namespace geotools::las::lasgrid_util;
+		geotools::point::pointstats_util::CellStats* PointStats::getComputer(const PointStatsConfig &config) {
+			using namespace geotools::point::pointstats_util;
 			switch(config.type) {
 			case TYPE_MEAN: return new CellMean();
 			case TYPE_MEDIAN: return new CellMedian();
@@ -417,11 +413,11 @@ namespace geotools {
 			}
 		}
 
-		void LASGrid::lasgrid(const LASGridConfig &config) {
+		void PointStats::pointstats(const PointStatsConfig &config, const Callbacks *callbacks) {
 
 			checkConfig(config);
 			
-			using namespace geotools::las::lasgrid_util;
+			using namespace geotools::point::pointstats_util;
 
 			// Compute the work bounds, and store the list
 			// of relevant files. Snap the bounds if necessary.
@@ -429,10 +425,10 @@ namespace geotools {
 			unsigned long pointCount;
 			Bounds workBounds;
 			workBounds.collapse();
-			computeWorkBounds(config.lasFiles, config.bounds, files, workBounds, &pointCount);
+			computeWorkBounds(config.sourceFiles, config.bounds, files, workBounds, &pointCount);
 			if(config.snap) {
 				workBounds.snap(config.resolution);
-				g_debug(" -- lasgrid - snapped work bounds: " << workBounds.print());
+				g_debug(" -- pointstats - snapped work bounds: " << workBounds.print());
 			}
 
 			// Prepare the grid
@@ -441,14 +437,14 @@ namespace geotools {
 				-config.resolution, -9999, config.hsrid);
 			grid.fill(-9999.0);
 
-			g_debug(" -- lasgrid - raster size: " << grid.cols() << ", " << grid.rows());
+			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
 			std::vector<std::string> filesv(files.size());
 			filesv.assign(files.begin(), files.end());
 
-			g_debug(" -- lasgrid - " << filesv.size() << " files");
+			g_debug(" -- pointstats - " << filesv.size() << " files");
 
-			CellStats *computer = getComputer(config);
+			std::unique_ptr<CellStats> computer(getComputer(config));
 
 			#pragma omp parallel
 			{
@@ -457,13 +453,20 @@ namespace geotools {
 				for(unsigned int i = 0; i < filesv.size(); ++i) {
 					const std::string &file = filesv[i];
 
+					if(callbacks)
+						callbacks->overallCallback((i + 0.5f) / filesv.size());
+
 					std::unordered_map<unsigned long, std::list<std::unique_ptr<Pt> > > values;
 
-					LASPoint pt;
-					PointStream ps(file);
+					geotools::las::LASPoint pt;
+					geotools::las::PointStream ps(file);
+					unsigned int curPt = 0;
 
 					while(ps.next(pt)) {
 						
+						if(callbacks && curPt++ % 1000 == 0) 
+							callbacks->fileCallback((curPt + 1.0f) / ps.pointCount());
+
 						unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
 						float x = (float) pt.x;
 						float y = (float) pt.y;
@@ -486,28 +489,20 @@ namespace geotools {
 					for(const auto &it : values)
 						ids.insert(it.first);
 
-					g_debug(" -- lasgrid - computing results");
+					g_debug(" -- pointstats - computing results");
 					for(const unsigned long &id : ids)
 						grid.set(id, computer->compute(values[id]));
+
+					if(callbacks)
+						callbacks->overallCallback((i + 1.0f) / filesv.size());
 				}
 
 
 			}
 
-			delete computer;
-
-
-//				if(m_callbacks)
-//					m_callbacks->overallCallback((curFile + 0.5f) / files.size());
-
-//						if(m_callbacks) 
-//							m_callbacks->fileCallback((curPt + 1.0f) / pts.pointCount());
-//			if(m_callbacks)
-//				m_callbacks->overallCallback(1.0f);
-
 		}
 
-	} // las
+	} // point
 
 } // geotools
 

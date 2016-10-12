@@ -2,14 +2,14 @@
 #include <set>
 #include <vector>
 
-#include "lasgrid.hpp"
-#include "lasgrid_ui.hpp"
+#include "pointstats.hpp"
+#include "pointstats_ui.hpp"
 
 using namespace geotools::util;
-using namespace geotools::las;
+using namespace geotools::point;
 
 void usage() {
-	std::cerr << "Usage: lasgrid <options> <file [file [file]]>\n"
+	std::cerr << "Usage: pointstats <options> <file [file [file]]>\n"
 		<< " -o <output file>\n"
 		<< " -t <type>                   Output median, mean, max, min, variance (sample), pvariance (population),\n"
 		<< "                             count, density, stddev (sample), pstddev (population). Default mean.\n"
@@ -30,7 +30,7 @@ void usage() {
 int runWithUI(int argc, char **argv) {
 	QApplication q(argc, argv);
 	QWidget *w = new QWidget();
-	geotools::ui::LasgridForm f;
+	geotools::ui::PointStatsForm f;
 	f.setupUi(w);
 	w->show();
 	return q.exec();
@@ -94,10 +94,10 @@ int main(int argc, char **argv) {
 		if(gui) {
 			return runWithUI(argc, argv);
 		} else {
-			LASGrid lg;
-			LASGridConfig config;
+			PointStats lg;
+			PointStatsConfig config;
 			config.dstFile = dstFile;
-			config.lasFiles = files;
+			config.sourceFiles = files;
 			config.classes = classes;
 			config.hsrid = crs;
 			config.attribute = config.parseAtt(att);
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
 			config.angleLimit = angleLimit;
 			config.fill = fill;
 			config.snap = true; // TODO: Snap
-			lg.lasgrid(config);
+			lg.pointstats(config);
 		}
 
 	} catch(const std::exception &ex) {
