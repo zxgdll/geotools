@@ -22,17 +22,17 @@ namespace geotools {
 		class MosaicCallbacks : public QObject, public geotools::util::Callbacks {
 			Q_OBJECT
 		public:
-			void fileCallback(float status) {
+			void fileCallback(float status) const {
 				emit fileProgress((int) std::round(status * 100));
 			}
 
-			void overallCallback(float status) {
+			void overallCallback(float status) const {
 				emit overallProgress((int) std::round(status * 100));
 			}
 
 		signals:
-			void fileProgress(int);
-			void overallProgress(int);
+			void fileProgress(int) const;
+			void overallProgress(int) const;
 		};
 
 	}
