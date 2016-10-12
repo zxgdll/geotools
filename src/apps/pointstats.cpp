@@ -3,7 +3,10 @@
 #include <vector>
 
 #include "pointstats.hpp"
+
+#ifdef WITH_GUI
 #include "pointstats_ui.hpp"
+#endif
 
 using namespace geotools::util;
 using namespace geotools::point;
@@ -28,12 +31,17 @@ void usage() {
 }
 
 int runWithUI(int argc, char **argv) {
+#ifdef WITH_GUI
 	QApplication q(argc, argv);
 	QWidget *w = new QWidget();
 	geotools::ui::PointStatsForm f;
 	f.setupUi(w);
 	w->show();
 	return q.exec();
+#else
+	std::cerr << "GUI not enabled." << std::endl;
+	return 1;
+#endif
 }
 
 int main(int argc, char **argv) {

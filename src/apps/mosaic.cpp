@@ -13,7 +13,10 @@
 
 #include "geotools.h"
 #include "mosaic.hpp"
+
+#ifdef WITH_GUI
 #include "mosaic_ui.hpp"
+#endif
 
 void usage() {
 	std::cerr << "Usage: mosaic [options] -o <output file> <file [file [file [...]]]>\n"
@@ -32,12 +35,17 @@ void usage() {
 }
 
 int runWithUI(int argc, char **argv) {
+#ifdef WITH_GUI
 	QApplication q(argc, argv);
 	QWidget *w = new QWidget();
 	geotools::ui::MosaicForm f;
 	f.setupUi(w);
 	w->show();
 	return q.exec();
+#else
+	std::cerr << "GUI not enabled." << std::endl;
+	return 1;
+#endif
 }
 
 int main(int argc, char **argv) {

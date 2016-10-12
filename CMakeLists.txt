@@ -1,7 +1,15 @@
 cmake_minimum_required(VERSION 3.0)
 
+set (WITH_GUI false CACHE BOOL "If true, will build the Qt GUI.")
+
+if(${WITH_GUI})
+	add_definitions(-DWITH_GUI)
+endif()
+
 if (${APPLE})
-	set (Qt5_DIR /usr/local/Cellar/qt5/5.6.1-1/lib/cmake/Qt5)
+	if(${WITH_GUI})
+		set (Qt5_DIR /usr/local/Cellar/qt5/5.6.1-1/lib/cmake/Qt5)
+	endif()
 	set (CMAKE_C_COMPILER /usr/local/bin/clang-omp CACHE STRING "C compiler" FORCE)
 	set (CMAKE_CXX_COMPILER /usr/local/bin/clang-omp++ CACHE STRING "C++ compiler" FORCE)
 else()
@@ -12,7 +20,9 @@ enable_language(C)
 enable_language(CXX)
 
 find_package(OpenMP)
-find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets)
+if(${WITH_GUI})
+	find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets)
+endif()
 
 set (CMAKE_AUTOUIC ON)
 set (CMAKE_AUTOMOC ON)
@@ -72,9 +82,13 @@ target_link_libraries (rasterstats gdal raster util geotools)
 
 add_library (mosaic SHARED src/mosaic.cpp)
 target_link_libraries (mosaic gdal boost_system boost_filesystem raster util geotools)
-add_executable (mosaic-app src/apps/mosaic.cpp src/apps/mosaic_ui.cpp)
-target_link_libraries (mosaic-app PUBLIC mosaic Qt5::Gui Qt5::Core Qt5::Widgets util geotools raster)
-
+if(${WITH_GUI})
+	add_executable (mosaic-app src/apps/mosaic.cpp src/apps/mosaic_ui.cpp)
+	target_link_libraries (mosaic-app PUBLIC mosaic Qt5::Gui Qt5::Core Qt5::Widgets)
+else()
+	add_executable (mosaic-app src/apps/mosaic.cpp)
+	target_link_libraries (mosaic-app PUBLIC mosaic)
+endif()
 
 add_library (treetops SHARED src/treetops.cpp)
 target_link_libraries (treetops gdal sqlite3 spatialite raster util geotools)
@@ -89,10 +103,14 @@ target_link_libraries (spectral-app PUBLIC spectral)
 
 
 add_library(pointstats SHARED src/pointstats.cpp src/lasutil.cpp src/pointstream.cpp)
-target_link_libraries (pointstats gdal geos SFCGAL laszip las boost_system boost_filesystem raster util geotools)
-add_executable (pointstats-app src/apps/pointstats.cpp src/apps/pointstats_ui.cpp src/apps/crs_selector_ui.cpp)
-target_link_libraries (pointstats-app PUBLIC pointstats Qt5::Gui Qt5::Core Qt5::Widgets raster)
-
+target_link_libraries (pointstats gdal geos CGAL SFCGAL laszip las boost_system boost_filesystem raster util geotools)
+if(${WITH_GUI})
+	add_executable (pointstats-app src/apps/pointstats.cpp src/apps/pointstats_ui.cpp src/apps/crs_selector_ui.cpp)
+	target_link_libraries (pointstats-app PUBLIC pointstats Qt5::Gui Qt5::Core Qt5::Widgets)
+else()
+	add_executable (pointstats-app src/apps/pointstats.cpp)
+	target_link_libraries (pointstats-app PUBLIC pointstats)
+endif()
 
 add_executable (lasboundary src/lasboundary.cpp src/lasutil.cpp)
 target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system boost_filesystem raster util geotools)
@@ -101,7 +119,7 @@ target_link_libraries (lasboundary PUBLIC las gdal las laszip geos boost_system 
 add_library(lasvalidate SHARED src/lasvalidate.cpp src/lasutil.cpp)
 target_link_libraries (lasvalidate las laszip geos raster util geotools)
 add_executable (lasvalidate-app src/apps/lasvalidate.cpp)
-target_link_libraries (lasvalidate-app lasvalidate)
+target_link_libraries (lasvalidate-app PUBLIC lasvalidate)
 
 
 add_executable (pointzonalstats src/pointzonalstats.cpp src/lasutil.cpp)
