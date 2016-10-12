@@ -28,6 +28,11 @@
 #include "lasgrid.hpp"
 #include "lasutil.hpp"
 #include "pointstream.hpp"
+#include "simplegeom.hpp"
+
+#include "SFCGAL/algorithm/area.h"
+#include "SFCGAL/TriangulatedSurface.h"
+#include "SFCGAL/Triangle.h"
 
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
@@ -35,6 +40,7 @@ namespace alg = boost::algorithm;
 using namespace geotools::util;
 using namespace geotools::raster;
 using namespace geotools::las;
+using namespace geotools::geom;
 
 namespace geotools {
 
@@ -52,7 +58,8 @@ namespace geotools {
 			std::map<std::string, unsigned char> types = {
 				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
 				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
-				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, {"Median", TYPE_MEDIAN}
+				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, 
+				{"Median", TYPE_MEDIAN}, {"Rugosity", TYPE_RUGOSITY}, {"Kurtosis", TYPE_KURTOSIS}, {"Skewness", TYPE_SKEW}
 			};
 			std::map<std::string, unsigned char> attributes = {
 				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
@@ -93,118 +100,208 @@ namespace geotools {
 				return r <= radius;
 			}
 
-			double cellArea;
+			CellStats::~CellStats() {}
 
-			double computeDensity(const std::list<double> &values) {
-				if(values.size() == 0)
-					return -9999.0;
-				return values.size() / cellArea;
-			}
-
-			double computeMean(const std::list<double> &values) {
-				if(values.size() == 0)
-					return -9999.0;
-				double sum = 0.0;
-				for(const double &v : values)
-					sum += v;
-				return sum / values.size();
-			}
-
-			double computeCount(const std::list<double> &values) {
-				return values.size();
-			}
-
-			double computeMedian(const std::list<double> &values) {
-				if(values.size() <= 1)
-					return -9999.0;
-				std::vector<double> v(values.begin(), values.end());
-				std::sort(v.begin(), v.end());
-				unsigned int size = v.size();
-				if(size % 2 == 0) {
-					return (v[(int) size / 2] - v[(int) size / 2 - 1]) / 2.0;
-				} else {
-					return v[(int) size / 2];
+			class CellDensity : public CellStats {
+			private:
+				double m_cellArea;
+			public:
+				CellDensity(double cellArea) :
+					m_cellArea(cellArea) {
 				}
-			}
 
-			double computeMin(const std::list<double> &values) {
-				if(values.size() <= 1)
-					return -9999.0;
-				double min = *(values.begin());
-				for(const double &v : values) {
-					if(v < min)
-						min = v;
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() == 0)
+						return -9999.0;
+					return values.size() / m_cellArea;
 				}
-				return min;
-			}
+			};
 
-			double computeMax(const std::list<double> &values) {
-				if(values.size() <= 1)
-					return -9999.0;
-				double max = *(values.begin());
-				for(const double &v : values) {
-					if(v > max)
-						max = v;
+			class CellMean : public CellStats {
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() == 0)
+						return -9999.0;
+					double sum = 0.0;
+					for(const std::unique_ptr<Pt> &v : values)
+						sum += v->z;
+					return sum / values.size();
 				}
-				return max;
-			}
+			};
 
-			double computeVariance(const std::list<double> &values) {
-				if(values.size() <= 1)
-					return -9999.0;			
-				double mean = lasgrid_util::computeMean(values);
-				double sum = 0;
-				for(const double &v : values)
-					sum += g_sq(g_abs(v - mean));
-				return sum / (values.size() - 1);
-			}
+			class CellCount : public CellStats {
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					return values.size();
+				}
+			};
 
-			double computePVariance(const std::list<double> &values) {
-				if(values.size() <= 1)
-					return -9999.0;			
-				double mean = lasgrid_util::computeMean(values);
-				double sum = 0;
-				for(const double &v : values)
-					sum += g_sq(g_abs(v - mean));
-				return sum / values.size();
-			}
+			class CellMedian : public CellStats {
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() <= 1)
+						return -9999.0;
+					int i = 0;
+					std::vector<double> v(values.size());
+					for(const std::unique_ptr<Pt> &pt : values)
+						v[i++] = pt->z;
+					std::sort(v.begin(), v.end());
+					unsigned int size = v.size();
+					if(size % 2 == 0) {
+						return (v[(int) size / 2] + v[(int) size / 2 - 1]) / 2.0;
+					} else {
+						return v[(int) size / 2];
+					}
+				}
+			};
 
-			double computeStdDev(const std::list<double> &values) {
-				if(values.size() == 0)
-					return -9999.0;
-				return std::sqrt(lasgrid_util::computeVariance(values));
-			}
+			class CellMin : public CellStats {
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() <= 1)
+						return -9999.0;
+					double min = G_DBL_MAX_POS;
+					for(const std::unique_ptr<Pt> &v : values) {
+						if(v->z < min)
+							min = v->z;
+					}
+					return min;
+				}
+			};
 
-			double computePStdDev(const std::list<double> &values) {
-				if(values.size() == 0)
-					return -9999.0;
-				return std::sqrt(lasgrid_util::computePVariance(values));
-			}
+			class CellMax : public CellStats {
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() <= 1)
+						return -9999.0;
+					double max = G_DBL_MAX_NEG;
+					for(const std::unique_ptr<Pt> &v : values) {
+						if(v->z > max)
+							max = v->z;
+					}
+					return max;
+				}
+			};
 
-			double computeSkew(const std::list<double> &values) {
-				if(values.size() == 0)
-					return -9999.0;
-				// Fisher-Pearson
-				double mean = lasgrid_util::computeMean(values);
-				double sum = 0.0;
-				unsigned int count = values.size();
-				for(const double &v : values)
-					sum += std::pow(v - mean, 3.0) / count;
-				return sum / std::pow(lasgrid_util::computeStdDev(values), 3.0);
-			}
+			class CellSampleVariance : public CellStats {
+			private:
+				CellMean m_mean;
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() <= 1)
+						return -9999.0;			
+					double mean = m_mean.compute(values);
+					double sum = 0;
+					for(const std::unique_ptr<Pt> &v : values)
+						sum += g_sq(g_abs(v->z - mean));
+					return sum / (values.size() - 1);
+				}
+			};
 
-			double computeKurtosis(const std::list<double> &values) {
-				if(values.size() == 0)
-					return -9999.0;
-				double mean = lasgrid_util::computeMean(values);
-				double sum = 0.0;
-				unsigned int count = values.size();
-				for(const double &v : values)
-					sum += std::pow(v - mean, 4.0) / count;
-				return sum / std::pow(lasgrid_util::computePStdDev(values), 4.0);
-			}
+			class CellPopulationVariance : public CellStats {
+			private:
+				CellMean m_mean;
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() <= 1)
+						return -9999.0;			
+					double mean = m_mean.compute(values);
+					double sum = 0;
+					for(const std::unique_ptr<Pt> &v : values)
+						sum += g_sq(g_abs(v->z - mean));
+					return sum / values.size();
+				}
+			};
 
+			class CellSampleStdDev : public CellStats {
+			private:
+				CellSampleVariance m_variance;
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() == 0)
+						return -9999.0;
+					return std::sqrt(m_variance.compute(values));
+				}
+			};
 
+			class CellPopulationStdDev : public CellStats {
+			private:
+				CellPopulationVariance m_variance;
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() == 0)
+						return -9999.0;
+					return std::sqrt(m_variance.compute(values));
+				}
+			};
+
+			class CellSkewness : public CellStats {
+			private:
+				CellMean m_mean;
+				CellSampleStdDev m_stdDev;
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() == 0)
+						return -9999.0;
+					// Fisher-Pearson
+					double mean = m_mean.compute(values);
+					double sum = 0.0;
+					unsigned int count = values.size();
+					for(const std::unique_ptr<Pt> &v : values)
+						sum += std::pow(v->z - mean, 3.0) / count;
+					return sum / std::pow(m_stdDev.compute(values), 3.0);
+				}
+			};
+
+			class CellKurtosis : public CellStats {
+			private:
+				CellMean m_mean;
+				CellSampleStdDev m_stdDev;
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() == 0)
+						return -9999.0;
+					double mean = m_mean.compute(values);
+					double sum = 0.0;
+					unsigned int count = values.size();
+					for(const std::unique_ptr<Pt> &v : values)
+						sum += std::pow(v->z - mean, 4.0) / count;
+					return sum / std::pow(m_stdDev.compute(values), 4.0) - 3.0;
+				}
+			};
+
+			class CellQuantile : public CellStats {
+			private:
+				unsigned int m_quantile;
+				unsigned int m_quantiles;
+			public:
+				CellQuantile(unsigned char quantile, unsigned char quantiles) :
+					m_quantile(quantile), m_quantiles(quantiles) {
+				}
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					return 0;
+				}
+			};
+
+			class CellRugosity : public CellStats {
+			public:
+				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+					if(values.size() == 0)
+						return -9999.0;
+					std::list<std::tuple<float, float, double> > coords;
+					for(const std::unique_ptr<Pt> &v : values)
+						coords.push_back(std::tuple<float, float, double>(v->x, v->y, v->z));
+					std::unique_ptr<SFCGAL::TriangulatedSurface> geom = SimpleGeom::getDelaunayTriangles(coords);
+					double tarea = 0;
+					double parea = 0;
+					for(size_t i = 0; i < geom->numGeometries(); ++i) {
+						const SFCGAL::Triangle &t = geom->geometryN(i);
+						tarea += SFCGAL::algorithm::area3D(t);
+						parea += SFCGAL::algorithm::area(t);
+					}
+					return tarea / parea;
+				}
+			};
 
 		} // util
 
@@ -298,10 +395,34 @@ namespace geotools {
 			g_debug(" -- computeWorkBounds - work bounds final: " << workBounds.print() << "; point count " << *pointCount);
 		}
 
+		geotools::las::lasgrid_util::CellStats* LASGrid::getComputer(const LASGridConfig &config) {
+			using namespace geotools::las::lasgrid_util;
+			switch(config.type) {
+			case TYPE_MEAN: return new CellMean();
+			case TYPE_MEDIAN: return new CellMedian();
+			case TYPE_COUNT: return new CellCount();
+			case TYPE_STDDEV: return new CellSampleStdDev();
+			case TYPE_VARIANCE: return new CellSampleVariance();
+			case TYPE_PSTDDEV: return new CellPopulationStdDev();
+			case TYPE_PVARIANCE: return new CellPopulationVariance();
+			case TYPE_DENSITY: return new CellDensity(g_sq(config.resolution));
+			case TYPE_RUGOSITY: return new CellRugosity();
+			case TYPE_MAX: return new CellMax();
+			case TYPE_MIN: return new CellMin();
+			case TYPE_KURTOSIS: return new CellKurtosis();
+			case TYPE_SKEW: return new CellSkewness();
+			case TYPE_QUANTILE: return new CellQuantile(config.quantile, config.quantiles);
+			default:
+				g_argerr("Invalid statistic type: " << config.type);
+			}
+		}
+
 		void LASGrid::lasgrid(const LASGridConfig &config) {
 
 			checkConfig(config);
 			
+			using namespace geotools::las::lasgrid_util;
+
 			// Compute the work bounds, and store the list
 			// of relevant files. Snap the bounds if necessary.
 			std::set<std::string> files;
@@ -327,50 +448,7 @@ namespace geotools {
 
 			g_debug(" -- lasgrid - " << filesv.size() << " files");
 
-			double (* compute)(const std::list<double>&) = nullptr;
-			switch(config.type) {
-			case TYPE_MEAN:
-				compute = &lasgrid_util::computeMean;
-				break;
-			case TYPE_MEDIAN:
-				compute = &lasgrid_util::computeMedian;
-				break;
-			case TYPE_COUNT:
-				compute = &lasgrid_util::computeCount;
-				break;
-			case TYPE_PSTDDEV:
-				compute = &lasgrid_util::computePStdDev;
-				break;
-			case TYPE_VARIANCE:
-				compute = &lasgrid_util::computeVariance;
-				break;
-			case TYPE_PVARIANCE:
-				compute = &lasgrid_util::computePVariance;
-				break;
-			case TYPE_STDDEV:
-				compute = &lasgrid_util::computeStdDev;
-				break;
-			case TYPE_DENSITY:
-				lasgrid_util::cellArea = g_abs(grid.resolutionX() * grid.resolutionY());
-				compute = &lasgrid_util::computeDensity;
-				break;
-			case TYPE_RUGOSITY:
-				break;
-			case TYPE_MAX:
-				compute = &lasgrid_util::computeMax;
-				break;
-			case TYPE_MIN:
-				compute = &lasgrid_util::computeMin;
-				break;
-			case TYPE_KURTOSIS:
-				compute = &lasgrid_util::computeKurtosis;
-				break;
-			case TYPE_SKEW:
-				compute = &lasgrid_util::computeSkew;
-				break;
-			case TYPE_QUANTILE:
-				break;
-			}
+			CellStats *computer = getComputer(config);
 
 			#pragma omp parallel
 			{
@@ -379,13 +457,16 @@ namespace geotools {
 				for(unsigned int i = 0; i < filesv.size(); ++i) {
 					const std::string &file = filesv[i];
 
-					std::unordered_map<unsigned long, std::list<double> > values;
+					std::unordered_map<unsigned long, std::list<std::unique_ptr<Pt> > > values;
 
 					LASPoint pt;
 					PointStream ps(file);
 
 					while(ps.next(pt)) {
+						
 						unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
+						float x = (float) pt.x;
+						float y = (float) pt.y;
 						double val = 0;
 
 						switch(config.attribute) {
@@ -397,7 +478,8 @@ namespace geotools {
 							break;
 						}
 
-						values[idx].push_back(val);
+						std::unique_ptr<Pt> pv(new Pt(x, y, val));
+						values[idx].push_back(std::move(pv));
 					}
 
 					std::set<unsigned long> ids;
@@ -406,11 +488,13 @@ namespace geotools {
 
 					g_debug(" -- lasgrid - computing results");
 					for(const unsigned long &id : ids)
-						grid.set(id, compute(values[id]));
+						grid.set(id, computer->compute(values[id]));
 				}
 
 
 			}
+
+			delete computer;
 
 
 //				if(m_callbacks)

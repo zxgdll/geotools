@@ -49,6 +49,25 @@ namespace geotools {
 
 		}
 
+		namespace lasgrid_util {
+
+			class Pt {
+			public:
+				float x;
+				float y;
+				double z;
+				Pt(float x, float y, double z) :
+					x(x), y(y), z(z) {}
+			};
+
+			class CellStats {
+			public:
+				virtual double compute(const std::list<std::unique_ptr<Pt> > &values)=0;
+				virtual ~CellStats();
+			};
+
+		}
+
 		/**
 		 * Contains configuration values for running the lasgrid process.
 		 */
@@ -67,6 +86,8 @@ namespace geotools {
 			unsigned char angleLimit;
 			bool fill;
 			bool snap;
+			unsigned char quantile;
+			unsigned char quantiles;
 
 			/**
 			 * Interpret the attribute and  return the constant int value.
@@ -97,6 +118,8 @@ namespace geotools {
 			 * Throw an exception if it's invalid or absent.
 			 */
 			void checkConfig(const LASGridConfig &config);
+
+			geotools::las::lasgrid_util::CellStats* getComputer(const LASGridConfig &config);
 
 			/**
 			 * Compute the working bounds and the selection of files

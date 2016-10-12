@@ -218,7 +218,7 @@ void Bounds::print(std::ostream &str) const {
 
 void Util::parseRanges(std::set<double> &values, const char *str, double step) {
 	std::stringstream ss;
-	double first, second;
+	double first = 0, second = 0;
 	bool range = false;
 	int i = 0;
 	char c = str[i++];
@@ -255,7 +255,7 @@ void Util::parseRanges(std::set<double> &values, const char *str, double step) {
 
 void Util::parseRanges(std::set<int> &values, const char *str) {
 	std::stringstream ss;
-	int first, second;
+	int first = 0, second = 0;
 	bool range = false;
 	int i = 0;
 	char c = str[i++];

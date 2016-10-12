@@ -9,11 +9,20 @@
 #include "geos/geom/LinearRing.h"
 #include "geos/geom/CoordinateSequence.h"
 #include "geos/geom/CoordinateSequenceFactory.h"
+#include "geos/triangulate/DelaunayTriangulationBuilder.h"
+
+#include <SFCGAL/MultiPoint.h>
+#include <SFCGAL/Point.h>
+#include <SFCGAL/Geometry.h>
+#include <SFCGAL/triangulate/triangulate2DZ.h>
+#include <SFCGAL/detail/triangulate/ConstraintDelaunayTriangulation.h>
+#include <SFCGAL/TriangulatedSurface.h>
 
 namespace util = geotools::util;
 
 using namespace geos::geom;
 using namespace geos::util;
+using namespace geos::triangulate;
 
 namespace geotools {
 	namespace geom {
@@ -23,6 +32,22 @@ namespace geotools {
 
 		class SimpleGeom {
 		public:
+
+			template <class X, class Y, class Z>
+			static std::unique_ptr<SFCGAL::TriangulatedSurface> getDelaunayTriangles(const std::list<std::tuple<X, Y, Z> > &coords) {
+				namespace tri = SFCGAL::triangulate;
+				SFCGAL::MultiPoint mp;
+				X x;
+				Y y;
+				Z z;
+				for(const std::tuple<X, Y, Z> &coord : coords) {
+					std::tie(x, y, z) = coord;
+					mp.addGeometry(new SFCGAL::Point((double) x, (double) y, (double) z));
+				}
+				tri::ConstraintDelaunayTriangulation tes = tri::triangulate2DZ(mp);
+				std::unique_ptr<SFCGAL::TriangulatedSurface> tesu(tes.getTriangulatedSurface().release());
+				return std::move(tesu);
+			}
 
 			static geos::geom::Point* createPoint(double x, double y, double z) {
 				const Coordinate c(x, y, z);
