@@ -103,7 +103,7 @@ target_link_libraries (spectral-app PUBLIC spectral)
 
 
 add_library(pointstats SHARED src/pointstats.cpp src/lasutil.cpp src/pointstream.cpp)
-target_link_libraries (pointstats gdal geos CGAL SFCGAL laszip las boost_system boost_filesystem raster util geotools)
+target_link_libraries (pointstats gdal geos gmp CGAL SFCGAL laszip las boost_system boost_filesystem raster util geotools)
 if(${WITH_GUI})
 	add_executable (pointstats-app src/apps/pointstats.cpp src/apps/pointstats_ui.cpp src/apps/crs_selector_ui.cpp)
 	target_link_libraries (pointstats-app PUBLIC pointstats Qt5::Gui Qt5::Core Qt5::Widgets)

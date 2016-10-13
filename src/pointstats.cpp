@@ -30,9 +30,14 @@
 #include "pointstream.hpp"
 #include "simplegeom.hpp"
 
-#include "SFCGAL/algorithm/area.h"
-#include "SFCGAL/TriangulatedSurface.h"
-#include "SFCGAL/Triangle.h"
+#include <CGAL/Plane_3.h>
+#include <CGAL/linear_least_squares_fitting_3.h>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Projection_traits_xy_3.h>
+#include <CGAL/Delaunay_triangulation_2.h>
+#include <CGAL/convex_hull_2.h>
+#include <CGAL/linear_least_squares_fitting_3.h>
+#include <CGAL/Polygon_2_algorithms.h>
 
 namespace fs = boost::filesystem;
 namespace alg = boost::algorithm;
@@ -283,22 +288,81 @@ namespace geotools {
 				}
 			};
 
+
+			typedef CGAL::Exact_predicates_inexact_constructions_kernel	K;
+			typedef CGAL::Projection_traits_xy_3<K>  					Gt;
+			typedef CGAL::Delaunay_triangulation_2<Gt> 					Delaunay;
+			typedef K::Point_3 											Point_3;
+			typedef K::Plane_3 											Plane_3;
+			typedef Delaunay::Finite_faces_iterator						Finite_faces_iterator;
+			typedef Delaunay::Face										Face;
+			typedef CGAL::Polygon_2<K>									Polygon_2;
+
+
 			class CellRugosity : public CellStats {
+			private:
+				static const int a = 2, b = 1, c = 0;
+
+				double computeArea(const Face &face) {
+					Point_3 p1 = face.vertex(0)->point();
+					Point_3 p2 = face.vertex(1)->point();
+					Point_3 p3 = face.vertex(2)->point();
+					double sides[] {
+						std::sqrt(std::pow(p1.x() - p2.x(), 2.0) + std::pow(p1.y() - p2.y(), 2.0) + std::pow(p1.z() - p2.z(), 2.0)),
+						std::sqrt(std::pow(p2.x() - p3.x(), 2.0) + std::pow(p2.y() - p3.y(), 2.0) + std::pow(p2.z() - p3.z(), 2.0)),
+						std::sqrt(std::pow(p3.x() - p1.x(), 2.0) + std::pow(p3.y() - p1.y(), 2.0) + std::pow(p3.z() - p1.z(), 2.0)),
+					};
+					double s = (sides[a] + sides[b] + sides[c]) / 2.0;
+					return std::sqrt(s * (s - sides[a]) * (s - sides[b]) * (s - sides[c]));
+				}
+
+				double toPlane(const Point_3 &p, const Plane_3 &plane, const Point_3 &centroid) {
+					// (ax + by + d) / -c = z
+					return (p.x() * plane.a() + p.y() * plane.b() + plane.d()) / -plane.c();
+				}
+
 			public:
+
+				/**
+				 * Using Du Preez, 2014 - Arc-Chord Ratio (ACR) Index.
+				 */
 				double compute(const std::list<std::unique_ptr<Pt> > &values) {
 					if(values.size() == 0)
 						return -9999.0;
-					std::list<std::tuple<float, float, double> > coords;
+					
+					std::list<Point_3> pts;
 					for(const std::unique_ptr<Pt> &v : values)
-						coords.push_back(std::tuple<float, float, double>(v->x, v->y, v->z));
-					std::unique_ptr<SFCGAL::TriangulatedSurface> geom = SimpleGeom::getDelaunayTriangles(coords);
-					double tarea = 0;
-					double parea = 0;
-					for(size_t i = 0; i < geom->numGeometries(); ++i) {
-						const SFCGAL::Triangle &t = geom->geometryN(i);
-						tarea += SFCGAL::algorithm::area3D(t);
-						parea += SFCGAL::algorithm::area(t);
-					}
+						pts.push_back(Point_3((double) v->x, (double) v->y, (double) v->z));
+					//g_debug(" -- rugosity - points " << pts.size());
+					
+					// Delaunay 3D surface area.
+					Delaunay dt(pts.begin(), pts.end());
+					double tarea = 0.0;
+					for(Finite_faces_iterator it = dt.finite_faces_begin(); it != dt.finite_faces_end(); ++it)
+						tarea += computeArea(*it);
+					//g_debug(" -- rugosity - tarea " << tarea);
+
+					// Convex hull
+					std::list<Point_3> hull;
+					CGAL::convex_hull_2(pts.begin(), pts.end(), std::back_inserter(hull), Gt());
+					std::list<Point_3> hullPts;
+					for(const Point_3 &pt : hull)
+						hullPts.push_back(Point_3(pt.x(), pt.y(), 0.0));
+					//g_debug(" -- rugosity - hull points " << hull.size());
+
+					// Plane of best fit.
+					Plane_3 plane;
+					Point_3 centroid;
+					CGAL::linear_least_squares_fitting_3(hull.begin(), hull.end(), plane, centroid, CGAL::Dimension_tag<0>());
+
+					// Hull area.
+					std::list<Point_3> polyPts;
+					for(const Point_3 &pt : hull)
+						polyPts.push_back(Point_3(pt.x(), pt.y(), toPlane(pt, plane, centroid)));
+					double xarea = CGAL::polygon_area_2(hullPts.begin(), hullPts.end(), Gt());
+					double parea = CGAL::polygon_area_2(polyPts.begin(), polyPts.end(), Gt());
+
+					//g_debug(" -- rugosity areas " << tarea << ", " << parea << ", " << xarea);
 					return tarea / parea;
 				}
 			};

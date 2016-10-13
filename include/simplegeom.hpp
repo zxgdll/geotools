@@ -17,6 +17,7 @@
 #include <SFCGAL/triangulate/triangulate2DZ.h>
 #include <SFCGAL/detail/triangulate/ConstraintDelaunayTriangulation.h>
 #include <SFCGAL/TriangulatedSurface.h>
+#include <SFCGAL/algorithm/convexHull.h>
 
 namespace util = geotools::util;
 
@@ -47,6 +48,20 @@ namespace geotools {
 				tri::ConstraintDelaunayTriangulation tes = tri::triangulate2DZ(mp);
 				std::unique_ptr<SFCGAL::TriangulatedSurface> tesu(tes.getTriangulatedSurface().release());
 				return std::move(tesu);
+			}
+
+			template <class X, class Y, class Z>
+			static std::unique_ptr<SFCGAL::Geometry> getConvexHull(const std::list<std::tuple<X, Y, Z> > &coords) {
+				SFCGAL::MultiPoint mp;
+				X x;
+				Y y;
+				Z z;
+				for(const std::tuple<X, Y, Z> &coord : coords) {
+					std::tie(x, y, z) = coord;
+					mp.addGeometry(new SFCGAL::Point((double) x, (double) y, (double) z));
+				}
+				std::unique_ptr<SFCGAL::Geometry> geom(SFCGAL::algorithm::convexHull3D(mp).release());
+				return std::move(geom);
 			}
 
 			static geos::geom::Point* createPoint(double x, double y, double z) {
