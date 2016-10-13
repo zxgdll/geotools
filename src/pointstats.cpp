@@ -47,6 +47,16 @@ using namespace geotools::raster;
 using namespace geotools::point;
 using namespace geotools::geom;
 
+typedef CGAL::Exact_predicates_inexact_constructions_kernel	K;
+typedef CGAL::Projection_traits_xy_3<K>  					Gt;
+typedef CGAL::Delaunay_triangulation_2<Gt> 					Delaunay;
+typedef K::Point_3 											Point_3;
+typedef K::Plane_3 											Plane_3;
+typedef Delaunay::Finite_faces_iterator						Finite_faces_iterator;
+typedef Delaunay::Face										Face;
+typedef CGAL::Polygon_2<K>									Polygon_2;
+
+
 namespace geotools {
 
 	namespace point {
@@ -289,15 +299,6 @@ namespace geotools {
 			};
 
 
-			typedef CGAL::Exact_predicates_inexact_constructions_kernel	K;
-			typedef CGAL::Projection_traits_xy_3<K>  					Gt;
-			typedef CGAL::Delaunay_triangulation_2<Gt> 					Delaunay;
-			typedef K::Point_3 											Point_3;
-			typedef K::Plane_3 											Plane_3;
-			typedef Delaunay::Finite_faces_iterator						Finite_faces_iterator;
-			typedef Delaunay::Face										Face;
-			typedef CGAL::Polygon_2<K>									Polygon_2;
-
 
 			class CellRugosity : public CellStats {
 			private:
@@ -318,7 +319,9 @@ namespace geotools {
 
 				double toPlane(const Point_3 &p, const Plane_3 &plane, const Point_3 &centroid) {
 					// (ax + by + d) / -c = z
-					return (p.x() * plane.a() + p.y() * plane.b() + plane.d()) / -plane.c();
+					double z = (p.x() * plane.a() + p.y() * plane.b() + plane.d()) / -plane.c();
+					//g_debug(" -- toplane " << z << ", " << p.z());
+					return z;
 				}
 
 			public:
@@ -333,36 +336,32 @@ namespace geotools {
 					std::list<Point_3> pts;
 					for(const std::unique_ptr<Pt> &v : values)
 						pts.push_back(Point_3((double) v->x, (double) v->y, (double) v->z));
-					//g_debug(" -- rugosity - points " << pts.size());
 					
 					// Delaunay 3D surface area.
-					Delaunay dt(pts.begin(), pts.end());
 					double tarea = 0.0;
-					for(Finite_faces_iterator it = dt.finite_faces_begin(); it != dt.finite_faces_end(); ++it)
-						tarea += computeArea(*it);
-					//g_debug(" -- rugosity - tarea " << tarea);
+					{
+						Delaunay dt(pts.begin(), pts.end());
+						for(Finite_faces_iterator it = dt.finite_faces_begin(); it != dt.finite_faces_end(); ++it)
+							tarea += computeArea(*it);
+					}
 
-					// Convex hull
+					// Convex hull and POBF
 					std::list<Point_3> hull;
-					CGAL::convex_hull_2(pts.begin(), pts.end(), std::back_inserter(hull), Gt());
-					std::list<Point_3> hullPts;
-					for(const Point_3 &pt : hull)
-						hullPts.push_back(Point_3(pt.x(), pt.y(), 0.0));
-					//g_debug(" -- rugosity - hull points " << hull.size());
-
-					// Plane of best fit.
 					Plane_3 plane;
 					Point_3 centroid;
+					CGAL::convex_hull_2(pts.begin(), pts.end(), std::back_inserter(hull), Gt());
 					CGAL::linear_least_squares_fitting_3(hull.begin(), hull.end(), plane, centroid, CGAL::Dimension_tag<0>());
 
-					// Hull area.
-					std::list<Point_3> polyPts;
-					for(const Point_3 &pt : hull)
-						polyPts.push_back(Point_3(pt.x(), pt.y(), toPlane(pt, plane, centroid)));
-					double xarea = CGAL::polygon_area_2(hullPts.begin(), hullPts.end(), Gt());
-					double parea = CGAL::polygon_area_2(polyPts.begin(), polyPts.end(), Gt());
-
-					//g_debug(" -- rugosity areas " << tarea << ", " << parea << ", " << xarea);
+					// POBF surface area.
+					double parea = 0.0;
+					{
+						std::list<Point_3> poly; // TODO: Is there a faster way?
+						for(const Point_3 &pt : hull)
+							poly.push_back(Point_3(pt.x(), pt.y(), toPlane(pt, plane, centroid)));
+						Delaunay dt(poly.begin(), poly.end());
+						for(Finite_faces_iterator it = dt.finite_faces_begin(); it != dt.finite_faces_end(); ++it)
+							parea += computeArea(*it);
+					}
 					return tarea / parea;
 				}
 			};
