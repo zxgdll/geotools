@@ -18,9 +18,9 @@ double LASPoint::scaleX = 0;
 double LASPoint::scaleZ = 0;
 double LASPoint::scaleY = 0;
 
-PointStream::PointStream(const std::string &file) :
+PointStream::PointStream(const std::string &file, bool deepBounds) :
 	m_file(file) {
-	init();
+	init(deepBounds);
 }
 
 PointStream::~PointStream() {
@@ -32,7 +32,7 @@ unsigned int PointStream::pointCount() {
 	return m_pointCount;
 }
 
-void PointStream::init() {
+void PointStream::init(bool deepBounds) {
 	g_debug(" -- init: opening file: " << m_file);
 	
 	m_instr = new std::ifstream (m_file.c_str(), std::ios::binary);
@@ -45,7 +45,7 @@ void PointStream::init() {
 	m_pointCount = lasHeader.GetPointRecordsCount();
 
 	g_debug(" -- init computing bounds");
-	if(!LasUtil::computeLasBounds(lasHeader, m_fileBounds, 2))
+	if(!LasUtil::computeLasBounds(lasHeader, m_fileBounds, 2) && deepBounds)
 		LasUtil::computeLasBounds(lasReader, m_fileBounds, 2); // If the header bounds are bogus.
 
 	lasReader.Reset();

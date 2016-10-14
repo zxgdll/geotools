@@ -8,6 +8,7 @@
 #include <string>
 
 #include "csv.h"
+#include "boost/filesystem.hpp"
 
 #include "geotools.h"
 #include "util.hpp"
@@ -382,3 +383,9 @@ void Util::status(int step, int of, const std::string &message, bool end) {
         }
 }
 
+bool Util::mkdir(const std::string &dir) {
+	boost::filesystem::path bdir(dir);
+    if(!boost::filesystem::exists(bdir))
+        return boost::filesystem::create_directory(bdir);
+    return true;
+}

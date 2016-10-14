@@ -1,6 +1,10 @@
+#include "liblas/liblas.hpp"
+#include "boost/filesystem.hpp"
+
 #include "pointnormalize.hpp"
 #include "raster.hpp"
 #include "pointstream.hpp"
+#include "util.hpp"
 
 using namespace geotools::point;
 using namespace geotools::raster;
@@ -8,39 +12,61 @@ using namespace geotools::las;
 
 void PointNormalize::normalize(const PointNormalizeConfig &config, const Callbacks *callbacks) {
 
-	Raster<float> terrain(config.terrainFile, 1, false);
-	Raster<float> chm(config.chmFile, 1, terrain);
 
-	unsigned int fileIdx = 0;
-	for(const std::string &pointFile : config.pointFiles) {
+	if(config.pointOutputDir.empty())
+		g_argerr("A point output dir must be provided.");
 
-		if(callbacks)
-			callbacks->overallCallback((fileIdx + 0.5f) / config.pointFiles.size());
+	using namespace boost::filesystem;
 
-		PointStream ps(pointFile);
-		LASPoint pt;
+	if(!Util::mkdir(config.pointOutputDir))
+		g_argerr("Couldn't create output dir " << config.pointOutputDir);
 
-		unsigned int ptIdx = 0;
-		unsigned int ptInt = ps.pointCount() / 20;
+	path outDir(config.pointOutputDir);
+	liblas::ReaderFactory rf;
 
-		while(ps.next(pt)) {
+	std::vector<std::string> files(config.pointFiles.begin(), config.pointFiles.end());
 
-			int col = terrain.toCol(pt.x);
-			int row = terrain.toRow(pt.y);
-			chm.set(col, row, pt.z - terrain.get(col, row));
+	#pragma omp parallel
+	{
 
-			if(callbacks && ptIdx % ptInt == 0)
-				callbacks->fileCallback((float) ptIdx / ps.pointCount());
-			++ptIdx;
+		Raster<float> terrain(config.terrainFile, 1, false);
+
+		#pragma omp for
+		for(unsigned int i = 0; i < files.size(); ++i) {
+			
+			const std::string &pointFile = files[i];
+
+			path oldPath(pointFile);
+			path newPath(outDir / oldPath.filename());
+			
+			g_debug(" -- normalize (point) processing " << pointFile << " to " << newPath);
+
+			if(exists(newPath)) {
+				g_warn("The output file " << newPath << " already exists.");
+				continue;
+			}
+
+			std::ifstream instr(pointFile.c_str(), std::ios::binary);
+			liblas::Reader lasReader = rf.CreateWithStream(instr);
+			liblas::Header lasHeader = lasReader.GetHeader();
+
+			std::ofstream outstr(newPath.c_str(), std::ios::binary);
+			liblas::Writer lasWriter(outstr, lasHeader);
+
+			while(lasReader.ReadNextPoint()) {
+				const liblas::Point &opt = lasReader.GetPoint();
+				int col = terrain.toCol(opt.GetX());
+				int row = terrain.toRow(opt.GetY());
+				if(terrain.has(col, row)) {
+					liblas::Point npt(opt);
+					npt.SetZ(opt.GetZ() - terrain.get(col, row));
+					lasWriter.WritePoint(npt);
+				}
+			}
+			instr.close();
+			outstr.close();
 		}
 
-		if(callbacks)
-			callbacks->overallCallback((fileIdx + 1.0f) / config.pointFiles.size());
-		++fileIdx;
-	}	
-
-	if(callbacks) {
-		callbacks->overallCallback(1.0f);
-		callbacks->fileCallback(1.0f);
 	}
+
 }

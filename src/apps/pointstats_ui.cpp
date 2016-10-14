@@ -53,20 +53,31 @@ void PointStatsForm::setupUi(QWidget *form) {
 	m_type = defaultType;
 	int i = 0;
 	int defaultIdx = -1;
-	for(auto it = types.begin(); it != types.end(); ++it) {
-		cboType->addItem(QString::fromStdString(it->first), QVariant(it->second));
-		if(it->second == m_type)
+	for(const auto &it : types) {
+		cboType->addItem(QString::fromStdString(it.first), QVariant(it.second));
+		if(it.second == m_type)
 			defaultIdx = i;
 		++i;
 	}
 	cboType->setCurrentIndex(defaultIdx);
 
+	m_gapFunction = defaultGapFraction;
+	i = 0;
+	defaultIdx = -1;
+	for(const auto &it : gapFractionTypes) {
+		cboGapFunction->addItem(QString::fromStdString(it.first), QVariant(it.second));
+		if(it.second == m_gapFunction)
+			defaultIdx = i;
+		++i;
+	}
+	cboGapFunction->setCurrentIndex(defaultIdx);
+
 	m_attribute = defaultAttribute;
 	i = 0;
 	defaultIdx = -1;
-	for(auto it = attributes.begin(); it != attributes.end(); ++it) {
-		cboAttribute->addItem(QString::fromStdString(it->first), QVariant(it->second));
-		if(it->second == m_attribute)
+	for(const auto &it : attributes) {
+		cboAttribute->addItem(QString::fromStdString(it.first), QVariant(it.second));
+		if(it.second == m_attribute)
 			defaultIdx = i;
 		++i;
 	}
@@ -95,6 +106,7 @@ void PointStatsForm::setupUi(QWidget *form) {
 	connect(spnResolution, SIGNAL(valueChanged(double)), this, SLOT(resolutionChanged(double)));
 	connect(chkSnapToGrid, SIGNAL(toggled(bool)), this, SLOT(snapToGridChanged(bool)));
 	connect(cboAttribute, SIGNAL(currentIndexChanged(int)), this, SLOT(attributeSelected(int)));
+	connect(cboGapFunction, SIGNAL(currentIndexChanged(int)), this, SLOT(gapFunctionSelected(int)));
 	connect(spnThreads, SIGNAL(valueChanged(int)), SLOT(threadsChanged(int)));
 	connect(spnQuantile, SIGNAL(valueChanged(int)), SLOT(quantileChanged(int)));
 	connect(spnQuantiles, SIGNAL(valueChanged(int)), SLOT(quantilesChanged(int)));
@@ -103,6 +115,7 @@ void PointStatsForm::setupUi(QWidget *form) {
 	connect((PointStatsCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
 	connect(m_workerThread, SIGNAL(finished()), this, SLOT(done()));
 
+	updateTypeUi();
 }
 
 void PointStatsForm::threadsChanged(int threads) {
@@ -131,6 +144,12 @@ void PointStatsForm::attributeSelected(int index) {
 	checkRun();
 }
 
+void PointStatsForm::gapFunctionSelected(int index) {
+	std::string gap = cboGapFunction->itemText(index).toStdString();
+	m_gapFunction = gapFractionTypes[gap];
+	checkRun();
+}
+
 void PointStatsForm::snapToGridChanged(bool state) {
 	m_snap = state;
 	checkRun();
@@ -141,12 +160,20 @@ void PointStatsForm::resolutionChanged(double res) {
 	checkRun();
 }
 
+void PointStatsForm::updateTypeUi() {
+	// TODO: See state machine framework
+	spnQuantile->setVisible(m_type == TYPE_QUANTILE);
+	spnQuantiles->setVisible(m_type == TYPE_QUANTILE);
+	lblQuantile->setVisible(m_type == TYPE_QUANTILE);
+	lblQuantiles->setVisible(m_type == TYPE_QUANTILE);
+	cboGapFunction->setVisible(m_type == TYPE_GAP_FRACTION);
+	lblGapFunction->setVisible(m_type == TYPE_GAP_FRACTION);
+}
+
 void PointStatsForm::typeSelected(int index) {
 	std::string type = cboType->itemText(index).toStdString();
 	m_type = types[type];
-	bool on = m_type == TYPE_QUANTILE;
-	spnQuantile->setEnabled(on);
-	spnQuantiles->setEnabled(on);
+	updateTypeUi();
 	checkRun();
 }
 

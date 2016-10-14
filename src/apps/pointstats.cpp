@@ -16,6 +16,8 @@ void usage() {
 		<< " -o <output file>\n"
 		<< " -t <type>                   Output median, mean, max, min, variance (sample), pvariance (population),\n"
 		<< "                             count, density, stddev (sample), pstddev (population). Default mean.\n"
+		<< " -g <type>					 Gap Fraction type. These are IR, FR, RR, BLa and BLb, adaped from \n"
+		<< "                             Hopkins and Chasmer, 2009: Testing LiDAR Models of Fractional Cover...\n"
 		<< " -r <resolution>             Resolution (default 2).\n"
 		<< " -s <srid>                   The EPSG ID of the CRS.\n"
 		<< " -c <classes>                Comma-delimited (e.g. '2,0' (ground and unclassified)).\n"

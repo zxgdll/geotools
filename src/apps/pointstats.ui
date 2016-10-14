@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>736</width>
-    <height>526</height>
+    <width>781</width>
+    <height>561</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,8 +18,8 @@
     <rect>
      <x>10</x>
      <y>14</y>
-     <width>711</width>
-     <height>501</height>
+     <width>758</width>
+     <height>531</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout" stretch="1,0,1,0">
@@ -150,44 +150,71 @@
          <widget class="QComboBox" name="cboType"/>
         </item>
         <item row="4" column="0">
+         <widget class="QLabel" name="lblGapFunction">
+          <property name="text">
+           <string>Gap Function</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QComboBox" name="cboGapFunction"/>
+        </item>
+        <item row="5" column="0">
          <widget class="QLabel" name="lblQuantiles">
           <property name="text">
            <string>Quantiles</string>
           </property>
          </widget>
         </item>
-        <item row="4" column="1">
+        <item row="5" column="1">
          <widget class="QSpinBox" name="spnQuantiles">
           <property name="enabled">
-           <bool>false</bool>
+           <bool>true</bool>
           </property>
           <property name="minimum">
            <number>1</number>
           </property>
          </widget>
         </item>
-        <item row="5" column="0">
+        <item row="6" column="0">
          <widget class="QLabel" name="lblQuantile">
           <property name="text">
            <string>Quantile</string>
           </property>
          </widget>
         </item>
-        <item row="5" column="1">
+        <item row="6" column="1">
          <widget class="QSpinBox" name="spnQuantile">
           <property name="enabled">
-           <bool>false</bool>
+           <bool>true</bool>
           </property>
          </widget>
         </item>
         <item row="7" column="0">
+         <widget class="QLabel" name="lblMaxAngle">
+          <property name="text">
+           <string>Max Scan Angle</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1">
+         <widget class="QSpinBox" name="spnMaxAngle">
+          <property name="maximum">
+           <number>180</number>
+          </property>
+          <property name="value">
+           <number>180</number>
+          </property>
+         </widget>
+        </item>
+        <item row="8" column="0">
          <widget class="QLabel" name="lblSRID">
           <property name="text">
            <string>CRS</string>
           </property>
          </widget>
         </item>
-        <item row="7" column="1">
+        <item row="8" column="1">
          <layout class="QHBoxLayout" name="horizontalLayout_2">
           <item>
            <widget class="QLineEdit" name="txtCRSConfig">
@@ -214,42 +241,38 @@
           </item>
          </layout>
         </item>
-        <item row="8" column="0">
+        <item row="9" column="0">
          <widget class="QLabel" name="lblClasses">
           <property name="text">
            <string>Classes</string>
           </property>
          </widget>
         </item>
-        <item row="8" column="1">
+        <item row="9" column="1">
          <widget class="QListWidget" name="lstClasses"/>
         </item>
-        <item row="6" column="1">
-         <widget class="QSpinBox" name="spnMaxAngle">
-          <property name="maximum">
-           <number>180</number>
-          </property>
-          <property name="value">
-           <number>180</number>
-          </property>
-         </widget>
-        </item>
-        <item row="6" column="0">
-         <widget class="QLabel" name="lblMaxAngle">
-          <property name="text">
-           <string>Max Scan Angle</string>
-          </property>
-         </widget>
-        </item>
-        <item row="9" column="1">
-         <widget class="QSpinBox" name="spnThreads"/>
-        </item>
-        <item row="9" column="0">
+        <item row="10" column="0">
          <widget class="QLabel" name="label">
           <property name="text">
            <string>Threads</string>
           </property>
          </widget>
+        </item>
+        <item row="10" column="1">
+         <widget class="QSpinBox" name="spnThreads"/>
+        </item>
+        <item row="11" column="1">
+         <spacer name="verticalSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
         </item>
        </layout>
       </item>

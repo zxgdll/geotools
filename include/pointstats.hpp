@@ -10,6 +10,7 @@
 #include "geotools.h"
 #include "raster.hpp"
 #include "util.hpp"
+#include "pointstream.hpp"
 
 #define TYPE_MIN 1
 #define TYPE_MAX 2
@@ -25,6 +26,13 @@
 #define TYPE_SKEW 16
 #define TYPE_KURTOSIS 15
 #define TYPE_RUGOSITY 14
+#define TYPE_GAP_FRACTION 17
+
+#define GAP_IR 1
+#define GAP_BLA 2
+#define GAP_BLB 3
+#define GAP_RR 4
+#define GAP_FR 5
 
 #define LAS_EXT ".las"
 
@@ -42,26 +50,19 @@ namespace geotools {
 			extern unsigned char defaultType;
 			extern unsigned char defaultAngleLimit;
 			extern unsigned char defaultAttribute;
+			extern unsigned char defaultGapFraction;
 			extern std::set<unsigned char> defaultClasses;
 			extern std::map<std::string, unsigned char> types;
 			extern std::map<std::string, unsigned char> attributes;
+			extern std::map<std::string, unsigned char> gapFractionTypes;
 
 		}
 
 		namespace pointstats_util {
 
-			class Pt {
-			public:
-				double x;
-				double y;
-				double z;
-				Pt(double x, double y, double z) :
-					x(x), y(y), z(z) {}
-			};
-
 			class CellStats {
 			public:
-				virtual double compute(const std::list<std::unique_ptr<Pt> > &values)=0;
+				virtual double compute(const std::list<std::unique_ptr<geotools::las::LASPoint> > &values)=0;
 				virtual ~CellStats();
 			};
 
@@ -76,18 +77,19 @@ namespace geotools {
 			std::list<std::string> sourceFiles;
 			std::set<unsigned char> classes;
 			geotools::util::Bounds bounds;
+			bool fill;
+			bool snap;
 			double resolution;
+			unsigned int threads;
 			unsigned short hsrid;
 			unsigned short vsrid;
 			unsigned char attribute;
 			unsigned char type;
 			unsigned char angleLimit;
-			bool fill;
-			bool snap;
 			unsigned char quantile;
 			unsigned char quantiles;
-			unsigned int threads;
-			
+			unsigned char gapFractionType;
+
 			/**
 			 * Interpret the attribute and  return the constant int value.
 			 */
@@ -97,6 +99,8 @@ namespace geotools {
 			 * Interpret the output type and return the constant int value.
 			 */
 			unsigned char parseType(const std::string &typeStr);
+
+			unsigned char parseGap(const std::string &typeStr);
 
 			/**
 			 * Returns true if the classes set contains the class.

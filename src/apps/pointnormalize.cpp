@@ -1,14 +1,18 @@
+#include <iostream>
+
+#include "geotools.h"
 #include "pointnormalize.hpp"
 
+using namespace geotools::point;
+
 void usage() {
-	std::cerr << "Usage: pointnormalize <terrain file> <chmfile> <point file [point file [point file ...]]>\n"
+	std::cerr << "Usage: pointnormalize <options> <terrain file> <point file [point file [point file ...]]>\n"
+		<< " --point-dir                 The directory where normalized point files are to be written.\n"
 		<< " -v                          Verbose output.\n"
 		<< " -h                          Print this message.\n"
 		<< " --threads                   The number of threads to use for computing output.\n"
 		<< " -gui                        Run the graphical user interface.\n";
 }
-
-int main(int argc, char **argv) {
 	
 int main(int argc, char **argv) {
 
@@ -16,8 +20,10 @@ int main(int argc, char **argv) {
 
 		std::string terrainFile;
 		std::string chmFile;
+		std::string pointDir;
 		std::list<std::string> pointFiles;
 		int threads = 1;
+		bool gui = false;
 
 		g_loglevel(0);
 		
@@ -32,28 +38,28 @@ int main(int argc, char **argv) {
 				g_loglevel(G_LOG_DEBUG);
 			} else if(s == "--threads") {
 				threads = atoi(argv[++i]);
+			} else if(s == "--point-dir") {
+				pointDir.assign(argv[++i]);
 			} else {
 				if(terrainFile.empty()) {
 					terrainFile.assign(s);
-				} else if(chmFile.empty()) {
-					chmFile.assign(s);
 				} else {
-					pointFiles.push_back(argv[i]);
+					pointFiles.push_back(s);
 				}
 			}
 		}
 
 		if(gui) {
-			return runWithUI(argc, argv);
+			//return runWithUI(argc, argv);
 		} else {
-			PointNormaize pn;
-			PointNormailzeConfig config;
+			PointNormalize pn;
+			PointNormalizeConfig config;
 			config.terrainFile = terrainFile;
-			config.chmFile = chmFile;
+			config.pointOutputDir = pointDir;
 			config.pointFiles = pointFiles;
 			config.threads = threads;
 			
-			pn.pointnormalize(config);
+			pn.normalize(config);
 		}
 
 	} catch(const std::exception &ex) {

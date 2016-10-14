@@ -156,6 +156,8 @@ namespace geotools {
 
 			static void status(int step, int of, const std::string &message = "", bool end = false);
 
+			static bool mkdir(const std::string &dir);
+
 		};
 
 	} // util

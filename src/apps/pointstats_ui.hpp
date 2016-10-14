@@ -49,25 +49,27 @@ namespace geotools {
 			std::string m_destFile;
 			std::list<std::string> m_sourceFiles;
 			std::set<unsigned char> m_classes;
+			bool m_fill;
+			bool m_snap;
 			int m_vsrid;
 			int m_hsrid;
 			int m_attribute;
 			int m_type;
-			unsigned char m_angleLimit;
-			bool m_fill;
-			bool m_snap;
-			double m_resolution;
 			int m_quantile;
 			int m_quantiles;
+			double m_resolution;
 			unsigned int m_threads;
+			unsigned char m_angleLimit;
+			unsigned char m_gapFunction;
 			QDir m_last;
 			geotools::util::Callbacks *m_callbacks;
 			WorkerThread *m_workerThread;
 
 			void updateFileList();
 			void updateFileButtons();
+			void updateTypeUi();
 			void checkRun();
-
+			
 		public:
 			PointStatsForm(QWidget *p = Q_NULLPTR);
 			void setupUi(QWidget *Form);
@@ -90,6 +92,7 @@ namespace geotools {
 			void snapToGridChanged(bool);
 			void resolutionChanged(double);
 			void maxAngleChanged(int);
+			void gapFunctionSelected(int);
 			void done();
 
 		};
@@ -117,7 +120,8 @@ namespace geotools {
 					config.fill = m_parent->m_fill;
 					config.snap = m_parent->m_snap;
 					config.threads = m_parent->m_threads;
-			
+					config.gapFractionType = m_parent->m_gapFunction;
+
 					l.pointstats(config, m_parent->m_callbacks);
 				} catch(const std::exception &e) {
 					QMessageBox err((QWidget *) m_parent);

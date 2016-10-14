@@ -13,8 +13,9 @@ namespace geotools {
 		class PointNormalizeConfig {
 		public:
 			std::string terrainFile;
-			std::string chmFile;
+			std::string pointOutputDir;
 			std::list<std::string> pointFiles;
+			unsigned int threads;
 		};
 
 		class PointNormalize {

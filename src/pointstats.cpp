@@ -66,15 +66,21 @@ namespace geotools {
 			unsigned char defaultType = TYPE_MEAN;
 			unsigned char defaultAttribute = ATT_HEIGHT;
 			unsigned char defaultAngleLimit = 180;
+			unsigned char defaultGapFraction = GAP_BLB;
 			std::set<unsigned char> defaultClasses = {2}; 
+
 			std::map<std::string, unsigned char> types = {
 				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
 				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
 				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, 
-				{"Median", TYPE_MEDIAN}, {"Rugosity", TYPE_RUGOSITY}, {"Kurtosis", TYPE_KURTOSIS}, {"Skewness", TYPE_SKEW}
+				{"Median", TYPE_MEDIAN}, {"Rugosity", TYPE_RUGOSITY}, {"Kurtosis", TYPE_KURTOSIS}, {"Skewness", TYPE_SKEW},
+				{"Gap Fraction", TYPE_GAP_FRACTION}
 			};
 			std::map<std::string, unsigned char> attributes = {
 				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
+			};
+			std::map<std::string, unsigned char> gapFractionTypes = {
+				{"IR", GAP_IR}, {"BLa", GAP_BLA}, {"BLb", GAP_BLB}, {"RR", GAP_RR}, {"FR", GAP_FR}
 			};
 
 		} // config
@@ -91,7 +97,7 @@ namespace geotools {
 					m_cellArea(cellArea) {
 				}
 
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() == 0)
 						return -9999.0;
 					return values.size() / m_cellArea;
@@ -100,11 +106,11 @@ namespace geotools {
 
 			class CellMean : public CellStats {
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() == 0)
 						return -9999.0;
 					double sum = 0.0;
-					for(const std::unique_ptr<Pt> &v : values)
+					for(const std::unique_ptr<LASPoint> &v : values)
 						sum += v->z;
 					return sum / values.size();
 				}
@@ -112,19 +118,19 @@ namespace geotools {
 
 			class CellCount : public CellStats {
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					return values.size();
 				}
 			};
 
 			class CellMedian : public CellStats {
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() <= 1)
 						return -9999.0;
 					int i = 0;
 					std::vector<double> v(values.size());
-					for(const std::unique_ptr<Pt> &pt : values)
+					for(const std::unique_ptr<LASPoint> &pt : values)
 						v[i++] = pt->z;
 					std::sort(v.begin(), v.end());
 					unsigned int size = v.size();
@@ -138,11 +144,11 @@ namespace geotools {
 
 			class CellMin : public CellStats {
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() <= 1)
 						return -9999.0;
 					double min = G_DBL_MAX_POS;
-					for(const std::unique_ptr<Pt> &v : values) {
+					for(const std::unique_ptr<LASPoint> &v : values) {
 						if(v->z < min)
 							min = v->z;
 					}
@@ -152,11 +158,11 @@ namespace geotools {
 
 			class CellMax : public CellStats {
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() <= 1)
 						return -9999.0;
 					double max = G_DBL_MAX_NEG;
-					for(const std::unique_ptr<Pt> &v : values) {
+					for(const std::unique_ptr<LASPoint> &v : values) {
 						if(v->z > max)
 							max = v->z;
 					}
@@ -168,12 +174,12 @@ namespace geotools {
 			private:
 				CellMean m_mean;
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() <= 1)
 						return -9999.0;			
 					double mean = m_mean.compute(values);
 					double sum = 0;
-					for(const std::unique_ptr<Pt> &v : values)
+					for(const std::unique_ptr<LASPoint> &v : values)
 						sum += g_sq(g_abs(v->z - mean));
 					return sum / (values.size() - 1);
 				}
@@ -183,12 +189,12 @@ namespace geotools {
 			private:
 				CellMean m_mean;
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() <= 1)
 						return -9999.0;			
 					double mean = m_mean.compute(values);
 					double sum = 0;
-					for(const std::unique_ptr<Pt> &v : values)
+					for(const std::unique_ptr<LASPoint> &v : values)
 						sum += g_sq(g_abs(v->z - mean));
 					return sum / values.size();
 				}
@@ -198,7 +204,7 @@ namespace geotools {
 			private:
 				CellSampleVariance m_variance;
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() == 0)
 						return -9999.0;
 					return std::sqrt(m_variance.compute(values));
@@ -209,7 +215,7 @@ namespace geotools {
 			private:
 				CellPopulationVariance m_variance;
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() == 0)
 						return -9999.0;
 					return std::sqrt(m_variance.compute(values));
@@ -221,14 +227,14 @@ namespace geotools {
 				CellMean m_mean;
 				CellSampleStdDev m_stdDev;
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() == 0)
 						return -9999.0;
 					// Fisher-Pearson
 					double mean = m_mean.compute(values);
 					double sum = 0.0;
 					unsigned int count = values.size();
-					for(const std::unique_ptr<Pt> &v : values)
+					for(const std::unique_ptr<LASPoint> &v : values)
 						sum += std::pow(v->z - mean, 3.0) / count;
 					return sum / std::pow(m_stdDev.compute(values), 3.0);
 				}
@@ -239,13 +245,13 @@ namespace geotools {
 				CellMean m_mean;
 				CellSampleStdDev m_stdDev;
 			public:
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					if(values.size() == 0)
 						return -9999.0;
 					double mean = m_mean.compute(values);
 					double sum = 0.0;
 					unsigned int count = values.size();
-					for(const std::unique_ptr<Pt> &v : values)
+					for(const std::unique_ptr<LASPoint> &v : values)
 						sum += std::pow(v->z - mean, 4.0) / count;
 					return sum / std::pow(m_stdDev.compute(values), 4.0) - 3.0;
 				}
@@ -259,7 +265,7 @@ namespace geotools {
 				CellQuantile(unsigned char quantile, unsigned char quantiles) :
 					m_quantile(quantile), m_quantiles(quantiles) {
 				}
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 					return 0;
 				}
 			};
@@ -292,13 +298,13 @@ namespace geotools {
 				/**
 				 * Using Du Preez, 2014 - Arc-Chord Ratio (ACR) Index.
 				 */
-				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
 
 					if(values.size() == 0)
 						return -9999.0;
 					
 					std::list<Point_3> pts;
-					for(const std::unique_ptr<Pt> &v : values)
+					for(const std::unique_ptr<LASPoint> &v : values)
 						pts.push_back(Point_3(v->x, v->y, v->z));
 					
 					// Delaunay 3D surface area.
@@ -324,6 +330,107 @@ namespace geotools {
 						parea += computeArea(*it);
 
 					return tarea / parea;
+				}
+			};
+
+			/**
+			 * Adapted from:
+			 * Hopkinson, C., & Chasmer, L. (2009). Testing LiDAR models of fractional cover across 
+			 *	multiple forest ecozones. Remote Sensing of Environment, 113(1), 275–288. 
+			 *	http://doi.org/10.1016/j.rse.2008.09.012
+			 */
+			class CellGapFraction : public CellStats {
+			private:
+				unsigned char m_type;
+
+				double fcLidarBLa(const std::list<std::unique_ptr<LASPoint> > &values) {
+					double gnd = 0.0, all = 0.0;
+					for(const std::unique_ptr<LASPoint> &pt : values) {
+						if(pt->ground())
+							gnd += pt->intensity;
+						all += pt->intensity; // TODO: This should perhaps be filtered by class to remove bogus points.
+					}
+					return all != 0.0 ? 1.0 - std::sqrt(gnd / all) : -9999.0;
+				}
+
+				double fcLidarBLb(const std::list<std::unique_ptr<LASPoint> > &values) {
+					double gndSingle = 0.0, gndLast = 0.0, first = 0.0, single = 0.0, intermediate = 0.0, last = 0.0, total = 0.0;
+					for(const std::unique_ptr<LASPoint> &pt : values) {
+						if(pt->ground()) {
+							if(pt->single())
+								gndSingle += pt->intensity;
+							if(pt->last())
+								gndLast += pt->intensity;
+						}
+						if(pt->first())
+							first += pt->intensity;
+						if(pt->single())
+							single += pt->intensity;
+						if(pt->intermediate())
+							intermediate += pt->intensity;
+						if(pt->last())
+							last += pt->intensity;
+						total += pt->intensity; // TODO: This should perhaps be filtered by class to remove bogus points.
+					}
+					if(total == 0.0) return -9999.0;
+					double denom = (first + single) / total + std::sqrt((intermediate + last) / total);
+					if(denom == 0.0) return -9999.;
+					return (gndSingle / total + std::sqrt(gndLast / total)) / denom;
+				}
+
+				double fcLidarIR(const std::list<std::unique_ptr<LASPoint> > &values) {
+					double canopy = 0.0, total = 0.0;
+					for(const std::unique_ptr<LASPoint> &pt : values) {
+						if(!pt->ground())
+							canopy += pt->intensity;
+						total += pt->intensity;
+					}
+					return total != 0.0 ? canopy / total : -9999.0;
+				}
+
+				
+				double fcLidarRR(const std::list<std::unique_ptr<LASPoint> > &values) {
+					unsigned int canopy = 0, total = 0;
+					for(const std::unique_ptr<LASPoint> &pt : values) {
+						if(!pt->ground())
+							++canopy;
+						++total;
+					}
+					return total != 0.0 ? (double) canopy / total : -9999.0;
+				}
+				
+				double fcLidarFR(const std::list<std::unique_ptr<LASPoint> > &values) {
+					unsigned int canopy = 0, total = 0;
+					for(const std::unique_ptr<LASPoint> &pt : values) {
+						if(pt->first()) {
+							if(!pt->ground())
+								++canopy;
+							++total;
+						}
+					}
+					return total != 0.0 ? (double) canopy / total : -9999.0;
+				}
+			public:
+				const static unsigned char IR = GAP_IR;
+				const static unsigned char BLA = GAP_BLA;
+				const static unsigned char BLB = GAP_BLB;
+				const static unsigned char RR = GAP_RR;
+				const static unsigned char FR = GAP_FR;
+
+				CellGapFraction(unsigned char type) :
+					m_type(type) {
+				}
+
+				double compute(const std::list<std::unique_ptr<LASPoint> > &values) {
+					switch(m_type) {
+					case BLA:	return fcLidarBLa(values);
+					case BLB:	return fcLidarBLb(values);
+					case IR:	return fcLidarIR(values);
+					case RR:	return fcLidarRR(values);
+					case FR:	return fcLidarFR(values);
+					default:
+						g_argerr("Unknown Gap Fraction method: " << m_type);
+					}
 				}
 			};
 
@@ -414,20 +521,21 @@ namespace geotools {
 
 		CellStats* PointStats::getComputer(const PointStatsConfig &config) {
 			switch(config.type) {
-			case TYPE_MEAN: return new CellMean();
-			case TYPE_MEDIAN: return new CellMedian();
-			case TYPE_COUNT: return new CellCount();
-			case TYPE_STDDEV: return new CellSampleStdDev();
-			case TYPE_VARIANCE: return new CellSampleVariance();
-			case TYPE_PSTDDEV: return new CellPopulationStdDev();
-			case TYPE_PVARIANCE: return new CellPopulationVariance();
-			case TYPE_DENSITY: return new CellDensity(g_sq(config.resolution));
-			case TYPE_RUGOSITY: return new CellRugosity();
-			case TYPE_MAX: return new CellMax();
-			case TYPE_MIN: return new CellMin();
-			case TYPE_KURTOSIS: return new CellKurtosis();
-			case TYPE_SKEW: return new CellSkewness();
-			case TYPE_QUANTILE: return new CellQuantile(config.quantile, config.quantiles);
+			case TYPE_MEAN: 		return new CellMean();
+			case TYPE_MEDIAN: 		return new CellMedian();
+			case TYPE_COUNT: 		return new CellCount();
+			case TYPE_STDDEV: 		return new CellSampleStdDev();
+			case TYPE_VARIANCE: 	return new CellSampleVariance();
+			case TYPE_PSTDDEV: 		return new CellPopulationStdDev();
+			case TYPE_PVARIANCE:	return new CellPopulationVariance();
+			case TYPE_DENSITY: 		return new CellDensity(g_sq(config.resolution));
+			case TYPE_RUGOSITY: 	return new CellRugosity();
+			case TYPE_MAX: 			return new CellMax();
+			case TYPE_MIN: 			return new CellMin();
+			case TYPE_KURTOSIS: 	return new CellKurtosis();
+			case TYPE_SKEW: 		return new CellSkewness();
+			case TYPE_QUANTILE: 	return new CellQuantile(config.quantile, config.quantiles);
+			case TYPE_GAP_FRACTION:	return new CellGapFraction(config.gapFractionType);
 			default:
 				g_argerr("Invalid statistic type: " << config.type);
 			}
@@ -477,22 +585,22 @@ namespace geotools {
 				if(callbacks)
 					callbacks->overallCallback((fileIdx + 0.5f) / filesv.size());
 
-				std::unordered_map<unsigned long, std::list<std::unique_ptr<Pt> > > values;
+				std::unordered_map<unsigned long, std::list<std::unique_ptr<LASPoint> > > values;
 
 				LASPoint pt;
 				PointStream ps(file);
+				auto clsEnd = config.classes.end();
+				bool allCls = config.classes.size() == 0;
+
 				while(ps.next(pt)) {
+
+					// Pre-filter on class.
+					if(!allCls && config.classes.find(pt.cls) == clsEnd)
+						continue;
+
 					unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-					double val = 0;
-					switch(config.attribute) {
-					case ATT_INTENSITY: 
-						val = (double) pt.intensity;
-						break;
-					default: 
-						val = pt.z;
-						break;
-					}
-					std::unique_ptr<Pt> pv(new Pt(pt.x, pt.y, val));
+
+					std::unique_ptr<LASPoint> pv(new LASPoint(pt));
 					values[idx].push_back(std::move(pv));
 				}
 

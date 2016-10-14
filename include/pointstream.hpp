@@ -22,8 +22,10 @@ namespace geotools {
 			uint8_t cls;
 			int8_t angle;
 
-			LASPoint() {}
-			LASPoint(const liblas::Point &pt) {
+			LASPoint() : 
+				ret(0), numRets(0) {}
+
+			LASPoint(const liblas::Point &pt) : LASPoint() {
 				update(pt);
 			}
 
@@ -44,6 +46,25 @@ namespace geotools {
 				angle = pt.GetScanAngleRank();
 			}
 
+			bool last() {
+				return numRets > 0 && ret == numRets;
+			}
+
+			bool first() {
+				return numRets > 0 && ret == 1;
+			}
+
+			bool intermediate() {
+				return numRets > 2 && ret > 1 && ret < numRets;
+			}
+			
+			bool ground() {
+				return cls == 2;
+			}
+
+			bool single() {
+				return numRets == 1;
+			}
 		};
 
 		class PointStream {
@@ -55,20 +76,19 @@ namespace geotools {
 			liblas::Reader *m_lasReader;
 			std::ifstream *m_instr;
 
+			/**
+			 * Initializes the point stream.
+			 */
+			void init(bool deepBounds);
 		public:
 
 			/**
 			 * Constructs a new point stream on the given file.
 			 * The mode indicates which dimensions will be stored.
 			 */
-			PointStream(const std::string &file);
+			PointStream(const std::string &file, bool deepBounds = false);
 
 			~PointStream();
-
-			/**
-			 * Initializes the point stream.
-			 */
-			void init();
 
 			geotools::util::Bounds fileBounds();
 

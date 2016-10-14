@@ -68,6 +68,7 @@ include_directories(/usr/local/opt/sqlite/include include /usr/local/include /us
 
 add_library (geotools SHARED src/geotools.cpp)
 add_library (util SHARED src/util.cpp)
+target_link_libraries (util boost_system boost_filesystem)
 add_library (raster SHARED src/raster.cpp)
 target_link_libraries (raster gdal util geotools)
 
@@ -112,7 +113,7 @@ else()
 	target_link_libraries (pointstats-app PUBLIC pointstats)
 endif()
 
-add_library(pointnormalize SHARED src/pointnormalize.cpp src/pointstream.cpp)
+add_library(pointnormalize SHARED src/pointnormalize.cpp src/pointstream.cpp src/lasutil.cpp)
 target_link_libraries (pointnormalize gdal laszip las boost_system boost_filesystem raster geotools)
 if(${WITH_GUI})
 	#add_executable (pointnormalize-app src/apps/pointnormalize.cpp src/apps/pointnormalize_ui.cpp)
