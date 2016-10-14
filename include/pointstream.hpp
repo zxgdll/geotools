@@ -9,6 +9,7 @@
 #include "util.hpp"
 
 namespace geotools {
+
 	namespace las {
 
 		class LASPoint {
@@ -82,8 +83,9 @@ namespace geotools {
 
 		};
 
-	}
-}
+	} // las
+
+} // geotools
 
 
 #endif

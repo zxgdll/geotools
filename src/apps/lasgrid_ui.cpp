@@ -1,26 +1,23 @@
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QFileDialog>
 #include <QMessageBox>
-#include <QSettings>
 
 #include "geotools.h"
-#include "pointstats.hpp"
-#include "pointstats_ui.hpp"
+#include "lasgrid.hpp"
+#include "lasgrid_ui.hpp"
 #include "crs_selector_ui.hpp"
 
 using namespace geotools::ui;
-using namespace geotools::point;
-using namespace geotools::point::pointstats_config;
+using namespace geotools::las;
+using namespace geotools::las::lasgrid_config;
 
-QSettings _settings("PointStats", "Geotools");
-QString _last_dir("last_dir");
 
-PointStatsForm::PointStatsForm(QWidget *p) : 
+LasgridForm::LasgridForm(QWidget *p) : 
 	QWidget(p),
 	m_vsrid(0), m_hsrid(0) {
 }
 
-PointStatsForm::~PointStatsForm() {
+LasgridForm::~LasgridForm() {
 	delete m_callbacks;
 	if(m_workerThread) {
 		m_workerThread->exit(0);
@@ -28,27 +25,24 @@ PointStatsForm::~PointStatsForm() {
 	}
 }
 
-void PointStatsForm::setupUi(QWidget *form) {
+void LasgridForm::setupUi(QWidget *form) {
 
-	Ui::PointStatsForm::setupUi(form);
+	Ui::LasgridForm::setupUi(form);
+
+	g_loglevel(G_LOG_DEBUG);
 
 	m_form = form;
-	if(_settings.contains(_last_dir)) {
-		m_last.setPath(_settings.value(_last_dir).toString());
-	} else {
-		m_last = QDir::home();
-	}
+	m_last = QDir::home();
 
+	m_radius = defaultRadius;
 	m_resolution = defaultResolution;
 	m_angleLimit = defaultAngleLimit;
 	spnResolution->setValue(m_resolution);
+	spnRadius->setValue(m_radius);
 	spnMaxAngle->setValue(m_angleLimit);
 
 	m_workerThread = new WorkerThread();
-	m_callbacks = new PointStatsCallbacks();
-
-	spnThreads->setValue(m_threads);
-	spnThreads->setMaximum(g_max(1, omp_get_num_procs()));
+	m_callbacks = new LasCallbacks();
 
 	m_type = defaultType;
 	int i = 0;
@@ -94,54 +88,54 @@ void PointStatsForm::setupUi(QWidget *form) {
 	connect(cboType, SIGNAL(currentIndexChanged(int)), this, SLOT(typeSelected(int)));
 	connect(spnResolution, SIGNAL(valueChanged(double)), this, SLOT(resolutionChanged(double)));
 	connect(chkSnapToGrid, SIGNAL(toggled(bool)), this, SLOT(snapToGridChanged(bool)));
+	connect(spnRadius, SIGNAL(valueChanged(double)), this, SLOT(radiusChanged(double)));
 	connect(cboAttribute, SIGNAL(currentIndexChanged(int)), this, SLOT(attributeSelected(int)));
-	connect(spnThreads, SIGNAL(valueChanged(int)), SLOT(threadsChanged(int)));
 	connect(spnQuantile, SIGNAL(valueChanged(int)), SLOT(quantileChanged(int)));
 	connect(spnQuantiles, SIGNAL(valueChanged(int)), SLOT(quantilesChanged(int)));
 	connect(spnMaxAngle, SIGNAL(valueChanged(int)), SLOT(maxAngleChanged(int)));
-	connect((PointStatsCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
-	connect((PointStatsCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
+	connect((LasCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
+	connect((LasCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
 	connect(m_workerThread, SIGNAL(finished()), this, SLOT(done()));
 
 }
 
-void PointStatsForm::threadsChanged(int threads) {
-	m_threads = threads;
-	checkRun();
-}
-
-void PointStatsForm::maxAngleChanged(int q) {
+void LasgridForm::maxAngleChanged(int q) {
 	m_angleLimit = q;
 	checkRun();
 }
 
-void PointStatsForm::quantileChanged(int q) {
+void LasgridForm::quantileChanged(int q) {
 	m_quantile = q;
 	checkRun();
 }
 
-void PointStatsForm::quantilesChanged(int q) {
+void LasgridForm::quantilesChanged(int q) {
 	m_quantiles = q;
 	checkRun();
 }
 
-void PointStatsForm::attributeSelected(int index) {
+void LasgridForm::attributeSelected(int index) {
 	std::string att = cboAttribute->itemText(index).toStdString();
 	m_attribute = attributes[att];
 	checkRun();
 }
 
-void PointStatsForm::snapToGridChanged(bool state) {
+void LasgridForm::radiusChanged(double radius) {
+	m_radius = radius;
+	checkRun();
+}
+
+void LasgridForm::snapToGridChanged(bool state) {
 	m_snap = state;
 	checkRun();
 }
 
-void PointStatsForm::resolutionChanged(double res) {
+void LasgridForm::resolutionChanged(double res) {
 	m_resolution = res;
 	checkRun();
 }
 
-void PointStatsForm::typeSelected(int index) {
+void LasgridForm::typeSelected(int index) {
 	std::string type = cboType->itemText(index).toStdString();
 	m_type = types[type];
 	bool on = m_type == TYPE_QUANTILE;
@@ -150,7 +144,7 @@ void PointStatsForm::typeSelected(int index) {
 	checkRun();
 }
 
-void PointStatsForm::crsConfigClicked() {
+void LasgridForm::crsConfigClicked() {
 	CRSSelector cs(m_form);
 	cs.setHorizontalSRID(m_hsrid);
 	cs.setVerticalSRID(m_vsrid);
@@ -166,21 +160,20 @@ void PointStatsForm::crsConfigClicked() {
 	checkRun();
 }
 
-void PointStatsForm::fileListSelectionChanged() {
+void LasgridForm::fileListSelectionChanged() {
 	updateFileButtons();
 	checkRun();
 }
 
-void PointStatsForm::destFileClicked() {
+void LasgridForm::destFileClicked() {
 	QString res = QFileDialog::getSaveFileName(this, "Save File", m_last.path(), "GeoTiff (*.tif *.tiff)");
 	m_destFile = res.toStdString();
 	m_last.setPath(res);
-	_settings.setValue(_last_dir, m_last.path());
 	txtDestFile->setText(res);
 	checkRun();
 }
 
-void PointStatsForm::runClicked() {
+void LasgridForm::runClicked() {
 
 	if(m_workerThread->isRunning())
 		return;
@@ -196,52 +189,50 @@ void PointStatsForm::runClicked() {
 
 }
 
-void PointStatsForm::done() {
+void LasgridForm::done() {
 	checkRun();
 	btnCancel->setEnabled(true);
 }
 
-void PointStatsForm::cancelClicked() {
+void LasgridForm::cancelClicked() {
 	g_trace("quit");
 	m_form->close();
 }
 
-void PointStatsForm::updateFileList() {
+void LasgridForm::updateFileList() {
 	while(lstFiles->count())
 		lstFiles->takeItem(0);
-	for(const std::string &file : m_sourceFiles)
-		lstFiles->addItem(QString(file.c_str()));
+	for(unsigned int i = 0; i < m_lasFiles.size(); ++i)
+		lstFiles->addItem(QString(m_lasFiles[i].c_str()));
 	updateFileButtons();
 	checkRun();
 }
 
-void PointStatsForm::updateFileButtons() {
+void LasgridForm::updateFileButtons() {
 	btnClearFiles->setEnabled(lstFiles->count() > 0);
 	btnRemoveSelected->setEnabled(lstFiles->selectedItems().size() > 0);
 }
 
-void PointStatsForm::removeFilesClicked() {
+void LasgridForm::removeFilesClicked() {
 	std::vector<std::string> lst;
-	unsigned int i = 0;
-	for(const std::string &file : m_sourceFiles) {
+	for(int i = 0; i < lstFiles->count(); ++i) {
 		QListWidgetItem *item = lstFiles->item(i);
 		if(!item->isSelected())
-			lst.push_back(file);
-		++i;
+			lst.push_back(m_lasFiles[i]);
 	}
-	m_sourceFiles.clear();
-	m_sourceFiles.assign(lst.begin(), lst.end());
+	m_lasFiles.clear();
+	m_lasFiles.assign(lst.begin(), lst.end());
 	updateFileList();
 	checkRun();
 }
 
-void PointStatsForm::clearFilesClicked() {
-	m_sourceFiles.clear();
+void LasgridForm::clearFilesClicked() {
+	m_lasFiles.clear();
 	updateFileList();
 	checkRun();
 }
 
-void PointStatsForm::selectFilesClicked() {
+void LasgridForm::selectFilesClicked() {
 	QFileDialog d(m_form);
 	d.setDirectory(m_last);
 	d.setFileMode(QFileDialog::ExistingFiles);
@@ -249,18 +240,17 @@ void PointStatsForm::selectFilesClicked() {
 	if(d.exec()) {
 		QStringList files = d.selectedFiles();
 		m_last = d.directory();
-		_settings.setValue(_last_dir, m_last.path());
-		std::set<std::string> tmp(m_sourceFiles.begin(), m_sourceFiles.end());
+		std::set<std::string> tmp(m_lasFiles.begin(), m_lasFiles.end());
 		for(int i = 0; i < files.size(); ++i)
 			tmp.insert(files[i].toStdString());
-		m_sourceFiles.clear();
-		m_sourceFiles.assign(tmp.begin(), tmp.end());
+		m_lasFiles.clear();
+		m_lasFiles.assign(tmp.begin(), tmp.end());
 	}
 	updateFileList();
 	checkRun();
 }
 
-void PointStatsForm::checkRun() {
+void LasgridForm::checkRun() {
 	// TODO: Check runnable.
 	btnRun->setEnabled(true);
 }

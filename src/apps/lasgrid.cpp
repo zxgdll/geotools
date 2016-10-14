@@ -2,17 +2,15 @@
 #include <set>
 #include <vector>
 
-#include "pointstats.hpp"
-
-#ifdef WITH_GUI
-#include "pointstats_ui.hpp"
-#endif
+#include "lasgrid.hpp"
+#include "lasgrid_ui.hpp"
 
 using namespace geotools::util;
-using namespace geotools::point;
+using namespace geotools::las;
+using namespace geotools::las::lasgrid_util;
 
 void usage() {
-	std::cerr << "Usage: pointstats <options> <file [file [file]]>\n"
+	std::cerr << "Usage: lasgrid <options> <file [file [file]]>\n"
 		<< " -o <output file>\n"
 		<< " -t <type>                   Output median, mean, max, min, variance (sample), pvariance (population),\n"
 		<< "                             count, density, stddev (sample), pstddev (population). Default mean.\n"
@@ -20,46 +18,41 @@ void usage() {
 		<< " -s <srid>                   The EPSG ID of the CRS.\n"
 		<< " -c <classes>                Comma-delimited (e.g. '2,0' (ground and unclassified)).\n"
 		<< " -a <attribute>              Use height, intensity (default height).\n"
+		<< " -d <radius>                 Radius (not diameter); use zero for cell bounds.\n"
+		<< "                             For example, if the cell size is 2, the circumcircle's radius is sqrt(2) (~1.41).\n"
 		<< " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size.\n"
-		<< " -p                          Snap to the resolution.\n"
+		<< " -f                          Fill voids.\n"
 		<< " -v                          Verbose output.\n"
 		<< " -h                          Print this message.\n"
-		<< " --threads                   The number of threads to use for computing output.\n"
 		<< " --angle-limit               Points located outside of this angle (devation from nadir) are excluded.\n"
 		<< " -gui                        Run the graphical user interface.\n";
 }
 
 int runWithUI(int argc, char **argv) {
-#ifdef WITH_GUI
 	QApplication q(argc, argv);
 	QWidget *w = new QWidget();
-	geotools::ui::PointStatsForm f;
+	geotools::ui::LasgridForm f;
 	f.setupUi(w);
 	w->show();
 	return q.exec();
-#else
-	std::cerr << "GUI not enabled." << std::endl;
-	return 1;
-#endif
 }
 
 int main(int argc, char **argv) {
 
 	try {
 
-		int crs = 0;
-		int threads = 1;
-		bool fill = false;
-		bool gui = false;
-		bool snap = false;
-		double resolution = 2.0;
-		unsigned char angleLimit = 100;
 		std::string dstFile;
-		std::string type = "mean";
-		std::string att = "height";
-		std::set<unsigned char> classes;
-		std::list<std::string> files;
+		int crs = 0;
+		int type = TYPE_MEAN;
+		int att = ATT_HEIGHT;
+		bool fill = false;
+		double resolution = 2.0;
+		double radius = -1.0;
+		unsigned char angleLimit = 100;
 		Bounds bounds;
+		std::set<int> classes;
+		std::vector<std::string> files;
+		bool gui = false;
 
 		g_loglevel(0);
 		
@@ -77,21 +70,19 @@ int main(int argc, char **argv) {
 			} else if(s == "-f") {
 				fill = true;
 			} else if(s == "-t") {
-				type = argv[++i];
+				type = parseType(argv[++i]);
 			} else if(s == "-r") {
 				resolution = atof(argv[++i]);
 			} else if(s == "-c") {
 				Util::intSplit(classes, argv[++i]);
 			} else if(s == "-a") {
-				att = argv[++i];
-			} else if(s == "-p") {
-				snap = true;
+				att = parseAtt(argv[++i]);
+			} else if(s == "-d") {
+				radius = atof(argv[++i]);
 			} else if(s == "-v") {
-				g_loglevel(G_LOG_DEBUG);
+				g_loglevel(G_LOG_TRACE);
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
-			} else if(s == "--threads") {
-				threads = atoi(argv[++i]);
 			} else if(s == "-b") {
 				bounds.extend(atof(argv[i + 1]), atof(argv[i + 2]));
 				bounds.extend(atof(argv[i + 3]), atof(argv[i + 4]));
@@ -104,22 +95,8 @@ int main(int argc, char **argv) {
 		if(gui) {
 			return runWithUI(argc, argv);
 		} else {
-			PointStats lg;
-			PointStatsConfig config;
-			config.dstFile = dstFile;
-			config.sourceFiles = files;
-			config.classes = classes;
-			config.hsrid = crs;
-			config.attribute = config.parseAtt(att);
-			config.type = config.parseType(type);
-			config.resolution = resolution;
-			config.bounds = bounds;
-			config.angleLimit = angleLimit;
-			config.fill = fill;
-			config.snap = snap;
-			config.threads = threads;
-			
-			lg.pointstats(config);
+			LasGrid lg;
+			lg.lasgrid(dstFile, files, classes, crs, att, type, radius, resolution, bounds, angleLimit, fill);
 		}
 
 	} catch(const std::exception &ex) {

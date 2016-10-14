@@ -38,7 +38,6 @@ namespace geotools {
 		namespace pointstats_config {
 
 			extern double defaultResolution;
-			extern double defaultRadius;
 			extern bool defaultSnapToGrid;
 			extern unsigned char defaultType;
 			extern unsigned char defaultAngleLimit;
@@ -53,10 +52,10 @@ namespace geotools {
 
 			class Pt {
 			public:
-				float x;
-				float y;
+				double x;
+				double y;
 				double z;
-				Pt(float x, float y, double z) :
+				Pt(double x, double y, double z) :
 					x(x), y(y), z(z) {}
 			};
 
@@ -77,7 +76,6 @@ namespace geotools {
 			std::list<std::string> sourceFiles;
 			std::set<unsigned char> classes;
 			geotools::util::Bounds bounds;
-			double radius;
 			double resolution;
 			unsigned short hsrid;
 			unsigned short vsrid;
@@ -88,7 +86,8 @@ namespace geotools {
 			bool snap;
 			unsigned char quantile;
 			unsigned char quantiles;
-
+			unsigned int threads;
+			
 			/**
 			 * Interpret the attribute and  return the constant int value.
 			 */

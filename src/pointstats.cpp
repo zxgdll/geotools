@@ -28,7 +28,6 @@
 #include "pointstats.hpp"
 #include "lasutil.hpp"
 #include "pointstream.hpp"
-#include "simplegeom.hpp"
 
 #include <CGAL/Plane_3.h>
 #include <CGAL/linear_least_squares_fitting_3.h>
@@ -45,7 +44,8 @@ namespace alg = boost::algorithm;
 using namespace geotools::util;
 using namespace geotools::raster;
 using namespace geotools::point;
-using namespace geotools::geom;
+using namespace geotools::las;
+using namespace geotools::point::pointstats_util;
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel	K;
 typedef CGAL::Projection_traits_xy_3<K>  					Gt;
@@ -54,8 +54,6 @@ typedef K::Point_3 											Point_3;
 typedef K::Plane_3 											Plane_3;
 typedef Delaunay::Finite_faces_iterator						Finite_faces_iterator;
 typedef Delaunay::Face										Face;
-typedef CGAL::Polygon_2<K>									Polygon_2;
-
 
 namespace geotools {
 
@@ -64,7 +62,6 @@ namespace geotools {
 		namespace pointstats_config {
 			
 			double defaultResolution = 2.0; 
-			double defaultRadius = std::sqrt(g_sq(defaultResolution / 2.0) * 2.0); 
 			bool defaultSnapToGrid = true;
 			unsigned char defaultType = TYPE_MEAN;
 			unsigned char defaultAttribute = ATT_HEIGHT;
@@ -83,37 +80,6 @@ namespace geotools {
 		} // config
 		
 		namespace pointstats_util {
-
-			/**
-			 * Comparator for sorting doubles.
-			 */
-			int fcmp(const void * a, const void * b) {
-				const double * aa = (const double *) a;
-				const double * bb = (const double *) b;
-				return (*aa > *bb) - (*bb > *aa);
-			}
-
-			/**
-			 * Returns true if the point is within the radius associated with a cell's centroid.
-			 * @param px The x coordinate of the point.
-			 * @param py The y coordinate of the point.
-			 * @param col The column of the cell of interest.
-			 * @param row The row of the cell of interest.
-			 * @param radius The radius around the cell's centroid.
-			 * @param resolution The resolution of the output raster.
-			 * @param bounds The bounds of the raster.
-			 */
-			bool inRadius(double px, double py, int col, int row, double radius,
-					double resolution, Bounds &bounds){
-				if(radius == 0.0) return true;
-				// If a radius is given, extract the x and y of the current cell's centroid
-				// and measure its distance (squared) from the point.
-				double x = col * resolution + bounds[0] + resolution * 0.5;
-				double y = row * resolution + bounds[1] + resolution * 0.5;
-				// If the cell is outside the radius, ignore it.
-				double r = sqrt(g_sq(x - px) + g_sq(y - py));
-				return r <= radius;
-			}
 
 			CellStats::~CellStats() {}
 
@@ -318,10 +284,7 @@ namespace geotools {
 				}
 
 				double toPlane(const Point_3 &p, const Plane_3 &plane, const Point_3 &centroid) {
-					// (ax + by + d) / -c = z
-					double z = (p.x() * plane.a() + p.y() * plane.b() + plane.d()) / -plane.c();
-					//g_debug(" -- toplane " << z << ", " << p.z());
-					return z;
+					return (p.x() * plane.a() + p.y() * plane.b() + plane.d()) / -plane.c();
 				}
 
 			public:
@@ -330,20 +293,19 @@ namespace geotools {
 				 * Using Du Preez, 2014 - Arc-Chord Ratio (ACR) Index.
 				 */
 				double compute(const std::list<std::unique_ptr<Pt> > &values) {
+
 					if(values.size() == 0)
 						return -9999.0;
 					
 					std::list<Point_3> pts;
 					for(const std::unique_ptr<Pt> &v : values)
-						pts.push_back(Point_3((double) v->x, (double) v->y, (double) v->z));
+						pts.push_back(Point_3(v->x, v->y, v->z));
 					
 					// Delaunay 3D surface area.
 					double tarea = 0.0;
-					{
-						Delaunay dt(pts.begin(), pts.end());
-						for(Finite_faces_iterator it = dt.finite_faces_begin(); it != dt.finite_faces_end(); ++it)
-							tarea += computeArea(*it);
-					}
+					Delaunay dt(pts.begin(), pts.end());
+					for(Finite_faces_iterator it = dt.finite_faces_begin(); it != dt.finite_faces_end(); ++it)
+						tarea += computeArea(*it);
 
 					// Convex hull and POBF
 					std::list<Point_3> hull;
@@ -354,14 +316,13 @@ namespace geotools {
 
 					// POBF surface area.
 					double parea = 0.0;
-					{
-						std::list<Point_3> poly; // TODO: Is there a faster way?
-						for(const Point_3 &pt : hull)
-							poly.push_back(Point_3(pt.x(), pt.y(), toPlane(pt, plane, centroid)));
-						Delaunay dt(poly.begin(), poly.end());
-						for(Finite_faces_iterator it = dt.finite_faces_begin(); it != dt.finite_faces_end(); ++it)
-							parea += computeArea(*it);
-					}
+					std::list<Point_3> poly; // TODO: Is there a faster way?
+					for(const Point_3 &pt : hull)
+						poly.push_back(Point_3(pt.x(), pt.y(), toPlane(pt, plane, centroid)));
+					Delaunay dt2(poly.begin(), poly.end());
+					for(Finite_faces_iterator it = dt2.finite_faces_begin(); it != dt2.finite_faces_end(); ++it)
+						parea += computeArea(*it);
+
 					return tarea / parea;
 				}
 			};
@@ -411,8 +372,6 @@ namespace geotools {
 		void PointStats::checkConfig(const PointStatsConfig &config) {
 			if(config.resolution <= 0.0)
 				g_argerr("Resolution must be > 0: " << config.resolution);
-			if(config.radius <= 0.0)
-				g_argerr("Radius invalid: " << config.radius);
 			if(config.sourceFiles.size() == 0)
 				g_argerr("At least one input file is required.");
 			if(config.dstFile.empty()) 
@@ -426,7 +385,6 @@ namespace geotools {
 			if(config.angleLimit <= 0)
 				g_argerr("Angle limit must be greater than zero.");
 
-			g_debug("Radius: " << config.radius);
 			g_debug("Resolution: " << config.resolution);
 			g_debug("Files: " << config.sourceFiles.size());
 			g_debug("Destination: " << config.dstFile);
@@ -454,8 +412,7 @@ namespace geotools {
 			g_debug(" -- computeWorkBounds - work bounds final: " << workBounds.print() << "; point count " << *pointCount);
 		}
 
-		geotools::point::pointstats_util::CellStats* PointStats::getComputer(const PointStatsConfig &config) {
-			using namespace geotools::point::pointstats_util;
+		CellStats* PointStats::getComputer(const PointStatsConfig &config) {
 			switch(config.type) {
 			case TYPE_MEAN: return new CellMean();
 			case TYPE_MEDIAN: return new CellMedian();
@@ -480,7 +437,13 @@ namespace geotools {
 
 			checkConfig(config);
 			
-			using namespace geotools::point::pointstats_util;
+		 	if(config.threads > 0) {
+		 		g_debug(" -- pointstats running with " << config.threads << " threads");
+		 		omp_set_dynamic(1);
+		 		omp_set_num_threads(config.threads);
+		 	} else {
+		 		g_argerr("Run with >=1 threads.");
+		 	}
 
 			// Compute the work bounds, and store the list
 			// of relevant files. Snap the bounds if necessary.
@@ -499,69 +462,56 @@ namespace geotools {
 			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
 				-config.resolution, -9999, config.hsrid);
 			grid.fill(-9999.0);
-
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
-			std::vector<std::string> filesv(files.size());
-			filesv.assign(files.begin(), files.end());
-
-			g_debug(" -- pointstats - " << filesv.size() << " files");
-
 			std::unique_ptr<CellStats> computer(getComputer(config));
+			std::vector<std::string> filesv(files.begin(), files.end());
+			unsigned int fileIdx = 0;
 
-			#pragma omp parallel
-			{
-			
-				#pragma omp for
-				for(unsigned int i = 0; i < filesv.size(); ++i) {
-					const std::string &file = filesv[i];
+			#pragma omp parallel for
+			for(unsigned int f = 0; f < filesv.size(); ++f) {
 
-					if(callbacks)
-						callbacks->overallCallback((i + 0.5f) / filesv.size());
+				const std::string &file = filesv[f];
+				g_debug(" -- pointstats - file " << file);
 
-					std::unordered_map<unsigned long, std::list<std::unique_ptr<Pt> > > values;
+				if(callbacks)
+					callbacks->overallCallback((fileIdx + 0.5f) / filesv.size());
 
-					geotools::las::LASPoint pt;
-					geotools::las::PointStream ps(file);
-					unsigned int curPt = 0;
+				std::unordered_map<unsigned long, std::list<std::unique_ptr<Pt> > > values;
 
-					while(ps.next(pt)) {
-						
-						if(callbacks && curPt++ % 1000 == 0) 
-							callbacks->fileCallback((curPt + 1.0f) / ps.pointCount());
-
-						unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-						float x = (float) pt.x;
-						float y = (float) pt.y;
-						double val = 0;
-
-						switch(config.attribute) {
-						case ATT_INTENSITY: 
-							val = (double) pt.intensity;
-							break;
-						default: 
-							val = pt.z;
-							break;
-						}
-
-						std::unique_ptr<Pt> pv(new Pt(x, y, val));
-						values[idx].push_back(std::move(pv));
+				LASPoint pt;
+				PointStream ps(file);
+				while(ps.next(pt)) {
+					unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
+					double val = 0;
+					switch(config.attribute) {
+					case ATT_INTENSITY: 
+						val = (double) pt.intensity;
+						break;
+					default: 
+						val = pt.z;
+						break;
 					}
-
-					std::set<unsigned long> ids;
-					for(const auto &it : values)
-						ids.insert(it.first);
-
-					g_debug(" -- pointstats - computing results");
-					for(const unsigned long &id : ids)
-						grid.set(id, computer->compute(values[id]));
-
-					if(callbacks)
-						callbacks->overallCallback((i + 1.0f) / filesv.size());
+					std::unique_ptr<Pt> pv(new Pt(pt.x, pt.y, val));
+					values[idx].push_back(std::move(pv));
 				}
 
+				g_debug(" -- pointstats - computing results");
+				std::set<unsigned long> ids; // sorted.
+				for(const auto &it : values)
+					ids.insert(it.first);
+				for(const int &id : ids)
+					grid.set(id, computer->compute(values[id]));
 
+				if(callbacks)
+					callbacks->overallCallback((fileIdx + 1.0f) / filesv.size());
+
+				#pragma omp atomic
+				++fileIdx;
 			}
+
+			if(callbacks)
+				callbacks->overallCallback(1.0f);
 
 		}
 

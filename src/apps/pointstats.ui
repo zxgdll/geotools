@@ -80,6 +80,27 @@
         <property name="fieldGrowthPolicy">
          <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
         </property>
+        <item row="0" column="0">
+         <widget class="QLabel" name="lblDestFile">
+          <property name="text">
+           <string>Destination</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <layout class="QHBoxLayout" name="horizontalLayout_6">
+          <item>
+           <widget class="QLineEdit" name="txtDestFile"/>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnDestFile">
+            <property name="text">
+             <string>Create...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
         <item row="1" column="0">
          <widget class="QLabel" name="lblResolution">
           <property name="text">
@@ -109,47 +130,33 @@
          </layout>
         </item>
         <item row="2" column="0">
-         <widget class="QLabel" name="lblRadius">
-          <property name="text">
-           <string>Radius</string>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="1">
-         <widget class="QDoubleSpinBox" name="spnRadius">
-          <property name="singleStep">
-           <double>0.100000000000000</double>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="0">
          <widget class="QLabel" name="lblAttribute">
           <property name="text">
            <string>Attribute</string>
           </property>
          </widget>
         </item>
-        <item row="3" column="1">
+        <item row="2" column="1">
          <widget class="QComboBox" name="cboAttribute"/>
         </item>
-        <item row="4" column="0">
+        <item row="3" column="0">
          <widget class="QLabel" name="lblType">
           <property name="text">
            <string>Type</string>
           </property>
          </widget>
         </item>
-        <item row="4" column="1">
+        <item row="3" column="1">
          <widget class="QComboBox" name="cboType"/>
         </item>
-        <item row="5" column="0">
+        <item row="4" column="0">
          <widget class="QLabel" name="lblQuantiles">
           <property name="text">
            <string>Quantiles</string>
           </property>
          </widget>
         </item>
-        <item row="5" column="1">
+        <item row="4" column="1">
          <widget class="QSpinBox" name="spnQuantiles">
           <property name="enabled">
            <bool>false</bool>
@@ -159,14 +166,14 @@
           </property>
          </widget>
         </item>
-        <item row="6" column="0">
+        <item row="5" column="0">
          <widget class="QLabel" name="lblQuantile">
           <property name="text">
            <string>Quantile</string>
           </property>
          </widget>
         </item>
-        <item row="6" column="1">
+        <item row="5" column="1">
          <widget class="QSpinBox" name="spnQuantile">
           <property name="enabled">
            <bool>false</bool>
@@ -217,28 +224,7 @@
         <item row="8" column="1">
          <widget class="QListWidget" name="lstClasses"/>
         </item>
-        <item row="0" column="1">
-         <layout class="QHBoxLayout" name="horizontalLayout_6">
-          <item>
-           <widget class="QLineEdit" name="txtDestFile"/>
-          </item>
-          <item>
-           <widget class="QPushButton" name="btnDestFile">
-            <property name="text">
-             <string>Create...</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="0" column="0">
-         <widget class="QLabel" name="lblDestFile">
-          <property name="text">
-           <string>Destination</string>
-          </property>
-         </widget>
-        </item>
-        <item row="9" column="1">
+        <item row="6" column="1">
          <widget class="QSpinBox" name="spnMaxAngle">
           <property name="maximum">
            <number>180</number>
@@ -248,10 +234,20 @@
           </property>
          </widget>
         </item>
-        <item row="9" column="0">
+        <item row="6" column="0">
          <widget class="QLabel" name="lblMaxAngle">
           <property name="text">
-           <string>Max Angle</string>
+           <string>Max Scan Angle</string>
+          </property>
+         </widget>
+        </item>
+        <item row="9" column="1">
+         <widget class="QSpinBox" name="spnThreads"/>
+        </item>
+        <item row="9" column="0">
+         <widget class="QLabel" name="label">
+          <property name="text">
+           <string>Threads</string>
           </property>
          </widget>
         </item>

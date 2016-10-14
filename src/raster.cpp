@@ -821,8 +821,8 @@ void Raster<T>::init(const std::string &filename, int band, double minx, double 
 	m_filename.assign(filename);
 
 	// Compute columns/rows
-	int width = (int) ((maxx - minx) / resolutionX) * (resolutionX < 0 ? -1 : 1);
-	int height = (int) ((maxy - miny) / resolutionY) * (resolutionY < 0 ? -1 : 1);
+	int width = (int) ((maxx - minx) / resolutionX) * (resolutionX < 0 ? -1 : 1) + 1;
+	int height = (int) ((maxy - miny) / resolutionY) * (resolutionY < 0 ? -1 : 1) + 1;
 
 	// Create GDAL dataset.
 	GDALAllRegister();
