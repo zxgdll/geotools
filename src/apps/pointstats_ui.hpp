@@ -93,6 +93,7 @@ namespace geotools {
 			void resolutionChanged(double);
 			void maxAngleChanged(int);
 			void gapFunctionSelected(int);
+			void classItemClicked(QListWidgetItem*);
 			void done();
 
 		};
@@ -102,39 +103,19 @@ namespace geotools {
 		private:
 			geotools::util::Bounds m_bounds;
 			PointStatsForm *m_parent;
+			std::string m_error;
 
-			void run() {
-				try {
-					geotools::point::PointStats l;
-					
-					geotools::point::PointStatsConfig config;
-					config.dstFile = m_parent->m_destFile;
-					config.sourceFiles = m_parent->m_sourceFiles;
-					config.classes = m_parent->m_classes;
-					config.hsrid = m_parent->m_hsrid;
-					config.attribute = m_parent->m_attribute;
-					config.type = m_parent->m_type;
-					config.resolution = m_parent->m_resolution;
-					config.bounds = m_bounds;
-					config.angleLimit = m_parent->m_angleLimit;
-					config.fill = m_parent->m_fill;
-					config.snap = m_parent->m_snap;
-					config.threads = m_parent->m_threads;
-					config.gapFractionType = m_parent->m_gapFunction;
-
-					l.pointstats(config, m_parent->m_callbacks);
-				} catch(const std::exception &e) {
-					QMessageBox err((QWidget *) m_parent);
-					err.setText("Error");
-					err.setInformativeText(QString(e.what()));
-					err.exec();
-				}
-			}
+			void run();
 		public:
 			void init(PointStatsForm *parent, const geotools::util::Bounds &bounds) {
 				m_parent = parent;
 				m_bounds = bounds;
 			}
+
+			bool hasError();
+
+			std::string getError();
+
 		};
 
 	}

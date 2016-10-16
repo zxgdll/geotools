@@ -15,6 +15,40 @@ using namespace geotools::point::pointstats_config;
 QSettings _settings("PointStats", "Geotools");
 QString _last_dir("last_dir");
 
+void WorkerThread::run() {
+	try {
+		m_error = "";
+		geotools::point::PointStats l;
+		
+		geotools::point::PointStatsConfig config;
+		config.dstFile = m_parent->m_destFile;
+		config.sourceFiles = m_parent->m_sourceFiles;
+		config.classes = m_parent->m_classes;
+		config.hsrid = m_parent->m_hsrid;
+		config.attribute = m_parent->m_attribute;
+		config.type = m_parent->m_type;
+		config.resolution = m_parent->m_resolution;
+		config.bounds = m_bounds;
+		config.angleLimit = m_parent->m_angleLimit;
+		config.fill = m_parent->m_fill;
+		config.snap = m_parent->m_snap;
+		config.threads = m_parent->m_threads;
+		config.gapFractionType = m_parent->m_gapFunction;
+
+		l.pointstats(config, m_parent->m_callbacks);
+	} catch(const std::exception &e) {
+		m_error = e.what();
+	}
+}
+
+bool WorkerThread::hasError() {
+	return !m_error.empty();
+}
+
+std::string WorkerThread::getError() {
+	return m_error;
+}
+
 PointStatsForm::PointStatsForm(QWidget *p) : 
 	QWidget(p),
 	m_vsrid(0), m_hsrid(0) {
@@ -94,6 +128,8 @@ void PointStatsForm::setupUi(QWidget *form) {
 		lstClasses->addItem(item);
 	}
 
+	chkSnapToGrid->setCheckState(defaultSnapToGrid ? Qt::Checked : Qt::Unchecked);
+
 	connect(btnSelectFiles, SIGNAL(clicked()), this, SLOT(selectFilesClicked()));
 	connect(btnRemoveSelected, SIGNAL(clicked()), this, SLOT(removeFilesClicked()));
 	connect(btnClearFiles, SIGNAL(clicked()), this, SLOT(clearFilesClicked()));
@@ -101,6 +137,7 @@ void PointStatsForm::setupUi(QWidget *form) {
 	connect(btnRun, SIGNAL(clicked()), this, SLOT(runClicked()));
 	connect(btnDestFile, SIGNAL(clicked()), this, SLOT(destFileClicked()));
 	connect(lstFiles, SIGNAL(itemSelectionChanged()), this, SLOT(fileListSelectionChanged()));
+	connect(lstClasses, SIGNAL(itemClicked(QListWidgetItem*)), this, SLOT(classItemClicked(QListWidgetItem*)));
 	connect(btnCRSConfig, SIGNAL(clicked()), this, SLOT(crsConfigClicked()));
 	connect(cboType, SIGNAL(currentIndexChanged(int)), this, SLOT(typeSelected(int)));
 	connect(spnResolution, SIGNAL(valueChanged(double)), this, SLOT(resolutionChanged(double)));
@@ -112,10 +149,18 @@ void PointStatsForm::setupUi(QWidget *form) {
 	connect(spnQuantiles, SIGNAL(valueChanged(int)), SLOT(quantilesChanged(int)));
 	connect(spnMaxAngle, SIGNAL(valueChanged(int)), SLOT(maxAngleChanged(int)));
 	connect((PointStatsCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
-	connect((PointStatsCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgFile, SLOT(setValue(int)));
 	connect(m_workerThread, SIGNAL(finished()), this, SLOT(done()));
 
 	updateTypeUi();
+}
+
+void PointStatsForm::classItemClicked(QListWidgetItem *item) {
+	unsigned char c = (unsigned char) item->text().toUShort();
+	if(item->checkState() == Qt::Checked) {
+		m_classes.insert(c);
+	} else {
+		m_classes.erase(c);
+	}
 }
 
 void PointStatsForm::threadsChanged(int threads) {
@@ -168,6 +213,8 @@ void PointStatsForm::updateTypeUi() {
 	lblQuantiles->setVisible(m_type == TYPE_QUANTILE);
 	cboGapFunction->setVisible(m_type == TYPE_GAP_FRACTION);
 	lblGapFunction->setVisible(m_type == TYPE_GAP_FRACTION);
+	lblAttribute->setVisible(m_type != TYPE_GAP_FRACTION);
+	cboAttribute->setVisible(m_type != TYPE_GAP_FRACTION);
 }
 
 void PointStatsForm::typeSelected(int index) {
@@ -217,13 +264,18 @@ void PointStatsForm::runClicked() {
 
 	// TODO: Bounds
 	Bounds bounds;
-
 	m_workerThread->init(this, bounds);
 	m_workerThread->start();
 
 }
 
 void PointStatsForm::done() {
+	if(m_workerThread->hasError()) {
+		QMessageBox err((QWidget *) this);
+		err.setText("Error");
+		err.setInformativeText(QString(m_workerThread->getError().c_str()));
+		err.exec();
+	}
 	checkRun();
 	btnCancel->setEnabled(true);
 }

@@ -6,8 +6,7 @@
 using namespace geotools::point;
 
 void usage() {
-	std::cerr << "Usage: pointnormalize <options> <terrain file> <point file [point file [point file ...]]>\n"
-		<< " --point-dir                 The directory where normalized point files are to be written.\n"
+	std::cerr << "Usage: pointnormalize [options] <terrain file> <output dir> <point file [point file [point file ...]]>\n"
 		<< " -v                          Verbose output.\n"
 		<< " -h                          Print this message.\n"
 		<< " --threads                   The number of threads to use for computing output.\n"
@@ -38,11 +37,11 @@ int main(int argc, char **argv) {
 				g_loglevel(G_LOG_DEBUG);
 			} else if(s == "--threads") {
 				threads = atoi(argv[++i]);
-			} else if(s == "--point-dir") {
-				pointDir.assign(argv[++i]);
 			} else {
 				if(terrainFile.empty()) {
 					terrainFile.assign(s);
+				} else if(pointDir.empty()) {
+					pointDir.assign(s);
 				} else {
 					pointFiles.push_back(s);
 				}

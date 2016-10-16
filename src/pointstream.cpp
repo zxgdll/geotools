@@ -18,6 +18,8 @@ double LASPoint::scaleX = 0;
 double LASPoint::scaleZ = 0;
 double LASPoint::scaleY = 0;
 
+PointStreamFilter::~PointStreamFilter() {}
+
 PointStream::PointStream(const std::string &file, bool deepBounds) :
 	m_file(file) {
 	init(deepBounds);
@@ -57,10 +59,15 @@ Bounds PointStream::fileBounds() {
 	return m_fileBounds;
 }
 
-bool PointStream::next(LASPoint &pt) {
-	if(m_lasReader->ReadNextPoint()) {
+bool PointStream::contains(double x, double y) {
+	return fileBounds().contains(x, y);
+}
+
+bool PointStream::next(LASPoint &pt, const PointStreamFilter *filter) {
+	while(m_lasReader->ReadNextPoint()) {
 		pt.update(m_lasReader->GetPoint());
-		return true;
+		if(filter == nullptr || filter->keep(pt))
+			return true;
 	}
 	return false;
 }

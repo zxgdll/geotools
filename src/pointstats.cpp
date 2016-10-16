@@ -350,6 +350,7 @@ namespace geotools {
 							gnd += pt->intensity;
 						all += pt->intensity; // TODO: This should perhaps be filtered by class to remove bogus points.
 					}
+					g_debug(" -- fcLidarBLa " << gnd << ", " << all << ", " << values.size());
 					return all != 0.0 ? 1.0 - std::sqrt(gnd / all) : -9999.0;
 				}
 
@@ -576,46 +577,69 @@ namespace geotools {
 			std::vector<std::string> filesv(files.begin(), files.end());
 			unsigned int fileIdx = 0;
 
+			std::map<unsigned long, std::list<std::unique_ptr<LASPoint> > > edges;
+
+			ClassFilter filter(config.classes);
+
 			#pragma omp parallel for
 			for(unsigned int f = 0; f < filesv.size(); ++f) {
 
-				const std::string &file = filesv[f];
-				g_debug(" -- pointstats - file " << file);
+				g_debug(" -- pointstats - file " << filesv[f]);
 
 				if(callbacks)
 					callbacks->overallCallback((fileIdx + 0.5f) / filesv.size());
 
-				std::unordered_map<unsigned long, std::list<std::unique_ptr<LASPoint> > > values;
+				const std::string &file = filesv[f];
+				std::map<unsigned long, std::list<std::unique_ptr<LASPoint> > > values;
 
 				LASPoint pt;
 				PointStream ps(file);
-				auto clsEnd = config.classes.end();
-				bool allCls = config.classes.size() == 0;
 
-				while(ps.next(pt)) {
-
-					// Pre-filter on class.
-					if(!allCls && config.classes.find(pt.cls) == clsEnd)
-						continue;
-
+				while(ps.next(pt, &filter)) {
 					unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-
 					std::unique_ptr<LASPoint> pv(new LASPoint(pt));
 					values[idx].push_back(std::move(pv));
 				}
 
 				g_debug(" -- pointstats - computing results");
-				std::set<unsigned long> ids; // sorted.
-				for(const auto &it : values)
-					ids.insert(it.first);
-				for(const int &id : ids)
-					grid.set(id, computer->compute(values[id]));
+				std::list<unsigned long> edgeIds;
+				for(const auto &it : values) {
+					int col = it.first % grid.cols();
+					int row = it.first / grid.cols();
+					if(ps.contains(grid.toX(col), grid.toY(row)) 
+							&& ps.contains(grid.toX(col + 1), grid.toY(row + 1))) {
+						grid.set(it.first, computer->compute(it.second));
+					} else {
+						edgeIds.push_back(it.first);
+					}
+				}
+
+				g_debug(" -- pointstats - " << edgeIds.size() << " edge cells deferred.");
+				// Write to the edge pixel map to solve later.
+				#pragma omp critical
+				{
+					for(const unsigned long &id : edgeIds) {
+						for(std::unique_ptr<LASPoint> &pt : values[id])
+							edges[id].push_back(std::move(pt));
+					}
+	
+					++fileIdx; // Do it here to save another critical/atomic
+				}
 
 				if(callbacks)
-					callbacks->overallCallback((fileIdx + 1.0f) / filesv.size());
+					callbacks->overallCallback((float) fileIdx / filesv.size()); // N.B. fileIdx already incremented
 
-				#pragma omp atomic
-				++fileIdx;
+			}
+
+			unsigned int i = 0;
+			std::vector<unsigned long> ids(edges.size());
+			for(const auto &it : edges)
+				ids[i++] = it.first;
+			std::sort(ids.begin(), ids.end());
+
+			#pragma omp parallel for
+			for(unsigned int i = 0; i < ids.size(); ++i) {
+				grid.set(ids[i], computer->compute(edges[ids[i]]));
 			}
 
 			if(callbacks)

@@ -46,24 +46,62 @@ namespace geotools {
 				angle = pt.GetScanAngleRank();
 			}
 
-			bool last() {
+			bool last() const {
 				return numRets > 0 && ret == numRets;
 			}
 
-			bool first() {
+			bool first() const {
 				return numRets > 0 && ret == 1;
 			}
 
-			bool intermediate() {
+			bool intermediate() const {
 				return numRets > 2 && ret > 1 && ret < numRets;
 			}
 			
-			bool ground() {
+			bool ground() const {
 				return cls == 2;
 			}
 
-			bool single() {
+			bool single() const {
 				return numRets == 1;
+			}
+		};
+
+		class PointStreamFilter {
+		public:
+			virtual ~PointStreamFilter() =0;
+			virtual bool keep(const LASPoint &pt) const =0;
+			virtual PointStreamFilter* append(const PointStreamFilter *copy) =0;
+			virtual PointStreamFilter* clone() const =0;
+		};
+
+		class ClassFilter : public PointStreamFilter {
+		private:
+			std::set<unsigned char> m_classes;
+			PointStreamFilter *m_next;
+
+		public:
+			
+			ClassFilter(const std::set<unsigned char> &classes) {
+				m_classes.insert(classes.begin(), classes.end());
+			}
+
+			bool keep(const LASPoint &pt) const {
+				return m_classes.size() == 0 || !(m_classes.find(pt.cls) == m_classes.end());
+			}
+
+			PointStreamFilter *clone() const {
+				return new ClassFilter(*this);
+			}
+
+			PointStreamFilter* append(const PointStreamFilter *next) {
+				m_next = next->clone();
+				return m_next;
+			}
+
+			~ClassFilter() {
+				if(m_next)
+					delete m_next;
 			}
 		};
 
@@ -96,10 +134,12 @@ namespace geotools {
 
 			unsigned int pointCount();
 
+			bool contains(double x, double y);
+
 			/**
 			 * Reads the next available point into the LASPoint object.
 			 */
-			bool next(LASPoint &pt);
+			bool next(LASPoint &pt, const PointStreamFilter *filter = nullptr);
 
 		};
 
