@@ -11,6 +11,7 @@
 #include "raster.hpp"
 #include "util.hpp"
 #include "pointstream.hpp"
+#include "cellstats.hpp"
 
 #define TYPE_MIN 1
 #define TYPE_MAX 2
@@ -27,12 +28,6 @@
 #define TYPE_KURTOSIS 15
 #define TYPE_RUGOSITY 14
 #define TYPE_GAP_FRACTION 17
-
-#define GAP_IR 1
-#define GAP_BLA 2
-#define GAP_BLB 3
-#define GAP_RR 4
-#define GAP_FR 5
 
 #define LAS_EXT ".las"
 
@@ -51,20 +46,17 @@ namespace geotools {
 			extern unsigned char defaultAngleLimit;
 			extern unsigned char defaultAttribute;
 			extern unsigned char defaultGapFraction;
+			extern unsigned int defaultQuantile;
+			extern unsigned int defaultQuantiles;
+			extern unsigned int defaultFilterQuantiles;
+			extern unsigned int defaultFilterQuantileFrom;
+			extern unsigned int defaultFilterQuantileTo;
+			extern unsigned int defaultThreads;
+
 			extern std::set<unsigned char> defaultClasses;
 			extern std::map<std::string, unsigned char> types;
 			extern std::map<std::string, unsigned char> attributes;
 			extern std::map<std::string, unsigned char> gapFractionTypes;
-
-		}
-
-		namespace pointstats_util {
-
-			class CellStats {
-			public:
-				virtual double compute(const std::list<std::unique_ptr<geotools::las::LASPoint> > &values)=0;
-				virtual ~CellStats();
-			};
 
 		}
 
@@ -89,6 +81,9 @@ namespace geotools {
 			unsigned char quantile;
 			unsigned char quantiles;
 			unsigned char gapFractionType;
+			unsigned int quantileFilter;
+			unsigned int quantileFilterFrom;
+			unsigned int quantileFilterTo;
 
 			/**
 			 * Interpret the attribute and  return the constant int value.
@@ -109,6 +104,17 @@ namespace geotools {
 				return classes.find(cls) != classes.end();
 			}
 
+			bool hasClasses() const {
+				return classes.size() > 0;
+			}
+
+			/**
+			 * Returns true if the quantile filter does not pass all points.
+			 */
+			bool hasQuantileFilter() const {
+				return quantileFilterFrom == 0 && quantileFilterTo == quantileFilter - 1;
+			}
+
 		};
 
 		class PointStats {
@@ -120,7 +126,7 @@ namespace geotools {
 			 */
 			void checkConfig(const PointStatsConfig &config);
 
-			geotools::point::pointstats_util::CellStats* getComputer(const PointStatsConfig &config);
+			geotools::point::stats::CellStats* getComputer(const PointStatsConfig &config);
 
 			/**
 			 * Compute the working bounds and the selection of files

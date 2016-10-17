@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>781</width>
-    <height>561</height>
+    <width>752</width>
+    <height>534</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,11 +18,11 @@
     <rect>
      <x>10</x>
      <y>14</y>
-     <width>758</width>
-     <height>540</height>
+     <width>731</width>
+     <height>511</height>
     </rect>
    </property>
-   <layout class="QVBoxLayout" name="verticalLayout" stretch="1,1,0">
+   <layout class="QVBoxLayout" name="verticalLayout" stretch="0,1,0">
     <property name="sizeConstraint">
      <enum>QLayout::SetDefaultConstraint</enum>
     </property>
@@ -76,207 +76,351 @@
        </layout>
       </item>
       <item>
-       <layout class="QFormLayout" name="formLayout">
-        <property name="fieldGrowthPolicy">
-         <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
-        </property>
-        <item row="0" column="0">
-         <widget class="QLabel" name="lblDestFile">
-          <property name="text">
-           <string>Destination</string>
+       <layout class="QVBoxLayout" name="verticalLayout_4">
+        <item>
+         <layout class="QFormLayout" name="formLayout">
+          <property name="fieldGrowthPolicy">
+           <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
           </property>
-         </widget>
-        </item>
-        <item row="0" column="1">
-         <layout class="QHBoxLayout" name="horizontalLayout_6">
-          <item>
-           <widget class="QLineEdit" name="txtDestFile"/>
-          </item>
-          <item>
-           <widget class="QPushButton" name="btnDestFile">
+          <item row="0" column="0">
+           <widget class="QLabel" name="lblDestFile">
             <property name="text">
-             <string>Create...</string>
+             <string>Destination</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_6">
+            <item>
+             <widget class="QLineEdit" name="txtDestFile"/>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnDestFile">
+              <property name="text">
+               <string>Create...</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="lblResolution">
+            <property name="text">
+             <string>Resolution</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_5">
+            <item>
+             <widget class="QDoubleSpinBox" name="spnResolution">
+              <property name="decimals">
+               <number>6</number>
+              </property>
+              <property name="minimum">
+               <double>0.000001000000000</double>
+              </property>
+              <property name="maximum">
+               <double>10000000.000000000000000</double>
+              </property>
+              <property name="singleStep">
+               <double>1.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>10.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="chkSnapToGrid">
+              <property name="text">
+               <string>Snap to Grid</string>
+              </property>
+              <property name="checked">
+               <bool>true</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="lblType">
+            <property name="text">
+             <string>Type</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="cboType"/>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="lblAttribute">
+            <property name="text">
+             <string>Attribute</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QComboBox" name="cboAttribute"/>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="lblGapFunction">
+            <property name="text">
+             <string>Gap Function</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QComboBox" name="cboGapFunction"/>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="lblQuantiles">
+            <property name="text">
+             <string>Quantiles</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="1">
+           <widget class="QSpinBox" name="spnQuantiles">
+            <property name="maximum">
+             <number>100</number>
+            </property>
+            <property name="value">
+             <number>100</number>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="lblQuantile">
+            <property name="text">
+             <string>Quantile</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="1">
+           <widget class="QSpinBox" name="spnQuantile">
+            <property name="value">
+             <number>50</number>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="lblSRID">
+            <property name="text">
+             <string>CRS</string>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="1">
+           <layout class="QHBoxLayout" name="horizontalLayout_2">
+            <item>
+             <widget class="QLineEdit" name="txtCRSConfig">
+              <property name="mouseTracking">
+               <bool>false</bool>
+              </property>
+              <property name="focusPolicy">
+               <enum>Qt::NoFocus</enum>
+              </property>
+              <property name="acceptDrops">
+               <bool>false</bool>
+              </property>
+              <property name="toolTip">
+               <string>Click Select to configure CRS.</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="btnCRSConfig">
+              <property name="text">
+               <string>Select</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item row="8" column="0">
+           <widget class="QLabel" name="label">
+            <property name="text">
+             <string>Threads</string>
+            </property>
+           </widget>
+          </item>
+          <item row="8" column="1">
+           <widget class="QSpinBox" name="spnThreads">
+            <property name="minimum">
+             <number>1</number>
             </property>
            </widget>
           </item>
          </layout>
         </item>
-        <item row="1" column="0">
-         <widget class="QLabel" name="lblResolution">
-          <property name="text">
-           <string>Resolution</string>
+        <item>
+         <widget class="QTabWidget" name="tabFilters">
+          <property name="currentIndex">
+           <number>0</number>
           </property>
-         </widget>
-        </item>
-        <item row="1" column="1">
-         <layout class="QHBoxLayout" name="horizontalLayout_5">
-          <item>
-           <widget class="QDoubleSpinBox" name="spnResolution">
-            <property name="singleStep">
-             <double>0.100000000000000</double>
+          <widget class="QWidget" name="tabQuantile">
+           <attribute name="title">
+            <string>Quantile</string>
+           </attribute>
+           <widget class="QWidget" name="formLayoutWidget">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>351</width>
+              <height>101</height>
+             </rect>
             </property>
+            <layout class="QFormLayout" name="formLayout_2">
+             <item row="1" column="0">
+              <widget class="QLabel" name="lblQuantileFilterFrom">
+               <property name="text">
+                <string>Quantiles</string>
+               </property>
+              </widget>
+             </item>
+             <item row="1" column="1">
+              <widget class="QSpinBox" name="spnQuantileFilter">
+               <property name="enabled">
+                <bool>true</bool>
+               </property>
+               <property name="minimum">
+                <number>2</number>
+               </property>
+               <property name="maximum">
+                <number>100</number>
+               </property>
+               <property name="value">
+                <number>100</number>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="1">
+              <layout class="QHBoxLayout" name="horizontalLayout_7">
+               <item>
+                <widget class="QSpinBox" name="spnQuantileFilterFrom">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>1</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="maximum">
+                  <number>98</number>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lblQuantileFilterTo">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                   <horstretch>1</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="text">
+                  <string>to</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QSpinBox" name="spnQuantileFilterTo">
+                 <property name="sizePolicy">
+                  <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                   <horstretch>1</horstretch>
+                   <verstretch>0</verstretch>
+                  </sizepolicy>
+                 </property>
+                 <property name="minimum">
+                  <number>1</number>
+                 </property>
+                 <property name="value">
+                  <number>99</number>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </item>
+             <item row="0" column="0">
+              <widget class="QLabel" name="lblQuantileRange">
+               <property name="text">
+                <string>Quantile Range</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
-          </item>
-          <item>
-           <widget class="QCheckBox" name="chkSnapToGrid">
-            <property name="text">
-             <string>Snap to Grid</string>
+          </widget>
+          <widget class="QWidget" name="tabScanAngle">
+           <attribute name="title">
+            <string>Scan Angle</string>
+           </attribute>
+           <widget class="QWidget" name="formLayoutWidget_3">
+            <property name="geometry">
+             <rect>
+              <x>0</x>
+              <y>0</y>
+              <width>351</width>
+              <height>101</height>
+             </rect>
             </property>
-            <property name="checked">
-             <bool>true</bool>
-            </property>
+            <layout class="QFormLayout" name="formLayout_4">
+             <item row="0" column="1">
+              <widget class="QSpinBox" name="spnMaxAngle">
+               <property name="maximum">
+                <number>180</number>
+               </property>
+               <property name="value">
+                <number>180</number>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="0">
+              <widget class="QLabel" name="lblMaxAngle">
+               <property name="text">
+                <string>Max Scan Angle</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="2" column="0">
-         <widget class="QLabel" name="lblType">
-          <property name="text">
-           <string>Type</string>
-          </property>
-         </widget>
-        </item>
-        <item row="2" column="1">
-         <widget class="QComboBox" name="cboType"/>
-        </item>
-        <item row="3" column="0">
-         <widget class="QLabel" name="lblAttribute">
-          <property name="text">
-           <string>Attribute</string>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="1">
-         <widget class="QComboBox" name="cboAttribute"/>
-        </item>
-        <item row="4" column="0">
-         <widget class="QLabel" name="lblGapFunction">
-          <property name="text">
-           <string>Gap Function</string>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="1">
-         <widget class="QComboBox" name="cboGapFunction"/>
-        </item>
-        <item row="5" column="0">
-         <widget class="QLabel" name="lblQuantiles">
-          <property name="text">
-           <string>Quantiles</string>
-          </property>
-         </widget>
-        </item>
-        <item row="5" column="1">
-         <widget class="QSpinBox" name="spnQuantiles">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-          <property name="minimum">
-           <number>1</number>
-          </property>
-         </widget>
-        </item>
-        <item row="6" column="0">
-         <widget class="QLabel" name="lblQuantile">
-          <property name="text">
-           <string>Quantile</string>
-          </property>
-         </widget>
-        </item>
-        <item row="6" column="1">
-         <widget class="QSpinBox" name="spnQuantile">
-          <property name="enabled">
-           <bool>true</bool>
-          </property>
-         </widget>
-        </item>
-        <item row="7" column="0">
-         <widget class="QLabel" name="lblMaxAngle">
-          <property name="text">
-           <string>Max Scan Angle</string>
-          </property>
-         </widget>
-        </item>
-        <item row="7" column="1">
-         <widget class="QSpinBox" name="spnMaxAngle">
-          <property name="maximum">
-           <number>180</number>
-          </property>
-          <property name="value">
-           <number>180</number>
-          </property>
-         </widget>
-        </item>
-        <item row="8" column="0">
-         <widget class="QLabel" name="lblSRID">
-          <property name="text">
-           <string>CRS</string>
-          </property>
-         </widget>
-        </item>
-        <item row="8" column="1">
-         <layout class="QHBoxLayout" name="horizontalLayout_2">
-          <item>
-           <widget class="QLineEdit" name="txtCRSConfig">
-            <property name="mouseTracking">
-             <bool>false</bool>
+          </widget>
+          <widget class="QWidget" name="tabClasses">
+           <attribute name="title">
+            <string>Classes</string>
+           </attribute>
+           <widget class="QWidget" name="formLayoutWidget_4">
+            <property name="geometry">
+             <rect>
+              <x>-1</x>
+              <y>0</y>
+              <width>351</width>
+              <height>101</height>
+             </rect>
             </property>
-            <property name="focusPolicy">
-             <enum>Qt::NoFocus</enum>
-            </property>
-            <property name="acceptDrops">
-             <bool>false</bool>
-            </property>
-            <property name="toolTip">
-             <string>Click Select to configure CRS.</string>
-            </property>
+            <layout class="QFormLayout" name="formLayout_5">
+             <item row="0" column="1">
+              <widget class="QListWidget" name="lstClasses">
+               <property name="sizePolicy">
+                <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
+                 <horstretch>2</horstretch>
+                 <verstretch>2</verstretch>
+                </sizepolicy>
+               </property>
+              </widget>
+             </item>
+             <item row="0" column="0">
+              <widget class="QLabel" name="lblClasses">
+               <property name="text">
+                <string>Classes</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
            </widget>
-          </item>
-          <item>
-           <widget class="QPushButton" name="btnCRSConfig">
-            <property name="text">
-             <string>Select</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item row="9" column="0">
-         <widget class="QLabel" name="lblClasses">
-          <property name="text">
-           <string>Classes</string>
-          </property>
+          </widget>
          </widget>
-        </item>
-        <item row="9" column="1">
-         <widget class="QListWidget" name="lstClasses"/>
-        </item>
-        <item row="10" column="0">
-         <widget class="QLabel" name="label">
-          <property name="text">
-           <string>Threads</string>
-          </property>
-         </widget>
-        </item>
-        <item row="10" column="1">
-         <widget class="QSpinBox" name="spnThreads">
-          <property name="minimum">
-           <number>1</number>
-          </property>
-         </widget>
-        </item>
-        <item row="11" column="1">
-         <spacer name="verticalSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>40</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </item>
@@ -326,6 +470,33 @@
    </layout>
   </widget>
  </widget>
+ <tabstops>
+  <tabstop>lstFiles</tabstop>
+  <tabstop>btnSelectFiles</tabstop>
+  <tabstop>btnClearFiles</tabstop>
+  <tabstop>btnRemoveSelected</tabstop>
+  <tabstop>txtDestFile</tabstop>
+  <tabstop>btnDestFile</tabstop>
+  <tabstop>spnResolution</tabstop>
+  <tabstop>chkSnapToGrid</tabstop>
+  <tabstop>cboType</tabstop>
+  <tabstop>cboAttribute</tabstop>
+  <tabstop>cboGapFunction</tabstop>
+  <tabstop>spnQuantiles</tabstop>
+  <tabstop>spnQuantile</tabstop>
+  <tabstop>btnCRSConfig</tabstop>
+  <tabstop>spnThreads</tabstop>
+  <tabstop>tabFilters</tabstop>
+  <tabstop>spnQuantileFilterFrom</tabstop>
+  <tabstop>spnQuantileFilterTo</tabstop>
+  <tabstop>spnQuantileFilter</tabstop>
+  <tabstop>spnMaxAngle</tabstop>
+  <tabstop>lstClasses</tabstop>
+  <tabstop>btnCancel</tabstop>
+  <tabstop>btnRun</tabstop>
+  <tabstop>spnMaxAngle</tabstop>
+  <tabstop>lstClasses</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
  <buttongroups>

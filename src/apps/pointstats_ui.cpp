@@ -34,6 +34,10 @@ void WorkerThread::run() {
 		config.snap = m_parent->m_snap;
 		config.threads = m_parent->m_threads;
 		config.gapFractionType = m_parent->m_gapFunction;
+		
+		config.quantileFilterFrom = m_parent->m_quantileFilterFrom;
+		config.quantileFilterTo = m_parent->m_quantileFilterTo;
+		config.quantileFilter = m_parent->m_quantileFilter;
 
 		l.pointstats(config, m_parent->m_callbacks);
 	} catch(const std::exception &e) {
@@ -73,16 +77,33 @@ void PointStatsForm::setupUi(QWidget *form) {
 		m_last = QDir::home();
 	}
 
-	m_resolution = defaultResolution;
-	m_angleLimit = defaultAngleLimit;
-	spnResolution->setValue(m_resolution);
-	spnMaxAngle->setValue(m_angleLimit);
-
 	m_workerThread = new WorkerThread();
 	m_callbacks = new PointStatsCallbacks();
 
+	m_resolution = defaultResolution;
+	spnResolution->setValue(m_resolution);
+
+	m_angleLimit = defaultAngleLimit;
+	spnMaxAngle->setValue(m_angleLimit);
+
+	m_threads = defaultThreads;
 	spnThreads->setValue(m_threads);
 	spnThreads->setMaximum(g_max(1, omp_get_num_procs()));
+
+	m_snap = defaultSnapToGrid;
+	chkSnapToGrid->setCheckState(m_snap ? Qt::Checked : Qt::Unchecked);
+
+	m_quantileFilter = defaultFilterQuantiles;
+	m_quantileFilterTo = defaultFilterQuantileTo;
+	m_quantileFilterFrom = defaultFilterQuantileFrom;
+	spnQuantileFilter->setValue(m_quantileFilter);
+	spnQuantileFilterFrom->setValue(m_quantileFilterFrom);
+	spnQuantileFilterTo->setValue(m_quantileFilterTo);
+
+	m_quantile = defaultQuantile;
+	m_quantiles = defaultQuantiles;
+	spnQuantiles->setValue(m_quantiles);
+	spnQuantile->setValue(m_quantile);
 
 	m_type = defaultType;
 	int i = 0;
@@ -128,8 +149,6 @@ void PointStatsForm::setupUi(QWidget *form) {
 		lstClasses->addItem(item);
 	}
 
-	chkSnapToGrid->setCheckState(defaultSnapToGrid ? Qt::Checked : Qt::Unchecked);
-
 	connect(btnSelectFiles, SIGNAL(clicked()), this, SLOT(selectFilesClicked()));
 	connect(btnRemoveSelected, SIGNAL(clicked()), this, SLOT(removeFilesClicked()));
 	connect(btnClearFiles, SIGNAL(clicked()), this, SLOT(clearFilesClicked()));
@@ -151,7 +170,26 @@ void PointStatsForm::setupUi(QWidget *form) {
 	connect((PointStatsCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
 	connect(m_workerThread, SIGNAL(finished()), this, SLOT(done()));
 
+	connect(spnQuantileFilter, SIGNAL(valueChanged(int)), SLOT(quantileFilterChanged(int)));
+	connect(spnQuantileFilterFrom, SIGNAL(valueChanged(int)), SLOT(quantileFilterFromChanged(int)));
+	connect(spnQuantileFilterTo, SIGNAL(valueChanged(int)), SLOT(quantileFilterToChanged(int)));
+
 	updateTypeUi();
+}
+
+void PointStatsForm::quantileFilterChanged(int quantiles) {
+	m_quantileFilter = quantiles;
+	checkRun();
+}
+
+void PointStatsForm::quantileFilterFromChanged(int quantiles) {
+	m_quantileFilterFrom = quantiles;
+	checkRun();
+}
+
+void PointStatsForm::quantileFilterToChanged(int quantiles) {
+	m_quantileFilterTo = quantiles;
+	checkRun();
 }
 
 void PointStatsForm::classItemClicked(QListWidgetItem *item) {

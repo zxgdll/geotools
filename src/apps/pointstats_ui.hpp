@@ -61,6 +61,9 @@ namespace geotools {
 			unsigned int m_threads;
 			unsigned char m_angleLimit;
 			unsigned char m_gapFunction;
+			unsigned int m_quantileFilter;
+			unsigned int m_quantileFilterFrom;
+			unsigned int m_quantileFilterTo;
 			QDir m_last;
 			geotools::util::Callbacks *m_callbacks;
 			WorkerThread *m_workerThread;
@@ -80,20 +83,32 @@ namespace geotools {
 			void selectFilesClicked();
 			void removeFilesClicked();
 			void clearFilesClicked();
+
+			void destFileClicked();
+			void snapToGridChanged(bool);
+			
 			void cancelClicked();
 			void runClicked();
-			void destFileClicked();
+
 			void crsConfigClicked();
+
 			void typeSelected(int);
+
 			void threadsChanged(int);
+
 			void quantileChanged(int);
 			void quantilesChanged(int);
+
 			void attributeSelected(int);
-			void snapToGridChanged(bool);
 			void resolutionChanged(double);
-			void maxAngleChanged(int);
 			void gapFunctionSelected(int);
+
+			void quantileFilterFromChanged(int);
+			void quantileFilterToChanged(int);
+			void quantileFilterChanged(int);
+			void maxAngleChanged(int);
 			void classItemClicked(QListWidgetItem*);
+
 			void done();
 
 		};
