@@ -9,12 +9,10 @@
 
 #include "geotools.h"
 #include "sortedpointstream.hpp"
-#include "simplegeom.hpp"
 #include "lasutil.hpp"
 
 using namespace geotools::las;
 using namespace geotools::util;
-using namespace geotools::geom;
 
 double LASPoint::scaleX = 0;
 double LASPoint::scaleZ = 0;

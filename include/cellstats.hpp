@@ -109,8 +109,6 @@ namespace geotools {
 
 				void init() {
 					unsigned int span = m_points.size() / m_quantiles;
-					unsigned int start = m_from * span;
-					unsigned int end = m_to * span + 1;
 					auto it = m_points.begin(); //std::advance(m_points.begin(), start);
 					if(it == m_points.end())
 						g_argerr("Quantile start index out of bounds.");
