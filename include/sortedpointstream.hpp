@@ -7,12 +7,78 @@
 #include <memory>
 #include <unordered_map>
 
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Polygon_2.h>
+#include <CGAL/Polygon_2_algorithms.h>
+#include <CGAL/Boolean_set_operations_2.h>
+
+#include "liblas/liblas.hpp"
+
 #include "geos/geom/Geometry.h"
 
 #include "util.hpp"
 
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef K::Point_2 											Point_2;
+typedef CGAL::Polygon_with_holes_2<K> 						Polygon_h_2;
+typedef CGAL::Polygon_2<K>	 								Polygon_2;
+
+using namespace geotools::util;
+
 namespace geotools {
 	namespace las {
+
+		class BoundsTracker {
+		private:			
+			Polygon_h_2 *m_bounds;
+
+		public:
+
+			BoundsTracker() : 
+				m_bounds(nullptr) {}
+
+			void add(double x1, double y1, double x2, double y2) {
+				if(x1 == x2 || y1 == y2)
+					g_argerr("X and Y coords must differ.");
+				if(x1 > x2) {
+					double tmp = x1;
+					x1 = x2;
+					x2 = tmp;
+				}
+				if(y1 > y2) {
+					double tmp = y1;
+					y1 = y2;
+					y2 = tmp;
+				}
+				std::list<Point_2> pts;
+				pts.push_back(Point_2(x1, y1));
+				pts.push_back(Point_2(x1, y2));
+				pts.push_back(Point_2(x2, y2));
+				pts.push_back(Point_2(x2, y1));
+				pts.push_back(Point_2(x1, y1));
+				if(!m_bounds) {
+					m_bounds = new Polygon_h_2(Polygon_2(pts.begin(), pts.end()));
+				} else {
+					Polygon_2 input(pts.begin(), pts.end());
+					Polygon_h_2 *output = new Polygon_h_2();
+					CGAL::intersection(*m_bounds, input, output);
+					delete m_bounds;
+					m_bounds = output;
+				}
+			}
+
+			bool contains(double x, double y) const {
+				return CGAL::ON_BOUNDED_SIDE == m_bounds->outer_boundary().bounded_side(Point_2(x, y));
+			}
+
+			bool contains(double x1, double y1, double x2, double y2) const {
+				return contains(x1, y1) && contains(x2, y2);
+			}
+
+			~BoundsTracker() {
+				delete m_bounds;
+			}
+		};
 
 		class LASPoint {
 		public:
@@ -75,21 +141,45 @@ namespace geotools {
 				str.write((char *) &angle, sizeof(int8_t));
 			}
 
+			bool last() const {
+				return numRets > 0 && ret == numRets;
+			}
 
+			bool first() const {
+				return numRets > 0 && ret == 1;
+			}
+
+			bool intermediate() const {
+				return numRets > 2 && ret > 1 && ret < numRets;
+			}
+			
+			bool ground() const {
+				return cls == 2;
+			}
+
+			bool single() const {
+				return numRets == 1;
+			}
 		};
 
 		class SortedPointStream {
 		private:
+			double m_blockSize;
+			double m_minx;
+			double m_miny;
+			Bounds m_bounds;
+			BoundsTracker m_boundsTracker;
 			unsigned int m_numBlocks;
-			std::string m_file;
-			std::map<unsigned int, std::unique_ptr<std::ifstream> > m_cacheFiles;
-			std::unordered_map<unsigned int, unsigned int> m_cacheCounts;
-			std::unordered_map<unsigned int, std::string> m_blockFilenames;
-			geotools::util::Bounds m_fileBounds;
-			geotools::util::Bounds m_currentBounds;
-			unsigned int m_currentBlock;
-			bool m_inited;
+			std::list<std::string> m_files;
+			std::unordered_map<unsigned int, std::unique_ptr<std::ifstream> > m_cacheFiles;
+			std::unordered_map<unsigned long, unsigned int> m_cacheCounts;
+			std::unordered_map<unsigned long, std::string> m_blockFilenames;
+			unsigned int m_col;
+			unsigned int m_row;
+			unsigned int m_cols;
+			unsigned int m_rows;
 			unsigned int m_pointCount;
+			bool m_inited;
 
 		public:
 
@@ -98,7 +188,7 @@ namespace geotools {
 			 * The mode indicates which dimensions will be stored.
 			 * If mem is true, the dataset is stored in memory. If false, in files.
 			 */
-			SortedPointStream(const std::string &file, unsigned int numBlocks);
+			SortedPointStream(const std::list<std::string> &files, double blockSize);
 
 			~SortedPointStream();
 
@@ -108,11 +198,13 @@ namespace geotools {
 			 */
 			void init();
 
-			geotools::util::Bounds fileBounds();
+			unsigned int pointCount() const;
 
-			geotools::util::Bounds currentBounds();
+			bool contains(double x, double y) const;
 
-			unsigned int pointCount();
+			bool contains(double x1, double y1, double x2, double y2) const;
+
+			const Bounds& bounds() const;
 
 			/**
 			 * Reads the next available point into the Point object.
@@ -120,7 +212,7 @@ namespace geotools {
 			 * the region within which there are no more points to read.)
 			 * Returns false if there are no more points, true otherwise.
 			 */
-			bool next(LASPoint &pt, geos::geom::Geometry **geom);
+			bool next(LASPoint &pt);
 
 		};
 

@@ -36,7 +36,7 @@
 
 #include "pointstats.hpp"
 #include "lasutil.hpp"
-#include "pointstream.hpp"
+#include "sortedpointstream.hpp"
 #include "cellstats.hpp"
 
 using namespace geotools::util;
@@ -155,6 +155,7 @@ namespace geotools {
 			g_debug("Angle Limit: " << config.angleLimit);
 		}
 
+		/*
 		void PointStats::computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds,
 			std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount) {
 			g_debug(" -- computeWorkBounds - work bounds initial: " << workBounds.print());
@@ -172,6 +173,7 @@ namespace geotools {
 			*pointCount = count;
 			g_debug(" -- computeWorkBounds - work bounds final: " << workBounds.print() << "; point count " << *pointCount);
 		}
+		*/
 
 		CellStats* PointStats::getComputer(const PointStatsConfig &config) {
 			using namespace geotools::point::stats;
@@ -184,7 +186,7 @@ namespace geotools {
 			case TYPE_PSTDDEV: 		return new CellPopulationStdDev();
 			case TYPE_PVARIANCE:	return new CellPopulationVariance();
 			case TYPE_DENSITY: 		return new CellDensity(g_sq(config.resolution));
-			case TYPE_RUGOSITY: 	return new CellRugosity();
+			case TYPE_RUGOSITY: 	return new CellRugosity(0, 0);
 			case TYPE_MAX: 			return new CellMax();
 			case TYPE_MIN: 			return new CellMin();
 			case TYPE_KURTOSIS: 	return new CellKurtosis();
@@ -208,21 +210,12 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			// Compute the work bounds, and store the list
-			// of relevant files. Snap the bounds if necessary.
-			std::set<std::string> files;
-			unsigned long pointCount;
-			Bounds workBounds;
-			workBounds.collapse();
-			computeWorkBounds(config.sourceFiles, config.bounds, files, workBounds, &pointCount);
-			if(config.snap) {
-				workBounds.snap(config.resolution);
-				g_debug(" -- pointstats - snapped work bounds: " << workBounds.print());
-			}
-
+			SortedPointStream ps(config.sourceFiles, 60.0);
+			ps.init();
+			
 			// Prepare the grid
 			// TODO: Only works with UTM north.
-			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
+			Raster<float> grid(config.dstFile, 1, ps.bounds(), config.resolution, 
 				-config.resolution, -9999, config.hsrid);
 			grid.fill(-9999.0);
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
@@ -231,81 +224,41 @@ namespace geotools {
 			CellStatsFilter *filter = nullptr, *tmp;
 			if(config.hasClasses()) 
 				tmp = filter = new ClassFilter(config.classes);
-			if(config.hasQuantileFilter())
-				tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
+			//if(config.hasQuantileFilter())
+			//	tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
 			if(filter)
 				computer->setFilter(filter);
 
-			std::vector<std::string> filesv(files.begin(), files.end());
-			unsigned int fileIdx = 0;
+			LASPoint pt;
 
-			std::map<unsigned long, std::list<std::shared_ptr<LASPoint> > > edges;
+			std::map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
+			unsigned long i = 1;
 
-			#pragma omp parallel for
-			for(unsigned int f = 0; f < filesv.size(); ++f) {
+			while(ps.next(pt)) {
 
-				g_debug(" -- pointstats - file " << filesv[f]);
+				unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
+				std::shared_ptr<LASPoint> pv(new LASPoint(pt));
+				values[idx].push_back(std::move(pv));
 
-				if(callbacks)
-					callbacks->overallCallback((fileIdx + 0.5f) / filesv.size());
-
-				const std::string &file = filesv[f];
-				std::map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
-
-				LASPoint pt;
-				PointStream ps(file);
-
-				while(ps.next(pt)) {
-
-					unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-					std::shared_ptr<LASPoint> pv(new LASPoint(pt));
-					values[idx].push_back(std::move(pv));
-
-				}
-
-				g_debug(" -- pointstats - computing results");
-				std::list<unsigned long> edgeIds;
-				for(const auto &it : values) {
-					int col = it.first % grid.cols();
-					int row = it.first / grid.cols();
-					if(ps.contains(grid.toX(col), grid.toY(row)) 
-							&& ps.contains(grid.toX(col + 1), grid.toY(row + 1))) {
-						if(filter)
-							filter->setPoints(it.second);
-						grid.set(it.first, computer->compute(it.second));
-					} else {
-						edgeIds.push_back(it.first);
+				if(i % 10000 == 0 || i == ps.pointCount()) {
+					g_debug(" -- pointstats - computing results");
+					std::unordered_set<unsigned long> rem;
+					for(const auto &it : values) {
+						int col = it.first % grid.cols();
+						int row = it.first / grid.cols();
+						if(ps.contains(grid.toX(col), grid.toY(row), grid.toX(col + 1), grid.toY(row + 1))) {
+							if(filter)
+								filter->setPoints(it.second);
+							grid.set(it.first, computer->compute(it.second));
+							rem.insert(it.first);
+						}
 					}
+					for(const unsigned long &id : rem)
+						values.erase(id);
+
 				}
 
-				g_debug(" -- pointstats - " << edgeIds.size() << " edge cells deferred.");
-				// Write to the edge pixel map to solve later.
-				#pragma omp critical
-				{
-					for(const unsigned long &id : edgeIds) {
-						for(std::shared_ptr<LASPoint> &pt : values[id])
-							edges[id].push_back(std::move(pt));
-					}
-	
-					++fileIdx; // Do it here to save another critical/atomic
-				}
-
-				if(callbacks)
-					callbacks->overallCallback((float) fileIdx / filesv.size()); // N.B. fileIdx already incremented
-
-			}
-
-			unsigned int i = 0;
-			std::vector<unsigned long> ids(edges.size());
-			for(const auto &it : edges)
-				ids[i++] = it.first;
-			std::sort(ids.begin(), ids.end());
-
-			#pragma omp parallel for
-			for(unsigned int i = 0; i < ids.size(); ++i) {
-				if(filter)
-					filter->setPoints(edges[ids[i]]);
-				grid.set(ids[i], computer->compute(edges[ids[i]]));
+				++i;
 			}
 
 			if(callbacks)

@@ -105,6 +105,16 @@ namespace geotools {
 
 		};
 
+		class SortedPointStream {
+		private:
+			std::string m_tmpFile;
+			double m_cellSize;
+
+		public:
+			SortedPointStream(const std::string &tmpFile, double cellSize);
+
+		};
+
 	} // las
 
 } // geotools

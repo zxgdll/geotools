@@ -687,7 +687,7 @@ namespace geotools {
 			/**
 			 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
 			 */
-			Raster(const std::string &filename, int band, Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs);
+			Raster(const std::string &filename, int band, const Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs);
 			
 			/**
 			 * Build a new raster with the given filename, bounds, resolution, nodata and SRID.

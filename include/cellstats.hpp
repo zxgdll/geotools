@@ -14,7 +14,7 @@
 #include <CGAL/Polygon_2_algorithms.h>
 
 
-#include "pointstream.hpp"
+#include "sortedpointstream.hpp"
 
 #define GAP_IR 1
 #define GAP_BLA 2
@@ -119,11 +119,11 @@ namespace geotools {
 					if(it == m_points.end())
 						g_argerr("Quantile end index out of bounds.");
 					m_max = (*it)->z;
-					g_debug(" -- quant init start: " << start << "; end: " << end << "; min: " << m_min << "; max: " << m_max);
-					std::stringstream ss;
-					for(const std::shared_ptr<LASPoint> &pt : m_points)
-						ss << pt->z;
-					g_debug(" --- points " << ss.str());
+					//g_debug(" -- quant init start: " << start << "; end: " << end << "; min: " << m_min << "; max: " << m_max);
+					//std::stringstream ss;
+					//for(const std::shared_ptr<LASPoint> &pt : m_points)
+					//	ss << pt->z;
+					//g_debug(" --- points " << ss.str());
 				}
 
 				~QuantileFilter() {}
@@ -164,8 +164,16 @@ namespace geotools {
 			private:
 				double m_cellArea;
 			public:
-				CellDensity(double cellArea) : CellStats(), 
-					m_cellArea(cellArea) {
+				CellDensity(double area = 0.0) : CellStats() {
+					this->setArea(area);
+				}
+
+				void setArea(double area) {
+					m_cellArea = area;
+				}
+
+				double area() {
+					return m_cellArea;
 				}
 
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
@@ -344,32 +352,66 @@ namespace geotools {
 
 			class CellRugosity : public CellStats { // TODO: Seems to be density-dependent
 			private:
-				static const int a = 2, b = 1, c = 0;
+				CellDensity m_density;
+				double m_avgDensity;
 
 				double computeArea(const Face &face) {
 					Point_3 p1 = face.vertex(0)->point();
 					Point_3 p2 = face.vertex(1)->point();
 					Point_3 p3 = face.vertex(2)->point();
-					double sides[] {
-						std::sqrt(std::pow(p1.x() - p2.x(), 2.0) + std::pow(p1.y() - p2.y(), 2.0) + std::pow(p1.z() - p2.z(), 2.0)),
-						std::sqrt(std::pow(p2.x() - p3.x(), 2.0) + std::pow(p2.y() - p3.y(), 2.0) + std::pow(p2.z() - p3.z(), 2.0)),
-						std::sqrt(std::pow(p3.x() - p1.x(), 2.0) + std::pow(p3.y() - p1.y(), 2.0) + std::pow(p3.z() - p1.z(), 2.0)),
-					};
-					double s = (sides[a] + sides[b] + sides[c]) / 2.0;
-					return std::sqrt(s * (s - sides[a]) * (s - sides[b]) * (s - sides[c]));
+					return computeArea(p1.x(), p1.y(), p1.z(), p2.x(), p2.y(), p2.z(), p3.x(), p3.y(), p3.z());
+				}
+
+				double computeArea(double x1, double y1, double z1, double x2, double y2, double z2, double x3, double y3, double z3) {
+					double side0 = std::sqrt(std::pow(x1 - x2, 2.0) + std::pow(y1 - y2, 2.0) + std::pow(z1 - z2, 2.0));
+					double side1 = std::sqrt(std::pow(x2 - x3, 2.0) + std::pow(y2 - y3, 2.0) + std::pow(z2 - z3, 2.0));
+					double side2 = std::sqrt(std::pow(x3 - x1, 2.0) + std::pow(y3 - y1, 2.0) + std::pow(z3 - z1, 2.0));
+					double s = (side0 + side1 + side2) / 2.0;
+					return std::sqrt(s * (s - side0) * (s - side1) * (s - side2));
 				}
 
 				double toPlane(const Point_3 &p, const Plane_3 &plane, const Point_3 &centroid) {
 					return (p.x() * plane.a() + p.y() * plane.b() + plane.d()) / -plane.c();
 				}
 
+				double densityFactor(const std::list<std::shared_ptr<LASPoint> > &values) {
+					if(values.size() == 0 || m_avgDensity <= 0.0 || m_density.area() <= 0.0)
+						return 1.0;
+
+					double a = 2.49127261 + 9.01659384 * std::sqrt(m_density.compute(values) * 32.65748276);
+					double b = 2.49127261 + 9.01659384 * std::sqrt(m_avgDensity * 32.65748276);
+
+					return b / a;
+				}
+
+				double polyArea(const std::list<Point_3> &hull, const Plane_3 &plane, const Point_3 &centroid) {
+					double area = 0.0;
+					auto it0 = hull.begin();
+					auto it1 = hull.begin();
+					it1++;
+					do {
+						double z0 = toPlane(*it0, plane, centroid);
+						double z1 = toPlane(*it1, plane, centroid);
+						area += computeArea(it0->x(), it0->y(), z0, it1->x(), it1->y(), z1, centroid.x(), centroid.y(), centroid.z());
+						it0++;
+						it1++;
+						if(it1 == hull.end())
+							it1 = hull.begin();
+					} while(it0 != hull.end());
+					return area;
+				}
+
 			public:
+
+				CellRugosity(double cellArea = 0.0, double avgDensity = 0.0) :
+					m_avgDensity(avgDensity) {
+					m_density.setArea(cellArea);
+				}
 
 				/**
 				 * Using Du Preez, 2014 - Arc-Chord Ratio (ACR) Index.
 				 */
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-
 					if(values.size() == 0)
 						return -9999.0;
 					
@@ -391,15 +433,9 @@ namespace geotools {
 					CGAL::linear_least_squares_fitting_3(hull.begin(), hull.end(), plane, centroid, CGAL::Dimension_tag<0>());
 
 					// POBF surface area.
-					double parea = 0.0;
-					std::list<Point_3> poly; // TODO: Is there a faster way?
-					for(const Point_3 &pt : hull)
-						poly.push_back(Point_3(pt.x(), pt.y(), toPlane(pt, plane, centroid)));
-					Delaunay dt2(poly.begin(), poly.end());
-					for(Finite_faces_iterator it = dt2.finite_faces_begin(); it != dt2.finite_faces_end(); ++it)
-						parea += computeArea(*it);
+					double parea = polyArea(hull, plane, centroid);
 
-					return tarea / parea;
+					return (tarea / parea) * densityFactor(values);
 				}
 			};
 

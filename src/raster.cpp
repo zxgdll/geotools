@@ -779,7 +779,7 @@ Raster<T>::Raster(const std::string &filename, int band, double minx, double min
 }
 
 template <class T>
-Raster<T>::Raster(const std::string &filename, int band, Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs) :
+Raster<T>::Raster(const std::string &filename, int band, const Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs) :
 	Raster(filename, band, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(),
 	resolutionX, resolutionY, nodata, crs) {
 }

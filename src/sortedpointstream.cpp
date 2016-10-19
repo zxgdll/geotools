@@ -5,10 +5,6 @@
 #include <memory>
 #include <cstdio>
 
-#include "geos/geom/Geometry.h"
-#include "geos/geom/Polygon.h"
-#include "geos/geom/Coordinate.h"
-
 #include "liblas/liblas.hpp"
 
 #include "geotools.h"
@@ -24,10 +20,9 @@ double LASPoint::scaleX = 0;
 double LASPoint::scaleZ = 0;
 double LASPoint::scaleY = 0;
 
-SortedPointStream::SortedPointStream(const std::string &file, unsigned int numBlocks) :
-	m_numBlocks(numBlocks), 
-	m_file(file),
-	m_currentBlock(0),
+SortedPointStream::SortedPointStream(const std::list<std::string> &files, double blockSize) :
+	m_blockSize(blockSize),
+	m_files(files),
 	m_inited(false) {
 }
 
@@ -41,7 +36,7 @@ SortedPointStream::~SortedPointStream() {
 	}
 }
 
-unsigned int SortedPointStream::pointCount() {
+unsigned int SortedPointStream::pointCount() const {
 	if(!m_inited)
 		g_runerr("Not inited.");
 	return m_pointCount;
@@ -51,106 +46,121 @@ void SortedPointStream::init() {
 	#pragma omp critical(__sps_init)
 	{
 		if(!m_inited) {
-			g_debug(" -- init: opening file: " << m_file);
-			std::ifstream instr(m_file.c_str(), std::ios::in|std::ios::binary);
-			liblas::ReaderFactory rf;
-			liblas::Reader lasReader = rf.CreateWithStream(instr);
-			liblas::Header lasHeader = lasReader.GetHeader();
 
-			LASPoint::setScale(lasHeader.GetScaleX(), lasHeader.GetScaleY(), lasHeader.GetScaleZ());
-			m_pointCount = lasHeader.GetPointRecordsCount();
+			m_bounds.collapse();
+			m_pointCount = 0;
 
-			g_debug(" -- init computing bounds");
-			if(!LasUtil::computeLasBounds(lasHeader, m_fileBounds, 2))
-				LasUtil::computeLasBounds(lasReader, m_fileBounds, 2); // If the header bounds are bogus.
+			for(const std::string &file : m_files) {
+				g_debug(" -- init: opening file: " << file);
+				std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+				liblas::ReaderFactory rf;
+				liblas::Reader lasReader = rf.CreateWithStream(instr);
+				liblas::Header lasHeader = lasReader.GetHeader();
 
-			std::map<unsigned int, std::unique_ptr<std::ofstream> > blockFiles;
-			std::map<unsigned int, std::string> blockFilenames;
+				LASPoint::setScale(lasHeader.GetScaleX(), lasHeader.GetScaleY(), lasHeader.GetScaleZ());
 
-			g_debug(" -- init opening out files");
-			for(unsigned int i = 0; i <= m_numBlocks; ++i) { // N.B. Extra block at the end.
-				std::stringstream fs;
-				fs << "/tmp/sps_" << i;
-				std::string file = fs.str();
-				std::unique_ptr<std::ofstream> os(new std::ofstream(file, std::ios::out|std::ios::binary));
-				blockFiles[i] = std::move(os);
-				m_blockFilenames[i] = file;
+				g_debug(" -- init computing bounds");
+				Bounds fileBounds;
+				if(!LasUtil::computeLasBounds(lasHeader, fileBounds, 2))
+					LasUtil::computeLasBounds(lasReader, fileBounds, 2); // If the header bounds are bogus.
+				m_bounds.extend(fileBounds);
+			}
+
+			m_minx = m_bounds.minx();
+			m_miny = m_bounds.miny();
+			m_cols = (int) (m_bounds.width() / m_blockSize) + 1;
+			m_rows = (int) (m_bounds.height() / m_blockSize) + 1;
+			m_numBlocks = m_cols * m_rows;
+
+			g_debug(" -- init creating out files");
+			for(unsigned int row = 0; row <= m_rows; ++row) {
+				for(unsigned int col = 0; col <= m_cols; ++col) {
+					std::stringstream fs;
+					fs << "/tmp/sps_" << row << "_" << col << ".tmp";
+					unsigned long block = ((unsigned long) row << 32) | col;
+					m_blockFilenames[block] = fs.str();
+				}
 			}
 
 			LASPoint pt;
-			unsigned int block;
+			std::map<unsigned long, std::unique_ptr<std::ofstream> > blockFiles;
 
-			g_debug(" -- init writing points");
-			int cnt = 0;
-			while(lasReader.ReadNextPoint()) {
-				++cnt;
-				pt.update(lasReader.GetPoint());
-				block = (unsigned int) ((pt.y - m_fileBounds.miny()) / m_fileBounds.height() * m_numBlocks);
-				pt.write(*(blockFiles[block].get()));
-				m_cacheCounts[block]++;
+			for(const std::string &file : m_files) {
+
+				std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+				liblas::ReaderFactory rf;
+				liblas::Reader lasReader = rf.CreateWithStream(instr);
+				liblas::Header lasHeader = lasReader.GetHeader();
+
+				g_debug(" -- init writing points");
+				int cnt = 0;
+				while(lasReader.ReadNextPoint()) {
+					++cnt;
+					pt.update(lasReader.GetPoint());
+					unsigned int row = (unsigned int) pt.y / m_rows;
+					unsigned int col = (unsigned int) pt.x / m_cols;
+					unsigned long block = ((unsigned long) row << 32) | col;
+					if(blockFiles.find(block) == blockFiles.end()) {
+						std::unique_ptr<std::ofstream> os(new std::ofstream(m_blockFilenames[block], std::ios::out|std::ios::binary));
+						blockFiles[block] = std::move(os);
+					}
+					pt.write(*(blockFiles[block].get()));
+					m_cacheCounts[block]++;
+					++m_pointCount;
+				}
 			}
 
-			for(const auto &it : m_cacheCounts)
-				g_debug(" -- init block " << it.first << "; count " << it.second);
+			g_debug(" -- init closing out files");
+			for(const auto &it : blockFiles)
+				it.second->close();
 
-			g_debug(" -- init opening in files");
-			for(unsigned int i = 0; i < m_numBlocks; ++i) {
-				blockFiles[i]->close();
-				std::unique_ptr<std::ifstream> is(new std::ifstream(m_blockFilenames[i], std::ios::in|std::ios::binary));
-				m_cacheFiles[i] = std::move(is);
-			}
-
-			m_currentBlock = 0;
+			m_row = 0;
+			m_col = 0;
 			m_inited = true;
 		}
 	} // omp
 }
 
-Bounds SortedPointStream::fileBounds() {
-	if(!m_inited)
-		g_runerr("Not inited.");
-	return m_fileBounds;
+bool SortedPointStream::contains(double x, double y) const {
+	return m_boundsTracker.contains(x, y);
 }
 
-Bounds SortedPointStream::currentBounds() {
-	if(!m_inited)
-		g_runerr("Not inited.");
-	return m_fileBounds;
+bool SortedPointStream::contains(double x1, double y1, double x2, double y2) const {
+	return m_boundsTracker.contains(x1, y1, x2, y2);
 }
 
-bool SortedPointStream::next(LASPoint &pt, geos::geom::Geometry **geom) {
+const Bounds& SortedPointStream::bounds() const {
+	return m_bounds;
+}
+
+bool SortedPointStream::next(LASPoint &pt) {
 
 	if(!m_inited)
 		g_runerr("Not inited.");
 
-	if(m_currentBlock >= m_numBlocks) 
-		return false;
+	unsigned long block = ((unsigned long) m_row << 32) | m_col;
 
-	if(m_cacheCounts[m_currentBlock] == 0) {
-		g_debug(" -- next - switching to next block " << m_currentBlock);
-		geos::geom::Geometry *poly = (geos::geom::Geometry *) SimpleGeom::createPolygon(m_fileBounds);
-		if(*geom == nullptr) {
-			*geom = poly;
-		} else {
-			geos::geom::Geometry *tmp;
-			if((*geom)->intersects(poly)) {
-				tmp = *geom;
-				*geom = (*geom)->intersection(poly);
-				delete tmp;
-			} else {
-				tmp = *geom;
-				*geom = (*geom)->Union(poly);
-				delete geom;
-			}
+	while(m_cacheCounts[block] == 0) {
+		g_debug(" -- next - switching to next block " << block);
+		m_boundsTracker.add(m_minx + m_col * m_blockSize, m_miny + m_row * m_blockSize, 
+			m_minx + (m_col + 1) * m_blockSize, m_miny + (m_row + 1) * m_blockSize);
+
+		++m_col;
+
+		if(m_col >= m_cols) {
+			m_col = 0;
+			++m_row;
 		}
-		m_currentBlock++;
+
+		if(m_row >= m_rows && m_col >= m_cols)
+			return false;
+
 	}
 
-	if(m_currentBlock >= m_numBlocks) 
-		return false;
 
-	pt.read(*(m_cacheFiles[m_currentBlock].get()));
-	m_cacheCounts[m_currentBlock]--;
+	block = ((unsigned long) m_row << 32) | m_col;
+	pt.read(*(m_cacheFiles[block].get()));
+	m_cacheCounts[block]--;
 
 	return true;
 }
