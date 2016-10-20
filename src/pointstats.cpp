@@ -220,7 +220,7 @@ namespace geotools {
 
 				unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
 				std::shared_ptr<LASPoint >pv(new LASPoint(pt));
-				values[idx].push_back(std::move(pv));
+				values[idx].push_back(pv);
 
 				if(lastPoint) {
 					g_debug(" -- pointstats - computing results " << values.size());
