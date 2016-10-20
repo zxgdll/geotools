@@ -212,14 +212,14 @@ namespace geotools {
 			if(filter)
 				computer->setFilter(filter);
 
-			std::unordered_map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
+			std::unordered_map<unsigned long, std::list<LASPoint*> > values;
 			bool lastPoint = false;
 			LASPoint pt;
 
 			while(ps.next(pt, &lastPoint)) {
 
 				unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-				std::shared_ptr<LASPoint >pv(new LASPoint(pt));
+				LASPoint *pv = new LASPoint(pt);
 				values[idx].push_back(pv);
 
 				if(lastPoint) {
@@ -228,7 +228,7 @@ namespace geotools {
 					auto it = values.begin();
 					#pragma omp parallel shared(it, values)
 					{
-						std::pair<unsigned long, std::list<std::shared_ptr<LASPoint> > > it0;
+						std::pair<unsigned long, std::list<LASPoint*> > it0;
 						std::unordered_set<unsigned long> rem;
 						#pragma omp for
 						for(unsigned int i = 0; i < values.size(); ++i) {
@@ -249,8 +249,11 @@ namespace geotools {
 						}
 						#pragma omp critical
 						{
-							for(const unsigned long &id : rem)
+							for(const unsigned long &id : rem) {
+								for(LASPoint *p : values[id])
+									delete p;
 								values.erase(id);
+							}
 						}
 					}
 				}
@@ -261,7 +264,7 @@ namespace geotools {
 			#pragma omp parallel shared(it)
 			{
 				std::unordered_set<unsigned long> rem;
-				std::pair<unsigned long, std::list<std::shared_ptr<LASPoint> > > it0;
+				std::pair<unsigned long, std::list<LASPoint*> > it0;
 				#pragma omp for
 				for(unsigned int i = 0; i < values.size(); ++i) {
 					#pragma omp critical
@@ -278,8 +281,11 @@ namespace geotools {
 				}
 				#pragma omp critical
 				{
-					for(const unsigned long &id : rem)
+					for(const unsigned long &id : rem) {
+						for(LASPoint *p : values[id])
+							delete p;
 						values.erase(id);
+					}
 				}
 			}
 
