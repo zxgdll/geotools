@@ -155,26 +155,6 @@ namespace geotools {
 			g_debug("Angle Limit: " << config.angleLimit);
 		}
 
-		/*
-		void PointStats::computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds,
-			std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount) {
-			g_debug(" -- computeWorkBounds - work bounds initial: " << workBounds.print());
-			liblas::ReaderFactory rf;
-			unsigned long count = 0;
-			for(const std::string &file : files) {
-				g_debug(" -- computeWorkBounds - checking file " << file);
-				geotools::las::PointStream ps(file);
-				count += ps.pointCount();
-				if(bounds.intersects(ps.fileBounds(), 2)) {
-					selectedFiles.insert(file);
-					workBounds.extend(ps.fileBounds());
-				}
-			}
-			*pointCount = count;
-			g_debug(" -- computeWorkBounds - work bounds final: " << workBounds.print() << "; point count " << *pointCount);
-		}
-		*/
-
 		CellStats* PointStats::getComputer(const PointStatsConfig &config) {
 			using namespace geotools::point::stats;
 			switch(config.type) {
@@ -263,7 +243,6 @@ namespace geotools {
 									grid.toX(col + 1), grid.toY(row + 1))) {
 								if(filter)
 									filter->setPoints(it0.second);
-								g_debug(computer->compute(it0.second));
 								grid.set(it0.first, computer->compute(it0.second));
 								rem.insert(it0.first);
 							}

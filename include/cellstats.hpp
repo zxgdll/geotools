@@ -180,10 +180,10 @@ namespace geotools {
 					if(values.size() == 0)
 						return -9999.0;
 					double sum = 0.0;
-					for(const std::shared_ptr<LASPoint> &v : filtered(values))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(vallues);
+					for(const std::shared_ptr<LASPoint> &v : filt)
 						sum += v->z;
-					//g_debug(" -- mean " << sum << ", " << values.size());
-					return sum / values.size();
+					return sum / filt.size();
 				}
 			};
 
