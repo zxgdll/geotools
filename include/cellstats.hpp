@@ -66,7 +66,7 @@ namespace geotools {
 				}
 
 				virtual bool keep(const LASPoint &pt) const {
-					return  keepImpl(pt) || (m_chain && m_chain->keep(pt));
+					return  keepImpl(pt) && (!m_chain || m_chain->keep(pt));
 				}
 
 				virtual ~CellStatsFilter() {}
