@@ -244,35 +244,64 @@ namespace geotools {
 
 				if(lastPoint) {
 					g_debug(" -- pointstats - computing results " << values.size());
-					std::unordered_set<unsigned long> rem;
-					for(const auto &it : values) {
-						int col = it.first % grid.cols();
-						int row = it.first / grid.cols();
-						if(ps.containsCompleted(grid.toX(col), grid.toY(row), 
-								grid.toX(col + 1), grid.toY(row + 1))) {
-							if(filter)
-								filter->setPoints(it.second);
-							grid.set(it.first, computer->compute(it.second));
-							rem.insert(it.first);
+
+					auto it = values.begin();
+					#pragma omp parallel shared(it, values)
+					{
+						std::pair<unsigned long, std::list<std::shared_ptr<LASPoint> > > it0;
+						std::unordered_set<unsigned long> rem;
+						#pragma omp for
+						for(unsigned int i = 0; i < values.size(); ++i) {
+							#pragma omp critical
+							{
+								it0 = *it;
+								++it;
+							}
+							int col = it0.first % grid.cols();
+							int row = it0.first / grid.cols();
+							if(ps.containsCompleted(grid.toX(col), grid.toY(row), 
+									grid.toX(col + 1), grid.toY(row + 1))) {
+								if(filter)
+									filter->setPoints(it0.second);
+								grid.set(it0.first, computer->compute(it0.second));
+								rem.insert(it0.first);
+							}
+						}
+						#pragma omp critical
+						{
+							for(const unsigned long &id : rem)
+								values.erase(id);
 						}
 					}
-					for(const unsigned long &id : rem)
-						values.erase(id);
 				}
 			}
 
 			g_debug(" -- pointstats - computing results " << values.size());
-			std::unordered_set<unsigned long> rem;
-			for(const auto &it : values) {
-				int col = it.first % grid.cols();
-				int row = it.first / grid.cols();
-				if(filter)
-					filter->setPoints(it.second);
-				grid.set(it.first, computer->compute(it.second));
-				rem.insert(it.first);
+			auto it = values.begin();
+			#pragma omp parallel shared(it)
+			{
+				std::unordered_set<unsigned long> rem;
+				std::pair<unsigned long, std::list<std::shared_ptr<LASPoint> > > it0;
+				#pragma omp for
+				for(unsigned int i = 0; i < values.size(); ++i) {
+					#pragma omp critical
+					{
+						it0 = *it;
+						++it;
+					}
+					int col = it0.first % grid.cols();
+					int row = it0.first / grid.cols();
+					if(filter)
+						filter->setPoints(it0.second);
+					grid.set(it0.first, computer->compute(it0.second));
+					rem.insert(it0.first);
+				}
+				#pragma omp critical
+				{
+					for(const unsigned long &id : rem)
+						values.erase(id);
+				}
 			}
-			for(const unsigned long &id : rem)
-				values.erase(id);
 
 			if(callbacks)
 				callbacks->overallCallback(1.0f);
