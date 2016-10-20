@@ -263,6 +263,7 @@ namespace geotools {
 									grid.toX(col + 1), grid.toY(row + 1))) {
 								if(filter)
 									filter->setPoints(it0.second);
+								g_debug(computer->compute(it0.second));
 								grid.set(it0.first, computer->compute(it0.second));
 								rem.insert(it0.first);
 							}
