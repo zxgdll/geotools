@@ -18,6 +18,10 @@ endif()
 
 enable_language(C)
 enable_language(CXX)
+set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD_REQUIRED ON)
+set (CMAKE_CXX_EXTENSIONS OFF)
+add_compile_options(-std=c++11)
 
 find_package(OpenMP)
 if(${WITH_GUI})
@@ -31,7 +35,6 @@ set (CMAKE_AUTOMOC_OPTIONS "-Iinclude")
 
 set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
 set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-set (CMAKE_CXX_STANDARD 11)
 
 set (CPACK_PACKAGE_NAME "GeoTools")
 set (CPACK_PACKAGE_VENDOR "dijital.ca")
