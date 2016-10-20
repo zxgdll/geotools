@@ -15,6 +15,7 @@
 #include <vector>
 #include <cstring>
 #include <string>
+#include <memory>
 
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
