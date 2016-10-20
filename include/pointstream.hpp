@@ -69,49 +69,51 @@ namespace geotools {
 
 		class PointStream {
 		private:
-			unsigned int m_numBlocks;
-			std::string m_file;
-			geotools::util::Bounds m_fileBounds;
-			unsigned int m_pointCount;
+			unsigned int m_fileIdx;
+			unsigned long m_pointCount;
+			unsigned long m_curPt;
+			unsigned long m_curPtCount;
+			geotools::util::Bounds m_bounds;
+			std::unordered_map<std::string, geotools::util::Bounds> m_fileBounds;
+			std::list<geotools::util::Bounds> m_completedBounds;
+			std::vector<std::string> m_files;
+			std::string m_currentFile;
 			liblas::Reader *m_lasReader;
 			std::ifstream *m_instr;
-
+			
 			/**
 			 * Initializes the point stream.
 			 */
-			void init(bool deepBounds);
+			void init(const std::list<std::string> &files, bool deepBounds);
+
+			bool loadNextReader();
+
 		public:
 
 			/**
-			 * Constructs a new point stream on the given file.
-			 * The mode indicates which dimensions will be stored.
+			 * Constructs a new point stream on the given files.
+			 * Deep bounds determines whether the bounds of a file are computed from
+			 * the header alone, or from the points, should the header be incorrect.
 			 */
-			PointStream(const std::string &file, bool deepBounds = false);
+			PointStream(const std::list<std::string> &files, bool deepBounds = false);
 
 			~PointStream();
 
-			geotools::util::Bounds fileBounds();
-
-			geotools::util::Bounds currentBounds();
+			geotools::util::Bounds bounds();
 
 			unsigned int pointCount();
 
 			bool contains(double x, double y);
 
+			bool contains(double x1, double y1, double x2, double y2);
+
+			bool containsCompleted(double x, double y);
+
+			bool containsCompleted(double x1, double y1, double x2, double y2);
 			/**
 			 * Reads the next available point into the LASPoint object.
 			 */
-			bool next(LASPoint &pt);
-
-		};
-
-		class SortedPointStream {
-		private:
-			std::string m_tmpFile;
-			double m_cellSize;
-
-		public:
-			SortedPointStream(const std::string &tmpFile, double cellSize);
+			bool next(LASPoint &pt, bool *lastPoint);
 
 		};
 

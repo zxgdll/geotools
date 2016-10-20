@@ -36,7 +36,7 @@
 
 #include "pointstats.hpp"
 #include "lasutil.hpp"
-#include "sortedpointstream.hpp"
+#include "pointstream.hpp"
 #include "cellstats.hpp"
 
 using namespace geotools::util;
@@ -210,12 +210,15 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			SortedPointStream ps(config.sourceFiles, 60.0);
-			ps.init();
-			
+			PointStream ps(config.sourceFiles);
+			Bounds workBounds = ps.bounds();
+			if(config.snap)
+				workBounds.snap(config.resolution);
+			g_debug(" -- pointstats - work bounds: " << workBounds.print());
+
 			// Prepare the grid
 			// TODO: Only works with UTM north.
-			Raster<float> grid(config.dstFile, 1, ps.bounds(), config.resolution, 
+			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
 				-config.resolution, -9999, config.hsrid);
 			grid.fill(-9999.0);
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
@@ -229,24 +232,24 @@ namespace geotools {
 			if(filter)
 				computer->setFilter(filter);
 
+			std::unordered_map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
+			bool lastPoint = false;
 			LASPoint pt;
 
-			std::map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
-			unsigned long i = 1;
-
-			while(ps.next(pt)) {
+			while(ps.next(pt, &lastPoint)) {
 
 				unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-				std::shared_ptr<LASPoint> pv(new LASPoint(pt));
+				std::shared_ptr<LASPoint >pv(new LASPoint(pt));
 				values[idx].push_back(std::move(pv));
 
-				if(i % 10000 == 0 || i == ps.pointCount()) {
-					g_debug(" -- pointstats - computing results");
+				if(lastPoint) {
+					g_debug(" -- pointstats - computing results " << values.size());
 					std::unordered_set<unsigned long> rem;
 					for(const auto &it : values) {
 						int col = it.first % grid.cols();
 						int row = it.first / grid.cols();
-						if(ps.contains(grid.toX(col), grid.toY(row), grid.toX(col + 1), grid.toY(row + 1))) {
+						if(ps.containsCompleted(grid.toX(col), grid.toY(row), 
+								grid.toX(col + 1), grid.toY(row + 1))) {
 							if(filter)
 								filter->setPoints(it.second);
 							grid.set(it.first, computer->compute(it.second));
@@ -255,11 +258,21 @@ namespace geotools {
 					}
 					for(const unsigned long &id : rem)
 						values.erase(id);
-
 				}
-
-				++i;
 			}
+
+			g_debug(" -- pointstats - computing results " << values.size());
+			std::unordered_set<unsigned long> rem;
+			for(const auto &it : values) {
+				int col = it.first % grid.cols();
+				int row = it.first / grid.cols();
+				if(filter)
+					filter->setPoints(it.second);
+				grid.set(it.first, computer->compute(it.second));
+				rem.insert(it.first);
+			}
+			for(const unsigned long &id : rem)
+				values.erase(id);
 
 			if(callbacks)
 				callbacks->overallCallback(1.0f);

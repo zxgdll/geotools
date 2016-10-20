@@ -10,7 +10,7 @@
 #include "geotools.h"
 #include "raster.hpp"
 #include "util.hpp"
-#include "sortedpointstream.hpp"
+#include "pointstream.hpp"
 #include "cellstats.hpp"
 
 #define TYPE_MIN 1

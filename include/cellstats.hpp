@@ -14,7 +14,7 @@
 #include <CGAL/Polygon_2_algorithms.h>
 
 
-#include "sortedpointstream.hpp"
+#include "pointstream.hpp"
 
 #define GAP_IR 1
 #define GAP_BLA 2
@@ -108,20 +108,13 @@ namespace geotools {
 				}
 
 				void init() {
-					unsigned int span = m_points.size() / m_quantiles;
 					auto it = m_points.begin(); //std::advance(m_points.begin(), start);
 					if(it == m_points.end())
 						g_argerr("Quantile start index out of bounds.");
 					m_min = (*it)->z;
-					//it = std::advance(it, end - start);
 					if(it == m_points.end())
 						g_argerr("Quantile end index out of bounds.");
 					m_max = (*it)->z;
-					//g_debug(" -- quant init start: " << start << "; end: " << end << "; min: " << m_min << "; max: " << m_max);
-					//std::stringstream ss;
-					//for(const std::shared_ptr<LASPoint> &pt : m_points)
-					//	ss << pt->z;
-					//g_debug(" --- points " << ss.str());
 				}
 
 				~QuantileFilter() {}
@@ -140,12 +133,12 @@ namespace geotools {
 
 				std::list<std::shared_ptr<LASPoint> > filtered(const std::list<std::shared_ptr<LASPoint> > &values) {
 					if(m_filter) {
-						std::list<std::shared_ptr<LASPoint> > out;
+						std::list<std::shared_ptr<LASPoint> > tmp;
 						for(const std::shared_ptr<LASPoint> &pt : values) {
 							if(m_filter->keep(*pt))
-								out.push_back(std::move(pt));
+								tmp.push_back(pt);
 						}
-						return std::move(out);
+						return std::move(tmp);
 					} else {
 						return std::move(values);
 					}				
@@ -189,6 +182,7 @@ namespace geotools {
 					double sum = 0.0;
 					for(const std::shared_ptr<LASPoint> &v : filtered(values))
 						sum += v->z;
+					//g_debug(" -- mean " << sum << ", " << values.size());
 					return sum / values.size();
 				}
 			};
