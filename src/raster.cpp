@@ -327,6 +327,8 @@ void MemRaster<T>::init(int cols, int rows) {
 		if(m_grid != nullptr)
 			free(m_grid);
 		m_grid = (T *) malloc(sizeof(T) * cols * rows);
+		if(!m_grid)
+			g_runerr("Failed to allocate memory for MemRaster.");
 	}
 }
 
@@ -610,8 +612,10 @@ T* BlockCache<T>::getBlock(int col, int row, bool forWrite) {
 	if(m_blocks.find(idx) == m_blocks.end()) {
 		//g_debug(" -- cache - new block");
 		T *blk = freeOne();
-		if(blk == nullptr)
+		if(!blk)
 			blk = (T *) malloc(sizeof(T) * m_bw * m_bh);
+		if(!blk)
+			g_runerr("Failed to allocate memory for raster block.");
 		#pragma omp critical(__gdal_io)
 		{
 			if(m_band->ReadBlock(col / m_bw, row / m_bh, blk) != CE_None)
