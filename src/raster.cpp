@@ -1,6 +1,10 @@
 #include <queue>
 #include <string>
 
+#include <boost/interprocess/file_mapping.hpp>
+#include <boost/interprocess/mapped_region.hpp>
+#include <boost/filesystem.hpp>
+
 #include "util.hpp"
 #include "raster.hpp"
 
@@ -42,7 +46,6 @@ void Grid<T>::gaussianWeights(double *weights, int size, double sigma) {
 		}
 	}
 }
-
 
 template <class T>
 void Grid<T>::computeStats() {
@@ -269,22 +272,23 @@ MemRaster<T>::MemRaster() :
 	m_grid(nullptr),
 	m_cols(-1), m_rows(-1),
 	m_item_dealloc(nullptr),
-	m_nodata(0) {
+	m_nodata(0),
+	m_mmapped(false),
+	m_size(0) {
 }
 
 template <class T>
-MemRaster<T>::MemRaster(int cols, int rows) : MemRaster() {
-	init(cols, rows);
+MemRaster<T>::MemRaster(int cols, int rows, bool mapped) : MemRaster() {
+	init(cols, rows, mapped);
 }
 
 template <class T>
 MemRaster<T>::~MemRaster() {
-	if(m_item_dealloc != nullptr) {
+	if(m_item_dealloc) {
 		for(size_t i = 0; i < (size_t) m_cols * m_rows; ++i)
 			m_item_dealloc(m_grid[i]);
 	}
-	if(m_grid != nullptr)
-		free(m_grid);
+	freeMem();
 }
 
 template <class T>
@@ -318,15 +322,42 @@ size_t MemRaster<T>::size() const {
 }
 
 template <class T>
-void MemRaster<T>::init(int cols, int rows) {
+void MemRaster<T>::freeMem() {
+	if(m_grid) {
+		if(m_mmapped) {
+			boost::interprocess::file_mapping::remove(m_mappedFile.c_str());
+		} else {
+			free(m_grid);
+		}
+	}
+}
+
+template <class T>
+void MemRaster<T>::init(int cols, int rows, bool mapped) {
 	if(cols <= 0 || rows <= 0)
 		g_argerr("Invalid row or column count.");
 	if(cols != m_cols || rows != m_rows) {
+		freeMem();
 		m_cols = cols;
 		m_rows = rows;
-		if(m_grid != nullptr)
-			free(m_grid);
-		m_grid = (T *) malloc(sizeof(T) * cols * rows);
+		m_mmapped = mapped;
+		m_grid = nullptr;
+		m_size = sizeof(T) * cols * rows;
+		if(mapped) {
+			using namespace boost::interprocess;
+			using namespace boost::filesystem;
+			path temp = boost::filesystem::unique_path();
+			m_mappedFile = temp.native();
+			std::filebuf fbuf;
+			fbuf.open(m_mappedFile, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+			fbuf.pubseekoff(m_size - 1, std::ios_base::beg);
+         	fbuf.sputc(0);
+			file_mapping mapping(m_mappedFile.c_str(), read_write);
+			mapped_region region(mapping, read_write);
+			m_grid = (T *) region.get_address();
+		} else {
+			m_grid = (T *) malloc(m_size);
+		}
 		if(!m_grid)
 			g_runerr("Failed to allocate memory for MemRaster.");
 	}
@@ -1167,22 +1198,22 @@ int Raster<T>::rows() const {
 
 template <class T>
 int Raster<T>::toRow(double y) const {
-	return (int) ((y - m_trans[3]) / m_trans[5]);
+	return (y - m_trans[3]) / m_trans[5];
 }
 
 template <class T>
 int Raster<T>::toCol(double x) const {
-	return (int) ((x - m_trans[0]) / m_trans[1]);
+	return (x - m_trans[0]) / m_trans[1];
 }
 
 template <class T>
 double Raster<T>::toX(int col) const {
-	return (col * m_trans[1]) + m_trans[0];
+	return m_trans[0] + col * m_trans[1] + m_trans[1] / 2.0;
 }
 
 template <class T>
 double Raster<T>::toY(int row) const {
-	return (row * m_trans[5]) + m_trans[3];
+	return m_trans[3] + row * m_trans[5] + m_trans[5] / 2.0;
 }
 
 template <class T>

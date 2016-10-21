@@ -90,6 +90,9 @@ namespace geotools {
 
 		public:
 
+			// TODO: Learn to use back_inserter
+			static geotools::util::Bounds filterFiles(const std::list<std::string> &infiles, std::vector<std::string> &outfiles, const geotools::util::Bounds &bounds);
+			
 			/**
 			 * Constructs a new point stream on the given files.
 			 * Deep bounds determines whether the bounds of a file are computed from

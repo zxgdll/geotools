@@ -201,6 +201,8 @@ namespace geotools {
 			grid.fill(-9999.0);
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
+			MemRaster<float> mem(grid.cols(), grid.rows(), true);
+
 			#pragma omp parallel
 			{
 
@@ -213,8 +215,6 @@ namespace geotools {
 				if(filter)
 					computer->setFilter(filter);
 
-				std::unordered_map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
-
 				#pragma omp for
 				for(unsigned int i = 0; i < ps.rowCount(); ++i) {
 
@@ -224,6 +224,8 @@ namespace geotools {
 
 					if(row.size()) {
 
+						std::unordered_map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
+
 						for(const LASPoint &pt : row) {
 							unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
 							std::shared_ptr<LASPoint> pv(new LASPoint(pt));
@@ -231,11 +233,13 @@ namespace geotools {
 						}
 
 						for(const auto &it : values)
-							grid.set(it.first, computer->compute(it.second));
+							mem.set(it.first, computer->compute(it.second));
 
 					}
 				}
 			}
+
+			grid.writeBlock(mem);
 
 			if(callbacks)
 				callbacks->overallCallback(1.0f);

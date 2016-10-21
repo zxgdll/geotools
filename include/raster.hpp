@@ -373,20 +373,25 @@ namespace geotools {
 			int m_rows;
 			void (*m_item_dealloc)(T);
 			T m_nodata;
-
+			bool m_mmapped;
+			size_t m_size;
+			std::string m_mappedFile;
+			
 			/**
 			 * Checks if the grid has been initialized. Throws exception otherwise.
 			 */
 			void checkInit() const;
 
+			void freeMem();
+
 		public:
 			MemRaster();
 
-			MemRaster(int cols, int rows);
+			MemRaster(int cols, int rows, bool mapped = false);
 
 			template <class U>
-			MemRaster(Grid<U> &tpl) : MemRaster() {
-			        init(tpl.cols(), tpl.rows());
+			MemRaster(Grid<U> &tpl, bool mapped = false) : MemRaster() {
+			        init(tpl.cols(), tpl.rows(), mapped);
 			}
 
 			~MemRaster();
@@ -411,15 +416,15 @@ namespace geotools {
 			size_t size() const;
 
 			template <class U>
-			void init(Grid<U> &tpl) {
-			        init(tpl.cols(), tpl.rows());
+			void init(Grid<U> &tpl, bool mapped = false) {
+			        init(tpl.cols(), tpl.rows(), mapped);
 			}
 
 			/**
 			 * Initialize with the given number of cols and rows.
 			 * (Re)allocates memory for the internal grid.
 			 */
-			void init(int cols, int rows);
+			void init(int cols, int rows, bool mapped = false);
 
 			/**
 			 * Fill the grid with the given value.

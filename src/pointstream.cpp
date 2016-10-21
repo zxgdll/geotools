@@ -64,6 +64,29 @@ void PointStream::init(const std::list<std::string> &files, bool deepBounds) {
 
 }
 
+geotools::util::Bounds PointStream::filterFiles(const std::list<std::string> &infiles, 
+		std::vector<std::string> &outfiles, const geotools::util::Bounds &bounds) {
+	liblas::ReaderFactory rf;
+	Bounds workkBounds;
+	workBounds.collapse();
+	for(const std::string &file : files) {
+		g_debug(" -- filterBounds opening file: " << file);
+		std::ifstream istr(file.c_str(), std::ios::binary);
+		liblas::Reader lasReader = rf.CreateWithStream(istr);
+		liblas::Header lasHeader = lasReader.GetHeader();
+		g_debug(" -- filterBounds computing bounds");
+		Bounds bounds0;
+		bounds0.collapse();
+		if(!LasUtil::computeLasBounds(lasHeader, bounds0, 2))
+			LasUtil::computeLasBounds(lasReader, bounds0, 2); // If the header bounds are bogus.
+		if(bounds.intersects(bounds0)) {
+			workBounds.extend(bounds0);
+			outfiles.push_back(file);
+		}
+	}
+	return workBounds;
+}
+
 Bounds PointStream::bounds() {
 	return m_bounds;
 }
