@@ -17,6 +17,8 @@
 #include <string>
 #include <memory>
 
+#include <boost/interprocess/file_mapping.hpp>
+#include <boost/interprocess/mapped_region.hpp>
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
 #include <eigen3/Eigen/Core>
@@ -376,7 +378,9 @@ namespace geotools {
 			bool m_mmapped;
 			size_t m_size;
 			std::string m_mappedFile;
-			
+			std::unique_ptr<boost::interprocess::mapped_region> m_region;
+			std::unique_ptr<boost::interprocess::file_mapping> m_mapping;
+	
 			/**
 			 * Checks if the grid has been initialized. Throws exception otherwise.
 			 */

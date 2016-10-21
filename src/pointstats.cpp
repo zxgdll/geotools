@@ -190,7 +190,7 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			SortedPointStream ps(config.sourceFiles, -config.resolution);
+			SortedPointStream ps(config.sourceFiles, -config.resolution * 2.0);
 			Bounds workBounds = ps.bounds();
 			g_debug(" -- pointstats - work bounds: " << workBounds.print());
 
@@ -198,10 +198,10 @@ namespace geotools {
 			// TODO: Only works with UTM north.
 			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
 				-config.resolution, -9999, config.hsrid);
-			grid.fill(-9999.0);
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
 			MemRaster<float> mem(grid.cols(), grid.rows(), true);
+			mem.fill(-9999.0);
 
 			#pragma omp parallel
 			{
@@ -239,6 +239,7 @@ namespace geotools {
 				}
 			}
 
+			g_debug(" -- writing to output");
 			grid.writeBlock(mem);
 
 			if(callbacks)

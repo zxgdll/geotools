@@ -95,7 +95,8 @@ void SortedPointStream::init(const std::list<std::string> &files, double blockSi
 			pt.update(lasReader.GetPoint());
 			unsigned int row = _getRow(pt.y, m_bounds, blockSize);
 			if(rowFiles.find(row) == rowFiles.end()) {
-				std::unique_ptr<std::ofstream> os(new std::ofstream(_rowFile(row), std::ios::binary));
+				std::string rowFile = _rowFile(row);
+				std::unique_ptr<std::ofstream> os(new std::ofstream(rowFile, std::ios::binary));
 				os->seekp(sizeof(unsigned int), std::ios::beg);
 				rowFiles[row] = std::move(os);
 				rowCounts[row] = 0;

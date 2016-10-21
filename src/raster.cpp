@@ -1,5 +1,6 @@
 #include <queue>
 #include <string>
+#include <fstream>
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -325,6 +326,8 @@ template <class T>
 void MemRaster<T>::freeMem() {
 	if(m_grid) {
 		if(m_mmapped) {
+			m_region.release();
+			m_mapping.release();
 			boost::interprocess::file_mapping::remove(m_mappedFile.c_str());
 		} else {
 			free(m_grid);
@@ -348,13 +351,15 @@ void MemRaster<T>::init(int cols, int rows, bool mapped) {
 			using namespace boost::filesystem;
 			path temp = boost::filesystem::unique_path();
 			m_mappedFile = temp.native();
-			std::filebuf fbuf;
-			fbuf.open(m_mappedFile, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
-			fbuf.pubseekoff(m_size - 1, std::ios_base::beg);
-         	fbuf.sputc(0);
-			file_mapping mapping(m_mappedFile.c_str(), read_write);
-			mapped_region region(mapping, read_write);
-			m_grid = (T *) region.get_address();
+			{
+				std::filebuf fbuf;
+				fbuf.open(m_mappedFile, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+				fbuf.pubseekoff(m_size - 1, std::ios_base::beg);
+				fbuf.sputc(0);
+			}
+			m_mapping.reset(new file_mapping(m_mappedFile.c_str(), read_write));
+			m_region.reset(new mapped_region(*(m_mapping.get()), read_write));
+			m_grid = (T *) m_region->get_address();
 		} else {
 			m_grid = (T *) malloc(m_size);
 		}
