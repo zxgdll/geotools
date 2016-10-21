@@ -36,7 +36,7 @@
 
 #include "pointstats.hpp"
 #include "lasutil.hpp"
-#include "pointstream.hpp"
+#include "sortedpointstream.hpp"
 #include "cellstats.hpp"
 
 using namespace geotools::util;
@@ -190,10 +190,8 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			PointStream ps(config.sourceFiles);
+			SortedPointStream ps(config.sourceFiles, -config.resolution);
 			Bounds workBounds = ps.bounds();
-			if(config.snap)
-				workBounds.snap(config.resolution);
 			g_debug(" -- pointstats - work bounds: " << workBounds.print());
 
 			// Prepare the grid
@@ -203,61 +201,7 @@ namespace geotools {
 			grid.fill(-9999.0);
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
-			std::unordered_map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
-			bool lastPoint = false;
-			LASPoint pt;
-
-			while(ps.next(pt, &lastPoint)) {
-
-				unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
-				std::shared_ptr<LASPoint> pv(new LASPoint(pt));
-				values[idx].push_back(pv);
-
-				if(lastPoint) {
-					g_debug(" -- pointstats - computing results " << values.size());
-
-					auto it = values.begin();
-					#pragma omp parallel shared(it, values)
-					{
-
-						std::unique_ptr<CellStats> computer(getComputer(config));
-						CellStatsFilter *filter = nullptr, *tmp;
-						if(config.hasClasses()) 
-							tmp = filter = new ClassFilter(config.classes);
-						//if(config.hasQuantileFilter())
-						//	tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
-						if(filter)
-							computer->setFilter(filter);
-
-						std::pair<unsigned long, std::list<std::shared_ptr<LASPoint> > > it0;
-						std::unordered_set<unsigned long> rem;
-						#pragma omp for
-						for(unsigned int i = 0; i < values.size(); ++i) {
-							#pragma omp critical
-							{
-								it0 = *it;
-								++it;
-							}
-							int col = it0.first % grid.cols();
-							int row = it0.first / grid.cols();
-							if(ps.containsCompleted(grid.toX(col), grid.toY(row), 
-									grid.toX(col + 1), grid.toY(row + 1))) {
-								grid.set(it0.first, computer->compute(it0.second));
-								rem.insert(it0.first);
-							}
-						}
-						#pragma omp critical
-						{
-							for(const unsigned long &id : rem)
-								values.erase(id);
-						}
-					}
-				}
-			}
-
-			g_debug(" -- pointstats - computing results " << values.size());
-			auto it = values.begin();
-			#pragma omp parallel shared(it)
+			#pragma omp parallel
 			{
 
 				std::unique_ptr<CellStats> computer(getComputer(config));
@@ -269,24 +213,27 @@ namespace geotools {
 				if(filter)
 					computer->setFilter(filter);
 
-				std::unordered_set<unsigned long> rem;
-				std::pair<unsigned long, std::list<std::shared_ptr<LASPoint> > > it0;
+				std::unordered_map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
+
 				#pragma omp for
-				for(unsigned int i = 0; i < values.size(); ++i) {
-					#pragma omp critical
-					{
-						it0 = *it;
-						++it;
+				for(unsigned int i = 0; i < ps.rowCount(); ++i) {
+
+					g_debug(" -- row " << i << "; thread " << omp_get_thread_num());
+					std::list<LASPoint> row;
+					ps.next(row);
+
+					if(row.size()) {
+
+						for(const LASPoint &pt : row) {
+							unsigned long idx = grid.toRow(pt.y) * grid.cols() + grid.toCol(pt.x);
+							std::shared_ptr<LASPoint> pv(new LASPoint(pt));
+							values[idx].push_back(pv);
+						}
+
+						for(const auto &it : values)
+							grid.set(it.first, computer->compute(it.second));
+
 					}
-					int col = it0.first % grid.cols();
-					int row = it0.first / grid.cols();
-					grid.set(it0.first, computer->compute(it0.second));
-					rem.insert(it0.first);
-				}
-				#pragma omp critical
-				{
-					for(const unsigned long &id : rem)
-						values.erase(id);
 				}
 			}
 

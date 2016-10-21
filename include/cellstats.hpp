@@ -13,8 +13,7 @@
 #include <CGAL/linear_least_squares_fitting_3.h>
 #include <CGAL/Polygon_2_algorithms.h>
 
-
-#include "pointstream.hpp"
+#include "sortedpointstream.hpp"
 
 #define GAP_IR 1
 #define GAP_BLA 2

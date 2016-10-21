@@ -164,41 +164,30 @@ namespace geotools {
 
 		class SortedPointStream {
 		private:
-			double m_blockSize;
-			double m_minx;
-			double m_miny;
 			Bounds m_bounds;
 			BoundsTracker m_boundsTracker;
-			unsigned int m_numBlocks;
-			std::list<std::string> m_files;
-			std::unordered_map<unsigned int, std::unique_ptr<std::ifstream> > m_cacheFiles;
-			std::unordered_map<unsigned long, unsigned int> m_cacheCounts;
-			std::unordered_map<unsigned long, std::string> m_blockFilenames;
-			unsigned int m_col;
-			unsigned int m_row;
-			unsigned int m_cols;
-			unsigned int m_rows;
 			unsigned int m_pointCount;
-			bool m_inited;
+			std::vector<unsigned int> m_rows;
+			unsigned int m_row;
+
+			void init(const std::list<std::string> &files, double blockSize);
 
 		public:
 
 			/**
-			 * Constructs a new point stream on the given file, with the given number of blocks.
-			 * The mode indicates which dimensions will be stored.
-			 * If mem is true, the dataset is stored in memory. If false, in files.
+			 * Constructs a new point stream on the given files.
+			 *
+			 * The block size gives the size, in map units, of a block,
+			 * blocks are square and stored as individual files.
 			 */
 			SortedPointStream(const std::list<std::string> &files, double blockSize);
 
 			~SortedPointStream();
 
-			/**
-			 * Initializes the point stream. Called implicitly by next()
-			 * so should exit quickly.
-			 */
-			void init();
 
 			unsigned int pointCount() const;
+
+			unsigned int rowCount() const;
 
 			bool contains(double x, double y) const;
 
@@ -206,14 +195,7 @@ namespace geotools {
 
 			const Bounds& bounds() const;
 
-			/**
-			 * Reads the next available point into the Point object.
-			 * Updates the geometry with the extent of the read region (that is,
-			 * the region within which there are no more points to read.)
-			 * Returns false if there are no more points, true otherwise.
-			 */
-			bool next(LASPoint &pt);
-
+			void next(std::list<LASPoint> &pts);
 		};
 
 	}
