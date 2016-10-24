@@ -71,6 +71,7 @@ namespace geotools {
 			geotools::util::Bounds bounds;
 			bool fill;
 			bool snap;
+			bool rebuild;
 			double resolution;
 			unsigned int threads;
 			unsigned short hsrid;

@@ -4,6 +4,9 @@
 #include <string>
 #include <memory>
 #include <cstdio>
+#include <cerrno>
+
+#include "omp.h"
 
 #include "liblas/liblas.hpp"
 
@@ -32,11 +35,13 @@ unsigned int _getRow(double y, const Bounds &bounds, double blockSize) {
 	}
 }
 
-SortedPointStream::SortedPointStream(const std::list<std::string> &files, double blockSize) {
-	init(files, blockSize);
+SortedPointStream::SortedPointStream(const std::list<std::string> &files, double blockSize, bool rebuild) {
+	init(files, blockSize, rebuild);
 }
 
 SortedPointStream::~SortedPointStream() {
+	delete m_pf;
+	/*
 	for(const unsigned int &row : m_rows) {
 		try {
 			std::remove(_rowFile(row).c_str());
@@ -44,6 +49,7 @@ SortedPointStream::~SortedPointStream() {
 			g_warn("Failed to delete " << _rowFile(row));
 		}
 	}
+	*/
 }
 
 unsigned int SortedPointStream::pointCount() const {
@@ -54,18 +60,18 @@ unsigned int SortedPointStream::rowCount() const {
 	return m_rows.size();
 }
 
-void SortedPointStream::init(const std::list<std::string> &files, double blockSize) {
+void SortedPointStream::init(const std::list<std::string> &files, double blockSize, bool rebuild) {
 
 	m_bounds.collapse();
 	m_pointCount = 0;
 	m_row = 0;
 
-	std::map<unsigned int, std::string> rowFileNames;
+	liblas::ReaderFactory rf;
+	std::unordered_map<unsigned int, std::string> rowFileNames;
 
 	for(const std::string &file : files) {
 		g_debug(" -- init: opening file: " << file);
 		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-		liblas::ReaderFactory rf;
 		liblas::Reader lasReader = rf.CreateWithStream(instr);
 		liblas::Header lasHeader = lasReader.GetHeader();
 
@@ -79,57 +85,124 @@ void SortedPointStream::init(const std::list<std::string> &files, double blockSi
 	}
 	m_bounds.snap(g_abs(blockSize));
 
-	std::map<unsigned int, unsigned int> rowCounts;
-	std::map<unsigned int, std::unique_ptr<std::ofstream> > rowFiles;
+	m_pf = new PointFile("/tmp/pf.tmp", m_bounds, blockSize);
+	m_pf->openWrite();
 
 	for(const std::string &file : files) {
 		g_debug(" -- init: opening file: " << file);
 		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-		liblas::ReaderFactory rf;
 		liblas::Reader lasReader = rf.CreateWithStream(instr);
 		liblas::Header lasHeader = lasReader.GetHeader();
 
-		g_debug(" -- init writing points");
 		LASPoint pt;
 		while(lasReader.ReadNextPoint()) {
 			pt.update(lasReader.GetPoint());
-			unsigned int row = _getRow(pt.y, m_bounds, blockSize);
-			if(rowFiles.find(row) == rowFiles.end()) {
-				std::string rowFile = _rowFile(row);
-				std::unique_ptr<std::ofstream> os(new std::ofstream(rowFile, std::ios::binary));
-				os->seekp(sizeof(unsigned int), std::ios::beg);
-				rowFiles[row] = std::move(os);
-				rowCounts[row] = 0;
-				m_rows.push_back(row);
-			}
-
-			pt.write(*(rowFiles[row].get()));
-			rowCounts[row]++;
-			++m_pointCount;
+			m_pf->addPoint(pt);
 		}
 	}
 
-	for(const auto &it : rowFiles) {
-		unsigned int c = rowCounts[it.first];
-		it.second->seekp(0, std::ios::beg);
-		it.second->write((char *) &c, sizeof(unsigned int));
-	}
+	m_pf->close();
+	m_pf->openRead();
 
-}
+		/*
+	if(rebuild) {
+	
+		std::vector<std::string> files0(files.begin(), files.end());
+		std::unordered_map<unsigned int, unsigned int> rowCounts;
+		std::unordered_map<unsigned int, std::FILE*> rowFiles;
+		std::unordered_map<unsigned int, unsigned long> rowTimes; // row --> time
+		std::map<unsigned long, unsigned int> timeRows; // time --> row
 
-bool SortedPointStream::contains(double x, double y) const {
-	return m_boundsTracker.contains(x, y);
-}
+		unsigned int pointCount = 0;
+		unsigned long openFileId = 0;
 
-bool SortedPointStream::contains(double x1, double y1, double x2, double y2) const {
-	return m_boundsTracker.contains(x1, y1, x2, y2);
+		#pragma omp parallel reduction(+:pointCount)
+		{
+
+			#pragma omp for
+			for(unsigned int i = 0; i < files0.size(); ++i) {
+				
+				const std::string &file = files0[i];
+
+				g_debug(" -- init: opening file: " << file << "; " << omp_get_thread_num());
+				std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+				liblas::Reader lasReader = rf.CreateWithStream(instr);
+				liblas::Header lasHeader = lasReader.GetHeader();
+
+				g_debug(" -- init writing points" << "; " << omp_get_thread_num());
+				LASPoint pt;
+				while(lasReader.ReadNextPoint()) {
+					pt.update(lasReader.GetPoint());
+					unsigned int row = _getRow(pt.y, m_bounds, blockSize);
+
+					if(rowFiles.find(row) == rowFiles.end()) {
+						#pragma omp critical(__sps_update)
+						{
+							if(rowFiles.find(row) == rowFiles.end()) {
+								++openFileId;
+								std::string rowFile = _rowFile(row);
+								FILE *os;
+								while(!(os = std::fopen(rowFile.c_str(), "wb"))) {
+									g_debug(" -- closing file -- limit reached");
+									if(!rowFiles.size())
+										g_runerr("Closed all files but couldn't open a new one... something's wrong.");
+									const auto &rt = timeRows.begin(); // Get the oldest item.
+									if(std::fclose(rowFiles[rt->second]))
+										g_warn("Failed to close file.");
+									rowFiles.erase(rt->second);
+									timeRows.erase(rt->first);
+									sleep(1);
+								}
+								std::fseek(os, sizeof(unsigned int), SEEK_SET);
+								rowFiles[row] = os;
+								timeRows[openFileId] = row;
+								rowTimes[row] = openFileId;
+								rowCounts[row] = 0;
+								m_rows.push_back(row);
+							}
+						}
+
+						pt.write(rowFiles[row]);
+					}
+
+
+					#pragma omp critical(__sps_update)
+					{
+						openFileId++;
+						timeRows.erase(rowTimes[row]);
+						rowTimes[row] = openFileId;
+						timeRows[openFileId] = row;
+						rowCounts[row]++;
+					}
+
+					++pointCount;
+				}
+			}
+
+			m_pointCount = pointCount;
+		}
+
+		for(const auto &it : rowFiles) {
+			unsigned int c = rowCounts[it.first];
+			// it.second->seekp(0, std::ios::beg);
+			std::fseek(it.second, 0, SEEK_SET);
+			//it.second->write((char *) &c, sizeof(unsigned int));
+			std::fwrite((const void *) &c, sizeof(unsigned int), 1, it.second);
+			std::fclose(it.second);
+		}
+
+	} // rebuild
+	*/
 }
 
 const Bounds& SortedPointStream::bounds() const {
 	return m_bounds;
 }
 
-void SortedPointStream::next(std::list<LASPoint> &pts) {
+bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
+	return m_pf->nextRow(pts);
+
+	/*
 	#pragma omp critical(__sps_init)
 	{
 		if(m_row < m_rows.size()) {
@@ -140,27 +213,15 @@ void SortedPointStream::next(std::list<LASPoint> &pts) {
 			unsigned int count;
 			instr.read((char *) &count, sizeof(unsigned int));
 			if(count) {
-				LASPoint pt;
 				for(unsigned int i = 0; i < count; ++i) {
-					pt.read(instr);
-					pts.push_back(pt); // copy
+					std::shared_ptr<LASPoint> pt(new LASPoint());
+					pt->read(instr);
+					pts.push_back(std::move(pt));
 				}
-				/*
-				double x1 = G_DBL_MAX_POS, y1 = G_DBL_MAX_POS;
-				double x2 = G_DBL_MAX_NEG, y2 = G_DBL_MAX_NEG;
-				while(count--) {
-					pt.read(instr);
-					x1 = g_min(pt.x, x1);
-					y1 = g_min(pt.y, y1);
-					x2 = g_max(pt.x, x2);
-					y2 = g_max(pt.y, y2);
-					pts.push_back(LASPoint(pt));
-				}
-				m_boundsTracker.add(x1, y1, x2, y2);
-				*/
 			}
 
 			++m_row;
 		}
 	}
+	*/
 }

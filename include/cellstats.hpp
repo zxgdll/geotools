@@ -40,7 +40,7 @@ namespace geotools {
 			class CellStatsFilter {
 			protected:
 				CellStatsFilter *m_chain;
-				std::list<std::shared_ptr<LASPoint> > m_points;
+				const std::list<std::shared_ptr<LASPoint> > *m_points;
 
 				virtual bool keepImpl(const LASPoint &) const =0;
 				virtual void init() {}
@@ -53,15 +53,14 @@ namespace geotools {
 					return next;
 				}
 
-				void setPoints(const std::list<std::shared_ptr<LASPoint> > &points) {
-					m_points.clear();
-					m_points.assign(points.begin(), points.end());
+				void setPoints(const std::list<std::shared_ptr<LASPoint> > *points) {
+					m_points = points;
 					init();
 					if(m_chain)
 						m_chain->setPoints(points);
 				}
 
-				virtual bool keep(const LASPoint &pt) const {
+				bool keep(const LASPoint &pt) const {
 					return  keepImpl(pt) && (!m_chain || m_chain->keep(pt));
 				}
 
@@ -104,11 +103,11 @@ namespace geotools {
 				}
 
 				void init() {
-					auto it = m_points.begin(); //std::advance(m_points.begin(), start);
-					if(it == m_points.end())
+					auto it = m_points->begin(); //std::advance(m_points.begin(), start);
+					if(it == m_points->end())
 						g_argerr("Quantile start index out of bounds.");
 					m_min = (*it)->z;
-					if(it == m_points.end())
+					if(it == m_points->end())
 						g_argerr("Quantile end index out of bounds.");
 					m_max = (*it)->z;
 				}
@@ -127,40 +126,23 @@ namespace geotools {
 					m_filter = filter;
 				}
 
-				unsigned int filtered(const std::list<std::shared_ptr<LASPoint> > &values, std::list<std::shared_ptr<LASPoint> > &filtered) {
+				std::list<std::shared_ptr<LASPoint> > filtered(const std::list<std::shared_ptr<LASPoint> > &values) {
+					std::list<std::shared_ptr<LASPoint> > filtered;
 					if(m_filter) {
-						m_filter->setPoints(values);
-						unsigned int i = 0;
+						m_filter->setPoints(&values);
 						for(const std::shared_ptr<LASPoint> &pt : values) {
-							if(m_filter->keep(*pt)) {
+							if(m_filter->keep(*pt))
 								filtered.push_back(pt);
-								++i;
-							}
 						}
 					} else {
 						filtered.assign(values.begin(), values.end());
 					}				
-					return filtered.size();
-				}
-
-				unsigned int filtered(const std::list<std::shared_ptr<LASPoint> > &values) {
-					if(m_filter) {
-						m_filter->setPoints(values);
-						unsigned int i = 0;
-						for(const std::shared_ptr<LASPoint> &pt : values) {
-							if(m_filter->keep(*pt))
-								++i;
-						}
-						return i;
-					} else {
-						return values.size();
-					}				
+					return filtered;
 				}
 
 				virtual double compute(const std::list<std::shared_ptr<LASPoint> >&) =0;
+
 				~CellStats() {
-					if(m_filter)
-						delete m_filter;
 				}
 			};
 
@@ -168,8 +150,9 @@ namespace geotools {
 			private:
 				double m_cellArea;
 			public:
-				CellDensity(double area = 0.0) : CellStats() {
-					this->setArea(area);
+				CellDensity(double area = 0.0) : 
+					CellStats(),
+					m_cellArea(area) {
 				}
 
 				void setArea(double area) {
@@ -181,8 +164,8 @@ namespace geotools {
 				}
 
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					return filt.size() / m_cellArea;
 				}
@@ -191,8 +174,8 @@ namespace geotools {
 			class CellMean : public CellStats {
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					double sum = 0.0;
 					for(const std::shared_ptr<LASPoint> &v : filt)
@@ -204,15 +187,15 @@ namespace geotools {
 			class CellCount : public CellStats {
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					return filtered(values);
+					return filtered(values).size();
 				}
 			};
 
 			class CellMedian : public CellStats {
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					int i = 0;
 					std::vector<double> v(filt.size());
@@ -231,8 +214,8 @@ namespace geotools {
 			class CellMin : public CellStats {
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					double min = G_DBL_MAX_POS;
 					for(const std::shared_ptr<LASPoint> &v : filt) {
@@ -246,8 +229,8 @@ namespace geotools {
 			class CellMax : public CellStats {
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					double max = G_DBL_MAX_NEG;
 					for(const std::shared_ptr<LASPoint> &v : filt) {
@@ -263,8 +246,8 @@ namespace geotools {
 				CellMean m_mean;
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					double mean = m_mean.compute(filt);
 					double sum = 0;
@@ -279,8 +262,8 @@ namespace geotools {
 				CellMean m_mean;
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					double mean = m_mean.compute(filt);
 					double sum = 0;
@@ -295,8 +278,8 @@ namespace geotools {
 				CellSampleVariance m_variance;
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					return std::sqrt(m_variance.compute(filt));
 				}
@@ -307,8 +290,8 @@ namespace geotools {
 				CellPopulationVariance m_variance;
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					return std::sqrt(m_variance.compute(filt));
 				}
@@ -320,8 +303,8 @@ namespace geotools {
 				CellSampleStdDev m_stdDev;
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					// Fisher-Pearson
 					double mean = m_mean.compute(filt);
@@ -339,8 +322,8 @@ namespace geotools {
 				CellSampleStdDev m_stdDev;
 			public:
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					double mean = m_mean.compute(filt);
 					double sum = 0.0;
@@ -395,7 +378,7 @@ namespace geotools {
 
 					double a = 2.49127261 + 9.01659384 * std::sqrt(m_density.compute(values) * 32.65748276);
 					double b = 2.49127261 + 9.01659384 * std::sqrt(m_avgDensity * 32.65748276);
-
+					//g_debug(" -- density " << m_density.compute(values) << ", " << m_avgDensity);
 					return b / a;
 				}
 
@@ -427,8 +410,8 @@ namespace geotools {
 				 * Using Du Preez, 2014 - Arc-Chord Ratio (ACR) Index.
 				 */
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 					
 					std::list<Point_3> pts;
@@ -450,8 +433,8 @@ namespace geotools {
 
 					// POBF surface area.
 					double parea = polyArea(hull, plane, centroid);
-
-					return (tarea / parea) * densityFactor(values);
+					double df = densityFactor(filt);
+					return (tarea / parea) * df;
 				}
 			};
 
@@ -466,13 +449,15 @@ namespace geotools {
 				unsigned char m_type;
 
 				double fcLidarBLa(const std::list<std::shared_ptr<LASPoint> > &values) {
-					double gnd = 0.0, all = 0.0;
+					double gnd = 0.0;
+					double all = 0.0;
 					for(const std::shared_ptr<LASPoint> &pt : values) {
 						if(pt->ground())
 							gnd += pt->intensity;
-						all += pt->intensity; // TODO: This should perhaps be filtered by class to remove bogus points.
+						if(pt->cls < 2) // TODO: This should perhaps be filtered by class to remove bogus points.
+							all += pt->intensity; 
 					}
-					g_debug(" -- fcLidarBLa " << gnd << ", " << all << ", " << values.size());
+					//g_debug(" -- fcLidarBLa " << gnd << ", " << all << ", " << values.size());
 					return all != 0.0 ? 1.0 - std::sqrt(gnd / all) : -9999.0;
 				}
 
@@ -545,8 +530,8 @@ namespace geotools {
 				}
 
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
-					std::list<std::shared_ptr<LASPoint> > filt;
-					if(!filtered(values, filt))
+					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
+					if(!filt.size())
 						return -9999.0;			
 
 					switch(m_type) {

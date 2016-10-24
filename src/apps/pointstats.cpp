@@ -54,11 +54,13 @@ int main(int argc, char **argv) {
 		bool fill = false;
 		bool gui = false;
 		bool snap = false;
+		bool rebuild = true;
 		double resolution = 2.0;
 		unsigned char angleLimit = 100;
 		std::string dstFile;
 		std::string type = "mean";
 		std::string att = "height";
+		std::string gap;
 		std::set<unsigned char> classes;
 		std::list<std::string> files;
 		Bounds bounds;
@@ -90,6 +92,10 @@ int main(int argc, char **argv) {
 				snap = true;
 			} else if(s == "-v") {
 				g_loglevel(G_LOG_DEBUG);
+			} else if(s == "-g") {
+				gap = argv[++i];
+			} else if(s == "-b") {
+				rebuild = true;
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
 			} else if(s == "--threads") {
@@ -120,6 +126,8 @@ int main(int argc, char **argv) {
 			config.fill = fill;
 			config.snap = snap;
 			config.threads = threads;
+			config.gapFractionType = config.parseGap(gap);
+			config.rebuild = rebuild;
 			
 			lg.pointstats(config);
 		}

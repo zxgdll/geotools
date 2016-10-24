@@ -13,7 +13,7 @@ if (${APPLE})
 	set (CMAKE_C_COMPILER /usr/local/bin/clang-omp CACHE STRING "C compiler" FORCE)
 	set (CMAKE_CXX_COMPILER /usr/local/bin/clang-omp++ CACHE STRING "C++ compiler" FORCE)
 else()
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-long-long -pedantic")
+	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-long-long -pedantic -frounding-math")
 endif()
 
 enable_language(C)
@@ -23,7 +23,10 @@ set (CMAKE_CXX_STANDARD_REQUIRED ON)
 set (CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-std=c++11)
 
-find_package(OpenMP)
+option(CGAL_DISABLE_ROUNDING_MATH_CHECK "Disable rounding math check in CGAL. This permits Valgrind to run." ON)
+
+find_package (OpenMP)
+
 if(${WITH_GUI})
 	find_package(Qt5 REQUIRED COMPONENTS Core Gui Widgets)
 endif()
