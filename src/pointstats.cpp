@@ -184,17 +184,17 @@ namespace geotools {
 			case TYPE_MEDIAN: 		return new CellMedian();
 			case TYPE_COUNT: 		return new CellCount();
 			case TYPE_STDDEV: 		return new CellSampleStdDev();
-			case TYPE_VARIANCE: 	return new CellSampleVariance();
+			case TYPE_VARIANCE: 		return new CellSampleVariance();
 			case TYPE_PSTDDEV: 		return new CellPopulationStdDev();
-			case TYPE_PVARIANCE:	return new CellPopulationVariance();
+			case TYPE_PVARIANCE:		return new CellPopulationVariance();
 			case TYPE_DENSITY: 		return new CellDensity(g_sq(config.resolution));
-			case TYPE_RUGOSITY: 	return new CellRugosity(config.resolution * config.resolution, 20.0);
+			case TYPE_RUGOSITY: 		return new CellRugosity(config.resolution * config.resolution, 20.0);
 			case TYPE_MAX: 			return new CellMax();
 			case TYPE_MIN: 			return new CellMin();
-			case TYPE_KURTOSIS: 	return new CellKurtosis();
+			case TYPE_KURTOSIS: 		return new CellKurtosis();
 			case TYPE_SKEW: 		return new CellSkewness();
-			case TYPE_QUANTILE: 	return new CellQuantile(config.quantile, config.quantiles);
-			case TYPE_GAP_FRACTION:	return new CellGapFraction(config.gapFractionType);
+			case TYPE_QUANTILE: 		return new CellQuantile(config.quantile, config.quantiles);
+			case TYPE_GAP_FRACTION:		return new CellGapFraction(config.gapFractionType);
 			default:
 				g_argerr("Invalid statistic type: " << config.type);
 			}
@@ -247,7 +247,7 @@ namespace geotools {
 			MemRaster<float> mem(grid.cols(), grid.rows(), true);
 			mem.fill(-9999.0);
 
-			#pragma omp parallel
+			//#pragma omp parallel
 			{
 
 				std::unique_ptr<CellStats> computer(getComputer(config));
@@ -259,10 +259,10 @@ namespace geotools {
 				if(filter)
 					computer->setFilter(filter);
 
-				#pragma omp for
+				//#pragma omp for
 				for(unsigned int i = 0; i < ps.rowCount(); ++i) {
 
-					g_debug(" -- row " << i << "; thread " << omp_get_thread_num());
+					//g_debug(" -- row " << i << "; thread " << omp_get_thread_num());
 					std::list<std::shared_ptr<LASPoint> > row;
 					ps.next(row);
 
@@ -282,7 +282,7 @@ namespace geotools {
 				}
 			}
 
-			_normalize(mem);
+			//_normalize(mem);
 
 			g_debug(" -- writing to output");
 			grid.writeBlock(mem);

@@ -97,14 +97,22 @@ namespace geotools {
 
 			void read(std::FILE *str) {
 				int32_t xx, yy, zz;
-				std::fwrite((const void *) &xx, sizeof(int32_t), 1, str); // 4
-				std::fwrite((const void *) &yy, sizeof(int32_t), 1, str); // 4
-				std::fwrite((const void *) &zz, sizeof(int32_t), 1, str); // 4
-				std::fwrite((const void *) &intensity, sizeof(uint16_t), 1, str); // 2
-				std::fwrite((const void *) &ret, sizeof(uint16_t), 1, str); // 2 
-				std::fwrite((const void *) &numRets, sizeof(uint16_t), 1, str); // 2
-				std::fwrite((const void *) &cls, sizeof(uint8_t), 1, str); // 1
-				std::fwrite((const void *) &angle, sizeof(int8_t), 1, str); // 1
+				if(!std::fread((void *) &xx, sizeof(int32_t), 1, str))
+					g_runerr("Failed to read x.")
+				if(!std::fread((void *) &yy, sizeof(int32_t), 1, str))
+					g_runerr("Failed to read x.")
+				if(!std::fread((void *) &zz, sizeof(int32_t), 1, str))
+					g_runerr("Failed to read x.")
+				if(!std::fread((void *) &intensity, sizeof(uint16_t), 1, str))
+					g_runerr("Failed to read x.")
+				if(!std::fread((void *) &ret, sizeof(uint16_t), 1, str))
+					g_runerr("Failed to read x.")
+				if(!std::fread((void *) &numRets, sizeof(uint16_t), 1, str))
+					g_runerr("Failed to read x.")
+				if(!std::fread((void *) &cls, sizeof(uint8_t), 1, str))
+					g_runerr("Failed to read x.")
+				if(!std::fread((void *) &angle, sizeof(int8_t), 1, str))
+					g_runerr("Failed to read x.")
 				x = (double) (xx * scaleX);
 				y = (double) (yy * scaleY);
 				z = (double) (zz * scaleZ);
@@ -154,7 +162,7 @@ namespace geotools {
 			}
 
 			unsigned long toRowOffset(unsigned int row) {
-				return row * (sizeof(unsigned int) * 2 + LASPoint::dataSize * PointFile::rowLen);
+				return row * (sizeof(unsigned int) * 4 + LASPoint::dataSize * PointFile::rowLen);
 			}
 
 			unsigned long toPointOffset(unsigned int row, unsigned int pos) {
@@ -197,30 +205,38 @@ namespace geotools {
 				m_cache[row].push_back(LASPoint(pt));
 				m_rows.insert(row);
 				++m_pointCount;
-				if(m_cache[row].size() >= PointFile::rowLen)
-					flush(row);
 			}
 
 			void flush(unsigned int row) {
+
+				unsigned int nextRow = m_nextRow++;
+				unsigned int count = g_max(PointFile::rowLen, m_cache[row].size());
 				unsigned int zero = 0;
+				unsigned int tag = 1111;
 
 				if(m_firstRow.find(row) == m_firstRow.end())
-					m_firstRow[row] = m_nextRow;
+					m_firstRow[row] = nextRow;
 
 				if(m_row.find(row) != m_row.end()) {
-					std::fseek(m_file, toRowOffset(m_row[row]) + 2 * sizeof(unsigned int), SEEK_SET);	
-					std::fwrite((const void *) &m_nextRow, sizeof(unsigned int), 1, m_file);	
+					unsigned int lastRow = m_row[row];
+					g_debug(" -- updating jump " << row << ", " << lastRow << ", " << nextRow);
+					std::fseek(m_file, toRowOffset(m_row[row]) + 3 * sizeof(unsigned int), SEEK_SET);	
+					std::fwrite((const void *) &nextRow, sizeof(unsigned int), 1, m_file);	
 				}
-				unsigned int count = m_cache[row].size();
-				std::fseek(m_file, toRowOffset(m_nextRow), SEEK_SET);
+
+				std::fseek(m_file, toRowOffset(nextRow), SEEK_SET);
+				std::fwrite((const void *) &tag, sizeof(unsigned int), 1, m_file);
 				std::fwrite((const void *) &row, sizeof(unsigned int), 1, m_file);
 				std::fwrite((const void *) &count, sizeof(unsigned int), 1, m_file);
 				std::fwrite((const void *) &zero, sizeof(unsigned int), 1, m_file);
-				for(const LASPoint &pt : m_cache[row])
+				for(unsigned int i = 0; i < count; ++i) {
+					unsigned int cnt = m_cache[row].size();
+					const LASPoint &pt = m_cache[row].front();
+					m_cache[row].pop_front();
 					pt.write(m_file);
-				m_cache[row].clear();
-				m_row[row] = m_nextRow;
-				++m_nextRow;
+				}
+				m_row[row] = nextRow;
+		
 			}
 
 			void flushAll() {
@@ -229,26 +245,43 @@ namespace geotools {
 			}
 
 			bool nextRow(std::list<std::shared_ptr<LASPoint> > &pts) {
-				if(!m_rows.size())
-					return false;
-
-				unsigned int row = *(m_rows.begin());
-				m_rows.erase(row);
-
-				unsigned int frow = m_firstRow[row];
-				unsigned int count;
-				unsigned int nextRow;
-				do {
-					std::fseek(m_file, toRowOffset(frow) + sizeof(unsigned int), SEEK_SET);
-					std::fread((void *) &count, sizeof(unsigned int), 1, m_file);
-					std::fread((void *) &nextRow, sizeof(unsigned int), 1, m_file);
-					for(unsigned int i = 0; i < count; ++i) {
-						std::shared_ptr<LASPoint> pt(new LASPoint());
-						pt->read(m_file);
-						pts.push_back(pt);
+				while(m_rows.size()) {
+					unsigned int row;
+					bool cont = true;
+					
+					if(m_rows.size()) {						
+						row = *(m_rows.begin());
+						m_rows.erase(row);
+						cont = false;
 					}
-				} while(nextRow > 0);
-				return true;
+						
+					if(cont || m_firstRow.find(row) == m_firstRow.end())
+						continue;
+
+					unsigned int nextRow = m_firstRow[row];
+					unsigned int count, curRow, tag;
+					do {
+						std::fseek(m_file, toRowOffset(nextRow), SEEK_SET);
+						if(!std::fread((void *) &tag, sizeof(unsigned int), 1, m_file))
+							g_runerr("Failed to read tag.");
+						if(tag != 1111)
+							g_runerr("Invalid row tag " << tag);
+						if(!std::fread((void *) &curRow, sizeof(unsigned int), 1, m_file))
+							g_runerr("Failed to read current row.");
+						if(!std::fread((void *) &count, sizeof(unsigned int), 1, m_file))
+							g_runerr("Failed to read count.");
+						if(!std::fread((void *) &nextRow, sizeof(unsigned int), 1, m_file))
+							g_runerr("Failed to read next row.");
+						for(unsigned int i = 0; i < count; ++i) {
+							std::shared_ptr<LASPoint> pt(new LASPoint());
+							pt->read(m_file);
+							pts.push_back(pt);
+						}
+						g_debug(" -- jump " << row << ", " << nextRow);
+					} while(nextRow > 0);
+					return true;
+				}
+				return false;
 			}
 
 			void close() {
@@ -260,6 +293,10 @@ namespace geotools {
 
 			unsigned int pointCount() {
 				return m_pointCount;
+			}
+
+			unsigned int rowCount() {
+				return m_rows.size();
 			}
 
 			~PointFile() {
