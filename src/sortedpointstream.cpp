@@ -77,25 +77,29 @@ void SortedPointStream::init(const std::list<std::string> &files, double blockSi
 	m_bounds.snap(g_abs(blockSize));
 
 	m_pf = new PointFile("/tmp/pf.tmp", m_bounds, blockSize);
-	m_pf->openWrite();
 
-	const std::vector<std::string> files0(files.begin(), files.end());
+	if(rebuild) {
+		m_pf->openWrite();
 
-	for(unsigned int i = 0; i< files0.size(); ++i) {
-		const std::string &file = files0[i];
-		g_debug(" -- init: opening file: " << file << "; " << omp_get_thread_num());
-		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-		liblas::Reader lasReader = rf.CreateWithStream(instr);
-		liblas::Header lasHeader = lasReader.GetHeader();
-		LASPoint pt;
-		while(lasReader.ReadNextPoint()) {
-			pt.update(lasReader.GetPoint());
-			m_pf->addPoint(pt);
+		const std::vector<std::string> files0(files.begin(), files.end());
+
+		#pragma omp parallel for
+		for(unsigned int i = 0; i< files0.size(); ++i) {
+			const std::string &file = files0[i];
+			g_debug(" -- init: opening file: " << file << "; " << omp_get_thread_num());
+			std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+			liblas::Reader lasReader = rf.CreateWithStream(instr);
+			liblas::Header lasHeader = lasReader.GetHeader();
+			LASPoint pt;
+			while(lasReader.ReadNextPoint()) {
+				pt.update(lasReader.GetPoint());
+				m_pf->addPoint(pt);
+			}
 		}
-	}
 
-	m_pf->flushAll();
-	m_pf->close();
+		m_pf->close();
+	}
+	
 	m_pf->openRead();
 }
 

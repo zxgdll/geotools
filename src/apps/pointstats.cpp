@@ -94,8 +94,8 @@ int main(int argc, char **argv) {
 				g_loglevel(G_LOG_DEBUG);
 			} else if(s == "-g") {
 				gap = argv[++i];
-			} else if(s == "-b") {
-				rebuild = true;
+			} else if(s == "-d") {
+				rebuild = false;
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);
 			} else if(s == "--threads") {
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
 			config.threads = threads;
 			config.gapFractionType = config.parseGap(gap);
 			config.rebuild = rebuild;
-			
+
 			lg.pointstats(config);
 		}
 
