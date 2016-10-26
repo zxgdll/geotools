@@ -20,6 +20,7 @@
 using namespace geotools::util;
 
 namespace geotools {
+
 	namespace las {
 
 		class LASPoint {
@@ -34,113 +35,34 @@ namespace geotools {
 			uint8_t cls;
 			int8_t angle;
 
-			LASPoint() {}
-			LASPoint(const liblas::Point &pt) {
-				update(pt);
-			}
+			LASPoint();
+			LASPoint(const liblas::Point &pt);
 
-			static void setScale(double x, double y, double z) {
-				scaleX = x;
-				scaleY = y;
-				scaleZ = z;
-			}
+			static void setScale(double x, double y, double z);
 
-			void update(const liblas::Point &pt) {
-				x = pt.GetX();
-				y = pt.GetY();
-				z = pt.GetZ();
-				intensity = pt.GetIntensity();
-				ret = pt.GetReturnNumber();
-				numRets = pt.GetNumberOfReturns();
-				cls = pt.GetClassification().GetClass();
-				angle = pt.GetScanAngleRank();
-			}
+			void update(const liblas::Point &pt);
 
-			void read(std::istream &str) {
-				int32_t xx, yy, zz;
-				str.read((char *) &xx, sizeof(int32_t));
-				str.read((char *) &yy, sizeof(int32_t));
-				str.read((char *) &zz, sizeof(int32_t));
-				str.read((char *) &intensity, sizeof(uint16_t));
-				str.read((char *) &ret, sizeof(uint16_t));
-				str.read((char *) &numRets, sizeof(uint16_t));
-				str.read((char *) &cls, sizeof(uint8_t));
-				str.read((char *) &angle, sizeof(int8_t));
-				x = (double) (xx * scaleX);
-				y = (double) (yy * scaleY);
-				z = (double) (zz * scaleZ);
-			}
+			void write(std::ostream &str) const;
 
-			void write(std::ostream &str) const {
-				int32_t xx = (int32_t) (x / scaleX);
-				int32_t yy = (int32_t) (y / scaleY);
-				int32_t zz = (int32_t) (z / scaleZ);
-				str.write((char *) &xx, sizeof(int32_t));
-				str.write((char *) &yy, sizeof(int32_t));
-				str.write((char *) &zz, sizeof(int32_t));
-				str.write((char *) &intensity, sizeof(uint16_t));
-				str.write((char *) &ret, sizeof(uint16_t));
-				str.write((char *) &numRets, sizeof(uint16_t));
-				str.write((char *) &cls, sizeof(uint8_t));
-				str.write((char *) &angle, sizeof(int8_t));
-			}
+			void read(std::istream &str);
 
-			void write(std::FILE *str) const {
-				int32_t xx = (int32_t) (x / scaleX);
-				int32_t yy = (int32_t) (y / scaleY);
-				int32_t zz = (int32_t) (z / scaleZ);
-				std::fwrite((const void *) &xx, sizeof(int32_t), 1, str);
-				std::fwrite((const void *) &yy, sizeof(int32_t), 1, str);
-				std::fwrite((const void *) &zz, sizeof(int32_t), 1, str);
-				std::fwrite((const void *) &intensity, sizeof(uint16_t), 1, str);
-				std::fwrite((const void *) &ret, sizeof(uint16_t), 1, str);
-				std::fwrite((const void *) &numRets, sizeof(uint16_t), 1, str);
-				std::fwrite((const void *) &cls, sizeof(uint8_t), 1, str);
-				std::fwrite((const void *) &angle, sizeof(int8_t), 1, str);
-			}
+			void write(std::FILE *str) const;
 
-			void read(std::FILE *str) {
-				int32_t xx, yy, zz;
-				if(!std::fread((void *) &xx, sizeof(int32_t), 1, str))
-					g_runerr("Failed to read x.")
-				if(!std::fread((void *) &yy, sizeof(int32_t), 1, str))
-					g_runerr("Failed to read x.")
-				if(!std::fread((void *) &zz, sizeof(int32_t), 1, str))
-					g_runerr("Failed to read x.")
-				if(!std::fread((void *) &intensity, sizeof(uint16_t), 1, str))
-					g_runerr("Failed to read x.")
-				if(!std::fread((void *) &ret, sizeof(uint16_t), 1, str))
-					g_runerr("Failed to read x.")
-				if(!std::fread((void *) &numRets, sizeof(uint16_t), 1, str))
-					g_runerr("Failed to read x.")
-				if(!std::fread((void *) &cls, sizeof(uint8_t), 1, str))
-					g_runerr("Failed to read x.")
-				if(!std::fread((void *) &angle, sizeof(int8_t), 1, str))
-					g_runerr("Failed to read x.")
-				x = (double) (xx * scaleX);
-				y = (double) (yy * scaleY);
-				z = (double) (zz * scaleZ);
-			}
+			void read(std::FILE *str);
 
-			bool last() const {
-				return numRets > 0 && ret == numRets;
-			}
+			void write(void *str) const;
 
-			bool first() const {
-				return numRets > 0 && ret == 1;
-			}
+			void read(void *str);
 
-			bool intermediate() const {
-				return numRets > 2 && ret > 1 && ret < numRets;
-			}
+			bool last() const;
+
+			bool first() const;
+
+			bool intermediate() const;
 			
-			bool ground() const {
-				return cls == 2;
-			}
+			bool ground() const;
 
-			bool single() const {
-				return numRets == 1;
-			}
+			bool single() const;
 		};
 
 		class PointFile {
@@ -396,14 +318,9 @@ namespace geotools {
 
 			~SortedPointStream();
 
-
 			unsigned int pointCount() const;
 
 			unsigned int rowCount() const;
-
-			//bool contains(double x, double y) const;
-
-			//bool contains(double x1, double y1, double x2, double y2) const;
 
 			const Bounds& bounds() const;
 

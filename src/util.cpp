@@ -301,11 +301,11 @@ void Util::intSplit(std::set<int> &values, const char *str) {
 }
 
 // TODO: Template
-void Util::intSplit(std::set<unsigned char> &values, const char *str) {
+void Util::intSplit(std::set<uint8_t> &values, const char *str) {
 	std::stringstream ss(str);
 	std::string item;
 	while(std::getline(ss, item, ','))
-		values.insert((unsigned char) atoi(item.c_str()));
+		values.insert((uint8_t) atoi(item.c_str()));
 }
 
 /**
@@ -383,9 +383,68 @@ void Util::status(int step, int of, const std::string &message, bool end) {
         }
 }
 
+bool Util::rm(const std::string &name) {
+	using namespace boost::filesystem;
+	path p(name);
+	return remove_all(p) > 0;
+}
+
 bool Util::mkdir(const std::string &dir) {
-	boost::filesystem::path bdir(dir);
-    if(!boost::filesystem::exists(bdir))
-        return boost::filesystem::create_directory(bdir);
+	using namespace boost::filesystem;
+	path bdir(dir);
+    if(!exists(bdir))
+        return create_directory(bdir);
     return true;
+}
+
+const std::string Util::tmpFile() {
+	return Util::tmpFile("");
+}
+
+const std::string Util::tmpFile(const std::string &root) {
+	using namespace boost::filesystem;
+	path p = unique_path();
+	if(!root.empty()) {
+		path r(root);
+		return (r / p).native();
+	}
+	return p.native();
+}
+
+MappedFile::MappedFile(const std::string &filename, uint64_t size, 
+		boost::interprocess::file_mapping *mapping, boost::interprocess::mapped_region *region) : 
+	m_filename(filename),
+	m_size(size),
+	m_mapping(mapping),
+	m_region(region) {
+}
+
+void* MappedFile::data() {
+	return m_region->get_address();
+}
+
+uint64_t MappedFile::size() {
+	return m_size;
+}
+
+MappedFile::~MappedFile() {
+	delete m_region;
+	delete m_mapping;
+	Util::rm(m_filename);
+}
+
+std::unique_ptr<MappedFile> Util::mapFile(const std::string &filename, uint64_t size) {
+	using namespace boost::interprocess;
+	using namespace boost::filesystem;
+
+	std::filebuf fbuf;
+	fbuf.open(filename, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+	fbuf.pubseekoff(size - 1, std::ios_base::beg);
+	fbuf.sputc(0);
+
+	file_mapping *mapping = new file_mapping(filename.c_str(), read_write);
+	mapped_region *region = new mapped_region(*mapping, read_write);
+
+	std::unique_ptr<MappedFile> mf(new MappedFile(filename, size, mapping, region));
+	return std::move(mf);
 }

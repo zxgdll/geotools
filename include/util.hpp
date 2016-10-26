@@ -7,6 +7,10 @@
 #include <vector>
 #include <map>
 
+#include <boost/interprocess/file_mapping.hpp>
+#include <boost/interprocess/mapped_region.hpp>
+#include <boost/filesystem.hpp>
+
 namespace geotools {
 
 	namespace util {
@@ -106,6 +110,28 @@ namespace geotools {
 		
 		};
 
+		class Util;
+		
+		/**
+		 * Maintains a memory-mapped file, and gives access to the mapped data.
+		 */
+		class MappedFile {
+			friend class Util;
+		private:
+			std::string m_filename;
+			uint64_t m_size;
+			boost::interprocess::file_mapping *m_mapping;
+			boost::interprocess::mapped_region *m_region;
+		protected:
+			MappedFile(const std::string &filename, uint64_t size, 
+				boost::interprocess::file_mapping *mapping, boost::interprocess::mapped_region *region);
+		public:
+			void* data();
+			uint64_t size();
+			~MappedFile();
+		};
+
+
 		/**
 		 * Provides utility methods for working with LiDAR data.
 		 */
@@ -131,7 +157,7 @@ namespace geotools {
 			 */
 			static void intSplit(std::vector<int> &values, const char *str);
 
-			static void intSplit(std::set<unsigned char> &values, const char *str);
+			static void intSplit(std::set<uint8_t> &values, const char *str);
 			/**
 			 * Return true if the integer is in the set, or the set is empty.
 			 */
@@ -156,7 +182,12 @@ namespace geotools {
 
 			static void status(int step, int of, const std::string &message = "", bool end = false);
 
+			static const std::string tmpFile(const std::string &root);
+			static const std::string tmpFile();
+			static bool rm(const std::string &name);
 			static bool mkdir(const std::string &dir);
+
+			static std::unique_ptr<MappedFile> mapFile(const std::string &filename, uint64_t size);
 
 		};
 

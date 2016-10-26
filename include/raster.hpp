@@ -377,7 +377,7 @@ namespace geotools {
 			T m_nodata;
 			bool m_mmapped;
 			size_t m_size;
-			std::string m_mappedFile;
+			std::unique_ptr<geotools::util::MappedFile> m_mappedFile;
 			std::unique_ptr<boost::interprocess::mapped_region> m_region;
 			std::unique_ptr<boost::interprocess::file_mapping> m_mapping;
 	
