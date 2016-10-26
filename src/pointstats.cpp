@@ -66,36 +66,36 @@ namespace geotools {
 			
 			double defaultResolution = 10.0; 
 			bool defaultSnapToGrid = true;
-			unsigned char defaultType = TYPE_MEAN;
-			unsigned char defaultAttribute = ATT_HEIGHT;
-			unsigned char defaultAngleLimit = 180;
-			unsigned char defaultGapFraction = GAP_BLB;
-			unsigned int defaultQuantile = 49;
-			unsigned int defaultQuantiles = 100;
-			unsigned int defaultFilterQuantiles = 100;
-			unsigned int defaultFilterQuantileFrom = 0;
-			unsigned int defaultFilterQuantileTo = 99;
-			unsigned int defaultThreads = 1;
+			uint8_t defaultType = TYPE_MEAN;
+			uint8_t defaultAttribute = ATT_HEIGHT;
+			uint8_t defaultAngleLimit = 180;
+			uint8_t defaultGapFraction = GAP_BLB;
+			uint32_t defaultQuantile = 49;
+			uint32_t defaultQuantiles = 100;
+			uint32_t defaultFilterQuantiles = 100;
+			uint32_t defaultFilterQuantileFrom = 0;
+			uint32_t defaultFilterQuantileTo = 99;
+			uint32_t defaultThreads = 1;
 
-			std::set<unsigned char> defaultClasses = {2}; 
+			std::set<uint8_t> defaultClasses = {2}; 
 
-			std::map<std::string, unsigned char> types = {
+			std::map<std::string, uint8_t> types = {
 				{"Minimum", TYPE_MIN}, {"Maximum", TYPE_MAX}, {"Mean", TYPE_MEAN}, {"Density", TYPE_DENSITY},
 				{"Sample Variance", TYPE_VARIANCE}, {"Sample Std. Dev.", TYPE_STDDEV}, {"Population Variance", TYPE_PVARIANCE},
 				{"Population Std. Dev.", TYPE_PSTDDEV}, {"Count", TYPE_COUNT}, {"Quantile", TYPE_QUANTILE}, 
 				{"Median", TYPE_MEDIAN}, {"Rugosity", TYPE_RUGOSITY}, {"Kurtosis", TYPE_KURTOSIS}, {"Skewness", TYPE_SKEW},
 				{"Gap Fraction", TYPE_GAP_FRACTION}
 			};
-			std::map<std::string, unsigned char> attributes = {
+			std::map<std::string, uint8_t> attributes = {
 				{"Height", ATT_HEIGHT}, {"Intensity", ATT_INTENSITY}
 			};
-			std::map<std::string, unsigned char> gapFractionTypes = {
+			std::map<std::string, uint8_t> gapFractionTypes = {
 				{"IR", GAP_IR}, {"BLa", GAP_BLA}, {"BLb", GAP_BLB}, {"RR", GAP_RR}, {"FR", GAP_FR}
 			};
 
 		} // config
 		
-		unsigned char PointStatsConfig::parseAtt(const std::string &attStr) {
+		uint8_t PointStatsConfig::parseAtt(const std::string &attStr) {
 			if("intensity" == attStr) {
 				return ATT_INTENSITY;
 			} else if("height" == attStr) {
@@ -104,7 +104,7 @@ namespace geotools {
 			return 0;
 		}
 
-		unsigned char PointStatsConfig::parseType(const std::string &typeStr) {
+		uint8_t PointStatsConfig::parseType(const std::string &typeStr) {
 			if("min" == typeStr) {
 				return TYPE_MIN;
 			} else if("max" == typeStr) {
@@ -137,7 +137,7 @@ namespace geotools {
 			return 0;
 		}
 
-		unsigned char PointStatsConfig::parseGap(const std::string &gapStr) {
+		uint8_t PointStatsConfig::parseGap(const std::string &gapStr) {
 			if("bla" == gapStr) {
 				return GAP_BLA;
 			} else if("blb" == gapStr) {
@@ -184,17 +184,17 @@ namespace geotools {
 			case TYPE_MEDIAN: 		return new CellMedian();
 			case TYPE_COUNT: 		return new CellCount();
 			case TYPE_STDDEV: 		return new CellSampleStdDev();
-			case TYPE_VARIANCE: 		return new CellSampleVariance();
+			case TYPE_VARIANCE: 	return new CellSampleVariance();
 			case TYPE_PSTDDEV: 		return new CellPopulationStdDev();
-			case TYPE_PVARIANCE:		return new CellPopulationVariance();
+			case TYPE_PVARIANCE:	return new CellPopulationVariance();
 			case TYPE_DENSITY: 		return new CellDensity(g_sq(config.resolution));
-			case TYPE_RUGOSITY: 		return new CellRugosity(config.resolution * config.resolution, 20.0);
+			case TYPE_RUGOSITY: 	return new CellRugosity(config.resolution * config.resolution, 20.0);
 			case TYPE_MAX: 			return new CellMax();
 			case TYPE_MIN: 			return new CellMin();
-			case TYPE_KURTOSIS: 		return new CellKurtosis();
+			case TYPE_KURTOSIS: 	return new CellKurtosis();
 			case TYPE_SKEW: 		return new CellSkewness();
-			case TYPE_QUANTILE: 		return new CellQuantile(config.quantile, config.quantiles);
-			case TYPE_GAP_FRACTION:		return new CellGapFraction(config.gapFractionType);
+			case TYPE_QUANTILE: 	return new CellQuantile(config.quantile, config.quantiles);
+			case TYPE_GAP_FRACTION:	return new CellGapFraction(config.gapFractionType);
 			default:
 				g_argerr("Invalid statistic type: " << config.type);
 			}
@@ -202,20 +202,20 @@ namespace geotools {
 
 		void _normalize(MemRaster<float> &mem) {
 			double sum = 0.0;
-			for(unsigned long i = 0; i < mem.size(); ++i) {
+			for(uint64_t i = 0; i < mem.size(); ++i) {
 				double v = mem[i];
 				if(v != -9999.0 && !std::isnan(v))
 					sum += mem[i];
 			}
 			double mean = sum / mem.size();
 			sum = 0.0;
-			for(unsigned long i = 0; i < mem.size(); ++i) {
+			for(uint64_t i = 0; i < mem.size(); ++i) {
 				double v = mem[i];
 				if(v != -9999.0 && !std::isnan(v))
 					sum += std::pow(mem[i] - mean, 2.0);
 			}
 			double stdDev = std::sqrt(sum);
-			for(unsigned long i = 0; i < mem.size(); ++i) {
+			for(uint64_t i = 0; i < mem.size(); ++i) {
 				double v = mem[i];
 				if(v != -9999.0 && !std::isnan(v))
 					mem.set(i, (mem[i] - mean) / stdDev);
@@ -235,6 +235,7 @@ namespace geotools {
 		 	}
 
 			SortedPointStream ps(config.sourceFiles, -config.resolution * 2.0, config.rebuild);
+			ps.init();
 			Bounds workBounds = ps.bounds();
 			g_debug(" -- pointstats - work bounds: " << workBounds.print());
 
@@ -260,7 +261,7 @@ namespace geotools {
 					computer->setFilter(filter);
 
 				#pragma omp for
-				for(unsigned int i = 0; i < ps.rowCount(); ++i) {
+				for(uint32_t i = 0; i < ps.rowCount(); ++i) {
 
 					//g_debug(" -- row " << i << "; thread " << omp_get_thread_num());
 					std::list<std::shared_ptr<LASPoint> > row;
@@ -269,10 +270,10 @@ namespace geotools {
 
 					if(row.size()) {
 
-						std::unordered_map<unsigned long, std::list<std::shared_ptr<LASPoint> > > values;
+						std::unordered_map<uint64_t, std::list<std::shared_ptr<LASPoint> > > values;
 
 						for(const std::shared_ptr<LASPoint> &pt : row) {
-							unsigned long idx = grid.toRow(pt->y) * grid.cols() + grid.toCol(pt->x);
+							uint64_t idx = grid.toRow(pt->y) * grid.cols() + grid.toCol(pt->x);
 							values[idx].push_back(pt);
 						}
 

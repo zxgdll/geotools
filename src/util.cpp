@@ -411,12 +411,24 @@ const std::string Util::tmpFile(const std::string &root) {
 	return p.native();
 }
 
-MappedFile::MappedFile(const std::string &filename, uint64_t size, 
-		boost::interprocess::file_mapping *mapping, boost::interprocess::mapped_region *region) : 
+using namespace boost::interprocess;
+
+MappedFile::MappedFile(const std::string &filename, uint64_t size) : 
 	m_filename(filename),
-	m_size(size),
-	m_mapping(mapping),
-	m_region(region) {
+	m_size(size) {
+
+	using namespace boost::interprocess;
+	using namespace boost::filesystem;
+
+	{
+		std::filebuf fbuf;
+		fbuf.open(filename, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+		fbuf.pubseekoff(size - 1, std::ios_base::beg);
+		fbuf.sputc(0);
+	}
+
+	m_mapping = new file_mapping(filename.c_str(), read_write);
+	m_region = new mapped_region(*m_mapping, read_write);
 }
 
 void* MappedFile::data() {
@@ -428,23 +440,13 @@ uint64_t MappedFile::size() {
 }
 
 MappedFile::~MappedFile() {
+	file_mapping::remove(m_filename.c_str());
+	Util::rm(m_filename);
 	delete m_region;
 	delete m_mapping;
-	Util::rm(m_filename);
 }
 
 std::unique_ptr<MappedFile> Util::mapFile(const std::string &filename, uint64_t size) {
-	using namespace boost::interprocess;
-	using namespace boost::filesystem;
-
-	std::filebuf fbuf;
-	fbuf.open(filename, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
-	fbuf.pubseekoff(size - 1, std::ios_base::beg);
-	fbuf.sputc(0);
-
-	file_mapping *mapping = new file_mapping(filename.c_str(), read_write);
-	mapped_region *region = new mapped_region(*mapping, read_write);
-
-	std::unique_ptr<MappedFile> mf(new MappedFile(filename, size, mapping, region));
+	std::unique_ptr<MappedFile> mf(new MappedFile(filename, size));
 	return std::move(mf);
 }

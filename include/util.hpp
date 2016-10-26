@@ -111,7 +111,7 @@ namespace geotools {
 		};
 
 		class Util;
-		
+
 		/**
 		 * Maintains a memory-mapped file, and gives access to the mapped data.
 		 */
@@ -123,8 +123,7 @@ namespace geotools {
 			boost::interprocess::file_mapping *m_mapping;
 			boost::interprocess::mapped_region *m_region;
 		protected:
-			MappedFile(const std::string &filename, uint64_t size, 
-				boost::interprocess::file_mapping *mapping, boost::interprocess::mapped_region *region);
+			MappedFile(const std::string &filename, uint64_t size);
 		public:
 			void* data();
 			uint64_t size();

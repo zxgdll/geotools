@@ -65,6 +65,7 @@ namespace geotools {
 			bool single() const;
 		};
 
+		/*
 		class PointFile {
 		private:
 			std::FILE *m_file;
@@ -294,21 +295,23 @@ namespace geotools {
 			}
 		};
 
-
+		*/
 
 		class SortedPointStream {
 		private:
 			Bounds m_bounds;
-			PointFile *m_pf;
 			bool m_inited;
 			bool m_rebuild;
-			uint32_t m_pointCount;
+			uint64_t m_pointCount;
+			uint32_t m_rowCount;
 			uint32_t m_row;
+			uint32_t m_rowLen;
+			uint32_t m_rowSize;
+			uint64_t m_size;
 			double m_blockSize;
 			std::list<std::string> m_files;
-			std::vector<uint32_t> m_rows;
-
-			void init();
+			std::set<uint32_t> m_rows;
+			std::map<uint32_t, std::unique_ptr<MappedFile>> m_mf;
 
 		public:
 
@@ -319,6 +322,8 @@ namespace geotools {
 			 * blocks are square and stored as individual files.
 			 */
 			SortedPointStream(const std::list<std::string> &files, double blockSize, bool rebuild = true);
+
+			void init();
 
 			~SortedPointStream();
 

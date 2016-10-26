@@ -346,8 +346,8 @@ void MemRaster<T>::init(int cols, int rows, bool mapped) {
 		m_size = sizeof(T) * cols * rows;
 		m_mappedFile.release();
 		if(mapped) {
-			const std::string filename = Util::tmpFile();
-			m_mappedFile.reset(Util::mapFile(filename, m_size).release());
+			const std::string filename = Util::tmpFile("/tmp");
+			m_mappedFile = Util::mapFile(filename, m_size);
 			m_grid = (T *) m_mappedFile->data();
 		} else {
 			m_grid = (T *) malloc(m_size);

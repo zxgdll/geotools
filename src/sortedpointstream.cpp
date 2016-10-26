@@ -172,19 +172,19 @@ bool LASPoint::single() const {
 SortedPointStream::SortedPointStream(const std::list<std::string> &files, double blockSize, bool rebuild) :
 	m_files(files),
 	m_blockSize(blockSize),
-	m_rebuild(rebuild) {
+	m_rebuild(rebuild),
+	m_inited(false) {
 }
 
 SortedPointStream::~SortedPointStream() {
-	delete m_pf;
 }
 
 uint64_t SortedPointStream::pointCount() const {
-	return m_pf->pointCount();
+	return m_pointCount;
 }
 
 uint32_t SortedPointStream::rowCount() const {
-	return m_pf->rowCount();
+	return m_rowCount;
 }
 
 void SortedPointStream::init() {
@@ -195,6 +195,7 @@ void SortedPointStream::init() {
 	m_bounds.collapse();
 	m_pointCount = 0;
 	m_row = 0;
+	m_rowCount = 0;
 
 	liblas::ReaderFactory rf;
 	std::vector<std::string> files0;
@@ -220,14 +221,16 @@ void SortedPointStream::init() {
 
 	if(m_rebuild) {
 		
-		uint32_t rows = (uint32_t) (m_bounds.height() / m_blockSize) + 1;
-		uint32_t rowLen = m_pointCount / rows * 2;
-		uint32_t rowSize = (rowLen * LASPoint::dataSize) + (3 * sizeof(uint32_t));
-		uint64_t size = rows * rowSize;
+		uint32_t rows = m_rowCount = (uint32_t) (m_bounds.height() / g_abs(m_blockSize)) + 1;
+		uint32_t rowLen = m_rowLen = m_pointCount / rows * 2;
+		uint32_t rowSize = m_rowSize = (rowLen * LASPoint::dataSize) + (3 * sizeof(uint32_t));
+		uint64_t size = m_size = rows * rowSize;
 		uint32_t nextRow = 0;
 
-		std::unique_ptr<MappedFile> mf = Util::mapFile(Util::tmpFile(), size);
-		char* data = (char *) mf->data();
+		uint32_t dataIdx = 0;
+
+		m_mf[dataIdx] = std::move(Util::mapFile(Util::tmpFile("/tmp"), size));
+		std::memset(m_mf[dataIdx]->data(), 0, m_size);
 
 		//#pragma omp parallel for
 		for(uint32_t i = 0; i< files0.size(); ++i) {
@@ -242,7 +245,8 @@ void SortedPointStream::init() {
 			uint32_t row;
 			uint32_t count;
 			uint32_t jump;
-			uint32_t offset;
+			uint64_t offset;
+			char *data = nullptr;
 
 			LASPoint pt;
 			while(lasReader.ReadNextPoint()) {
@@ -254,52 +258,35 @@ void SortedPointStream::init() {
 					row = (uint32_t) ((pt.y - m_bounds.miny()) / m_blockSize);
 				}
 
-				offset = row * rowSize + sizeof(uint32_t);
-				if(offset >= size) {
-					g_warn("Offset larger than size " << offset << ", " << size);
-					break;
-				}
+				m_rows.insert(row);
 
-				char *d = data + offset; // skip the row column
-
-
-				jump = 0;
+				jump = row;
+				offset = jump * rowSize;
 				do {
-					offset = jump * rowSize + sizeof(uint32_t);
 					if(offset >= size) {
 						g_warn("Offset larger than size " << offset << ", " << size);
-						break;
+						dataIdx = offset / size;
+						if(m_mf.find(dataIdx) == m_mf.end()) {
+							m_mf[dataIdx] = std::move(Util::mapFile(Util::tmpFile(), size));
+							std::memset(m_mf[dataIdx]->data(), 0, m_size);
+						}
+						data = (char *) m_mf[dataIdx]->data();
+					} else {
+						data = (char *) m_mf[0]->data();
 					}
-					d = data + offset; // skip the row column
-					count = *((uint32_t *) d); d += sizeof(uint32_t);
-					jump = *((uint32_t *) d); d += sizeof(uint32_t);
+					count = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
+					jump  = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
+					if(count == rowLen)
+						jump = ++nextRow + rows;
+					if(jump > 0)
+						offset = jump * rowSize;
 				} while(jump > 0);
 
-				if(count == rowLen) {
-					++nextRow;
-					jump = row + nextRow;
-					offset = jump * rowSize + sizeof(uint32_t);
-					if(offset >= size) {
-						g_warn("Offset larger than size " << offset << ", " << size);
-						break;
-					}
-					d -= sizeof(uint32_t) * 2; // back to the jump column
-					*((uint32_t *) d) = jump;
-					d = data + offset; // skip the row column
-					jump = 0;
-					count = 0;
-				}
+				*((uint32_t *) (data + offset)) = row;     offset += sizeof(uint32_t);
+				*((uint32_t *) (data + offset)) = ++count; offset += sizeof(uint32_t);
+				*((uint32_t *) (data + offset)) = 0;       offset += sizeof(uint32_t);
 
-
-				*((uint32_t *) d) = row;       d += sizeof(uint32_t);
-				*((uint32_t *) d) = count + 1; d += sizeof(uint32_t);
-				*((uint32_t *) d) = 0;         d += sizeof(uint32_t);
-
-				d += count * LASPoint::dataSize;
-
-				++count;
-
-				pt.write((void *) d);
+				pt.write((void *) (data + offset + (count - 1) * LASPoint::dataSize));
 
 			}
 		}
@@ -311,5 +298,40 @@ const Bounds& SortedPointStream::bounds() const {
 }
 
 bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
-	return false;
+	if(!m_rows.size())
+		return false;
+	uint32_t row = *(m_rows.begin());
+	m_rows.erase(row);
+
+	char *data = (char *) m_mf[0]->data();
+
+	uint64_t jump = row;
+	uint64_t offset;
+	uint32_t row0;
+	uint32_t dataIdx;
+	uint32_t count;
+	do {
+		offset = jump * m_rowSize;
+		if(offset >= m_size) {
+			g_warn("Offset larger than size " << offset << ", " << m_size);
+			dataIdx = offset / m_size;
+			if(m_mf.find(dataIdx) == m_mf.end())
+				g_runerr("Bad index " << dataIdx);
+			data = (char *) m_mf[dataIdx]->data();
+		} else {
+			data = (char *) m_mf[0]->data();
+		}
+		row0 = *((uint32_t *) (data + offset));  offset += sizeof(uint32_t);
+		if(row != row0)
+			g_runerr("Rows don't match " << row << ", " << row0);
+		count = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
+		jump  = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
+		for(uint32_t i = 0; i < count; ++i) {
+			std::shared_ptr<LASPoint> pt(new LASPoint());
+			pt->read(data + offset);
+			pts.push_back(pt);
+			offset += LASPoint::dataSize;
+		}
+	} while(jump > 0);
+	return true;
 }
