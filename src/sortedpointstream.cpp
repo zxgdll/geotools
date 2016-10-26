@@ -21,17 +21,17 @@ double LASPoint::scaleX = 0;
 double LASPoint::scaleZ = 0;
 double LASPoint::scaleY = 0;
 
-std::string _rowFile(unsigned int row) {
+std::string _rowFile(uint32_t row) {
 	std::stringstream fs;
 	fs << "/tmp/sps_" << row << ".tmp";
 	return fs.str();
 }
 
-unsigned int _getRow(double y, const Bounds &bounds, double blockSize) {
+uint32_t _getRow(double y, const Bounds &bounds, double blockSize) {
 	if(blockSize < 0) {
-		return (unsigned int) ((y - bounds.maxy()) / blockSize);
+		return (uint32_t) ((y - bounds.maxy()) / blockSize);
 	} else {
-		return (unsigned int) ((bounds.miny() - y) / blockSize);
+		return (uint32_t) ((bounds.miny() - y) / blockSize);
 	}
 }
 
@@ -169,72 +169,141 @@ bool LASPoint::single() const {
 }
 
 
-SortedPointStream::SortedPointStream(const std::list<std::string> &files, double blockSize, bool rebuild) {
-	init(files, blockSize, rebuild);
+SortedPointStream::SortedPointStream(const std::list<std::string> &files, double blockSize, bool rebuild) :
+	m_files(files),
+	m_blockSize(blockSize),
+	m_rebuild(rebuild) {
 }
 
 SortedPointStream::~SortedPointStream() {
 	delete m_pf;
 }
 
-unsigned int SortedPointStream::pointCount() const {
+uint64_t SortedPointStream::pointCount() const {
 	return m_pf->pointCount();
 }
 
-unsigned int SortedPointStream::rowCount() const {
+uint32_t SortedPointStream::rowCount() const {
 	return m_pf->rowCount();
 }
 
-void SortedPointStream::init(const std::list<std::string> &files, double blockSize, bool rebuild) {
+void SortedPointStream::init() {
+
+	if(m_inited) return;
+	m_inited = true;
 
 	m_bounds.collapse();
 	m_pointCount = 0;
 	m_row = 0;
 
 	liblas::ReaderFactory rf;
-	std::unordered_map<unsigned int, std::string> rowFileNames;
+	std::vector<std::string> files0;
+	Bounds workBounds; // Configure
 
-	for(const std::string &file : files) {
+	for(const std::string &file : m_files) {
 		g_debug(" -- init: opening file: " << file);
 		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
 		liblas::Reader lasReader = rf.CreateWithStream(instr);
 		liblas::Header lasHeader = lasReader.GetHeader();
-
 		LASPoint::setScale(lasHeader.GetScaleX(), lasHeader.GetScaleY(), lasHeader.GetScaleZ());
-
 		g_debug(" -- init computing bounds");
 		Bounds fileBounds;
 		if(!LasUtil::computeLasBounds(lasHeader, fileBounds, 2))
 			LasUtil::computeLasBounds(lasReader, fileBounds, 2); // If the header bounds are bogus.
-		m_bounds.extend(fileBounds);
+		if(fileBounds.intersects(workBounds)) {
+			m_bounds.extend(fileBounds);
+			m_pointCount += lasHeader.GetPointRecordsCount();
+			files0.push_back(file);
+		}
 	}
-	m_bounds.snap(g_abs(blockSize));
+	m_bounds.snap(g_abs(m_blockSize));
 
-	m_pf = new PointFile("/tmp/pf.tmp", m_bounds, blockSize);
+	if(m_rebuild) {
+		
+		uint32_t rows = (uint32_t) (m_bounds.height() / m_blockSize) + 1;
+		uint32_t rowLen = m_pointCount / rows * 2;
+		uint32_t rowSize = (rowLen * LASPoint::dataSize) + (3 * sizeof(uint32_t));
+		uint64_t size = rows * rowSize;
+		uint32_t nextRow = 0;
 
-	if(rebuild) {
-		m_pf->openWrite();
+		std::unique_ptr<MappedFile> mf = Util::mapFile(Util::tmpFile(), size);
+		char* data = (char *) mf->data();
 
-		const std::vector<std::string> files0(files.begin(), files.end());
-
-		#pragma omp parallel for
-		for(unsigned int i = 0; i< files0.size(); ++i) {
+		//#pragma omp parallel for
+		for(uint32_t i = 0; i< files0.size(); ++i) {
+			
 			const std::string &file = files0[i];
 			g_debug(" -- init: opening file: " << file << "; " << omp_get_thread_num());
+			
 			std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
 			liblas::Reader lasReader = rf.CreateWithStream(instr);
 			liblas::Header lasHeader = lasReader.GetHeader();
+
+			uint32_t row;
+			uint32_t count;
+			uint32_t jump;
+			uint32_t offset;
+
 			LASPoint pt;
 			while(lasReader.ReadNextPoint()) {
 				pt.update(lasReader.GetPoint());
-				m_pf->addPoint(pt);
+				
+				if(m_blockSize < 0) {
+					row = (uint32_t) ((pt.y - m_bounds.maxy()) / m_blockSize);
+				} else {
+					row = (uint32_t) ((pt.y - m_bounds.miny()) / m_blockSize);
+				}
+
+				offset = row * rowSize + sizeof(uint32_t);
+				if(offset >= size) {
+					g_warn("Offset larger than size " << offset << ", " << size);
+					break;
+				}
+
+				char *d = data + offset; // skip the row column
+
+
+				jump = 0;
+				do {
+					offset = jump * rowSize + sizeof(uint32_t);
+					if(offset >= size) {
+						g_warn("Offset larger than size " << offset << ", " << size);
+						break;
+					}
+					d = data + offset; // skip the row column
+					count = *((uint32_t *) d); d += sizeof(uint32_t);
+					jump = *((uint32_t *) d); d += sizeof(uint32_t);
+				} while(jump > 0);
+
+				if(count == rowLen) {
+					++nextRow;
+					jump = row + nextRow;
+					offset = jump * rowSize + sizeof(uint32_t);
+					if(offset >= size) {
+						g_warn("Offset larger than size " << offset << ", " << size);
+						break;
+					}
+					d -= sizeof(uint32_t) * 2; // back to the jump column
+					*((uint32_t *) d) = jump;
+					d = data + offset; // skip the row column
+					jump = 0;
+					count = 0;
+				}
+
+
+				*((uint32_t *) d) = row;       d += sizeof(uint32_t);
+				*((uint32_t *) d) = count + 1; d += sizeof(uint32_t);
+				*((uint32_t *) d) = 0;         d += sizeof(uint32_t);
+
+				d += count * LASPoint::dataSize;
+
+				++count;
+
+				pt.write((void *) d);
+
 			}
 		}
-
-		m_pf->close();
 	}
-	
-	m_pf->openRead();
 }
 
 const Bounds& SortedPointStream::bounds() const {
@@ -242,5 +311,5 @@ const Bounds& SortedPointStream::bounds() const {
 }
 
 bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
-	return m_pf->nextRow(pts);
+	return false;
 }
