@@ -89,6 +89,7 @@ namespace geotools {
 			std::mutex m_fmtx;
 			std::mutex m_cmtx;
 			std::queue<std::string> m_fileq;
+			std::list<uint32_t> m_flush;
 
 		public:
 

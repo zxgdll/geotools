@@ -204,6 +204,8 @@ void SortedPointStream::produce() {
 
 			m_cmtx.lock();
 			m_cache[row].push_back(new LASPoint(pt));
+			if(m_cache[row].size() >= CACHE_LEN)
+				m_flush.push_back(row);
 			m_cmtx.unlock();
 		}
 	}
@@ -211,70 +213,60 @@ void SortedPointStream::produce() {
 
 void SortedPointStream::consume() {
 
-	uint32_t rowSize = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
 	uint64_t bufLen = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
-	void *buf = calloc(bufLen, 1);
 
-	while(m_running || m_cache.size()) {
-		std::list<uint32_t> rem;
-		for(const auto &it : m_cache) {
-			if(it.second.size() > CACHE_LEN || !m_running) {
-				uint32_t row = it.first;
-				uint32_t count = g_min(CACHE_LEN, it.second.size());
-				uint32_t curIdx = 0;
-				uint32_t prevIdx = 0;
-				uint32_t nextIdx = 0;
+	while(m_running || m_flush.size()) {
 
-				if(m_jump.find(row) == m_jump.end()) {
-					prevIdx = row;
-					curIdx = m_jump[row] = row;
-				} else {
-					prevIdx = m_jump[row];
-					curIdx = m_jump[row] = m_nextJump++;
-				}
-				
-				m_cmtx.lock();
-				auto it0 = m_cache[row].begin();
-				auto it1 = it0;
-				std::advance(it1, count);
-				std::list<LASPoint*> pts(it0, it1);
-				m_cache[row].erase(it0, it1);
-				m_cmtx.unlock();
+		uint32_t row;
+		uint32_t count;
+		uint32_t curIdx = 0;
+		uint32_t prevIdx = 0;
+		uint32_t nextIdx = 0;
 
-				if(prevIdx != curIdx) {
-					std::fseek(m_file, prevIdx *  rowSize + 2 * sizeof(uint32_t), SEEK_SET);
-					std::fwrite((const void *) &curIdx, sizeof(uint32_t), 1, m_file);
-				}
-
-				uint64_t offset = 0;
-				char *buf0 = (char *) buf;
-
-				*((uint32_t *) buf0) = row;     buf0 += sizeof(uint32_t);
-				*((uint32_t *) buf0) = count;   buf0 += sizeof(uint32_t);
-				*((uint32_t *) buf0) = nextIdx; buf0 += sizeof(uint32_t);
-
-				//g_debug(" -- writing row " << row << "; " << pts.size() << "; " << m_cache[row].size());
-				for(const LASPoint *pt : pts) {
-					pt->write((void *) buf0); buf0 += LASPoint::dataSize;
-					delete pt;
-				}
-
-				m_fmtx.lock();
-				std::fseek(m_file, curIdx * rowSize, SEEK_SET);
-				std::fwrite(buf, bufLen, 1, m_file);
-				m_fmtx.unlock();
-
-				if(!m_cache[row].size())
-					rem.push_back(row);
-			}
-		}
 		m_cmtx.lock();
-		for(const uint32_t &row : rem)
-			m_cache.erase(row);
+			row = m_flush.front();
+			m_flush.pop_front();
+			count = g_min(CACHE_LEN, m_cache[row].size());
+			auto it0 = m_cache[row].begin();
+			auto it1 = it0;
+			std::advance(it1, count);
+			std::list<LASPoint*> pts(it0, it1);
+			m_cache[row].erase(it0, it1);
+			if(m_jump.find(row) == m_jump.end()) {
+				prevIdx = row;
+				curIdx = m_jump[row] = row;
+			} else {
+				prevIdx = m_jump[row];
+				curIdx = m_jump[row] = m_nextJump++;
+			}
 		m_cmtx.unlock();
-	}
+	
+		uint64_t offset = 0;
+		void *buf = calloc(bufLen, 1);
+		char *buf0 = (char *) buf;
 
-	free(buf);
+		*((uint32_t *) buf0) = row;     buf0 += sizeof(uint32_t);
+		*((uint32_t *) buf0) = count;   buf0 += sizeof(uint32_t);
+		*((uint32_t *) buf0) = nextIdx; buf0 += sizeof(uint32_t);
+
+		g_debug(" -- writing row " << row << "; " << pts.size() << "; " << m_cache[row].size());
+		for(const LASPoint *pt : pts) {
+			pt->write((void *) buf0); buf0 += LASPoint::dataSize;
+			delete pt;
+		}
+
+		m_fmtx.lock();
+		if(prevIdx != curIdx) {
+			std::fseek(m_file, prevIdx *  bufLen + 2 * sizeof(uint32_t), SEEK_SET);
+			std::fwrite((const void *) &curIdx, sizeof(uint32_t), 1, m_file);
+		}
+		std::fseek(m_file, curIdx * bufLen, SEEK_SET);
+		std::fwrite(buf, bufLen, 1, m_file);
+		m_fmtx.unlock();
+
+		free(buf);
+		
+	}
 }
 
 void SortedPointStream::init() {
@@ -322,10 +314,12 @@ void SortedPointStream::init() {
 			std::fwrite((const void *) buf, rowSize, 1, m_file);
 		free(buf);
 
-		std::thread consumer(&SortedPointStream::consume, this);
+		std::list<std::thread> consumers;
+		for(uint32_t i = 0; i < 3; ++i)
+			consumers.push_back(std::thread(&SortedPointStream::consume, this));
 
 		std::list<std::thread> producers;
-		for(uint32_t i = 0; i < 4; ++i)
+		for(uint32_t i = 0; i < 3; ++i)
 			producers.push_back(std::thread(&SortedPointStream::produce, this));
 
 		for(std::thread &t : producers)
@@ -333,7 +327,8 @@ void SortedPointStream::init() {
 
 		m_running = false;
 
-		consumer.join();
+		for(std::thread &t : consumers)
+			t.join();
 
 		g_debug(" -- sorting done.");
 
