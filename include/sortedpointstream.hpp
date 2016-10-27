@@ -309,9 +309,17 @@ namespace geotools {
 			uint32_t m_rowSize;
 			uint64_t m_size;
 			double m_blockSize;
+			std::FILE *m_file;
 			std::list<std::string> m_files;
-			std::set<uint32_t> m_rows;
-			std::map<uint32_t, std::unique_ptr<MappedFile>> m_mf;
+			std::string m_filename;
+			std::unordered_map<uint32_t, std::list<LASPoint*> > m_cache;
+			std::unordered_map<uint32_t, uint32_t> m_jump;
+			bool m_running;
+			bool m_finalize;
+			uint32_t m_nextJump;
+			std::mutex m_fmtx;
+			std::mutex m_cmtx;
+			std::queue<std::string> m_fileq;
 
 		public:
 
@@ -331,6 +339,9 @@ namespace geotools {
 
 			uint32_t rowCount() const;
 
+			void produce();
+			void consume();
+			
 			const Bounds& bounds() const;
 
 			bool next(std::list<std::shared_ptr<LASPoint> > &pts);

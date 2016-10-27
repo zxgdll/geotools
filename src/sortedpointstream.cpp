@@ -173,10 +173,13 @@ SortedPointStream::SortedPointStream(const std::list<std::string> &files, double
 	m_files(files),
 	m_blockSize(blockSize),
 	m_rebuild(rebuild),
-	m_inited(false) {
+	m_inited(false),
+	m_file(nullptr) {
 }
 
 SortedPointStream::~SortedPointStream() {
+	if(m_file)
+		std::fclose(m_file);
 }
 
 uint64_t SortedPointStream::pointCount() const {
@@ -187,109 +190,154 @@ uint32_t SortedPointStream::rowCount() const {
 	return m_rowCount;
 }
 
+void _produce(SortedPointStream *s) {
+	s->produce();
+}
+
+void SortedPointStream::produce() {
+
+	liblas::ReaderFactory rf;
+	while(m_fileq.size()) {
+
+		std::string file;
+
+		m_fmtx.lock();
+		if(m_fileq.size()) {
+			file = m_fileq.front();
+			m_fileq.pop();
+		}
+		m_fmtx.unlock();
+
+		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+		liblas::Reader lasReader = rf.CreateWithStream(instr);
+		liblas::Header lasHeader = lasReader.GetHeader();
+
+		uint32_t row;
+		LASPoint pt;
+		while(lasReader.ReadNextPoint()) {
+			pt.update(lasReader.GetPoint());
+			
+			if(m_blockSize < 0) {
+				row = (uint32_t) ((pt.y - m_bounds.maxy()) / m_blockSize);
+			} else {
+				row = (uint32_t) ((pt.y - m_bounds.miny()) / m_blockSize);
+			}
+
+			m_cmtx.lock();
+			m_cache[row].push_back(new LASPoint(pt));
+			m_cmtx.unlock();
+		}
+
+	}
+}
+
+void _consume(SortedPointStream *s) {
+	s->consume();
+}
+
+void SortedPointStream::consume() {
+
+	uint32_t rowSize = 3 * sizeof(uint32_t) + 1024 * LASPoint::dataSize;
+
+	while(m_running) {
+		for(const auto &it : m_cache) {
+			if(it.second.size() > 1024 || m_finalize) {
+
+				uint32_t row = it.first;
+				uint32_t count = g_min(1024, it.second.size());
+				uint32_t curIdx = 0;
+				uint32_t prevIdx = 0;
+				uint32_t nextIdx = 0;
+
+				if(m_jump.find(row) == m_jump.end()) {
+					prevIdx = row;
+					curIdx = m_jump[row] = row;
+				} else {
+					prevIdx = m_jump[row];
+					curIdx = m_jump[row] = m_nextJump++;
+				}
+				
+				auto it0 = m_cache[row].begin();
+				auto it1 = it0;
+				std::advance(it1, count);
+				std::list<LASPoint*> pts(it0, it1);
+				m_cache[row].erase(it0, it1);
+
+				if(prevIdx != curIdx) {
+					std::fseek(m_file, prevIdx *  rowSize + 2 * sizeof(uint32_t), SEEK_SET);
+					std::fwrite((const void *) &curIdx, sizeof(uint32_t), 1, m_file);
+				}
+
+				std::fseek(m_file, curIdx * rowSize, SEEK_SET);
+				std::fwrite((const void *) &row, sizeof(uint32_t), 1, m_file);
+				std::fwrite((const void *) &count, sizeof(uint32_t), 1, m_file);
+				std::fwrite((const void *) &nextIdx, sizeof(uint32_t), 1, m_file);
+
+				for(const LASPoint *pt : pts) {
+					pt->write(m_file);
+					delete pt;
+				}
+			}
+		}
+	}
+}
+
 void SortedPointStream::init() {
 
 	if(m_inited) return;
 	m_inited = true;
 
 	m_bounds.collapse();
-	m_pointCount = 0;
-	m_row = 0;
-	m_rowCount = 0;
-
-	liblas::ReaderFactory rf;
-	std::vector<std::string> files0;
-	Bounds workBounds; // Configure
-
-	for(const std::string &file : m_files) {
-		g_debug(" -- init: opening file: " << file);
-		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-		liblas::Reader lasReader = rf.CreateWithStream(instr);
-		liblas::Header lasHeader = lasReader.GetHeader();
-		LASPoint::setScale(lasHeader.GetScaleX(), lasHeader.GetScaleY(), lasHeader.GetScaleZ());
-		g_debug(" -- init computing bounds");
-		Bounds fileBounds;
-		if(!LasUtil::computeLasBounds(lasHeader, fileBounds, 2))
-			LasUtil::computeLasBounds(lasReader, fileBounds, 2); // If the header bounds are bogus.
-		if(fileBounds.intersects(workBounds)) {
-			m_bounds.extend(fileBounds);
-			m_pointCount += lasHeader.GetPointRecordsCount();
-			files0.push_back(file);
-		}
-	}
-	m_bounds.snap(g_abs(m_blockSize));
 
 	if(m_rebuild) {
-		
-		uint32_t rows = m_rowCount = (uint32_t) (m_bounds.height() / g_abs(m_blockSize)) + 1;
-		uint32_t rowLen = m_rowLen = m_pointCount / rows * 2;
-		uint32_t rowSize = m_rowSize = (rowLen * LASPoint::dataSize) + (3 * sizeof(uint32_t));
-		uint64_t size = m_size = rows * rowSize;
-		uint32_t nextRow = 0;
 
-		uint32_t dataIdx = 0;
+		liblas::ReaderFactory rf;
+		std::queue<std::string> m_fileq;
+		Bounds workBounds; // Configure
 
-		m_mf[dataIdx] = std::move(Util::mapFile(Util::tmpFile("/tmp"), size));
-		std::memset(m_mf[dataIdx]->data(), 0, m_size);
-
-		//#pragma omp parallel for
-		for(uint32_t i = 0; i< files0.size(); ++i) {
-			
-			const std::string &file = files0[i];
-			g_debug(" -- init: opening file: " << file << "; " << omp_get_thread_num());
-			
+		for(const std::string &file : m_files) {
+			g_debug(" -- init: opening file: " << file);
 			std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
 			liblas::Reader lasReader = rf.CreateWithStream(instr);
 			liblas::Header lasHeader = lasReader.GetHeader();
-
-			uint32_t row;
-			uint32_t count;
-			uint32_t jump;
-			uint64_t offset;
-			char *data = nullptr;
-
-			LASPoint pt;
-			while(lasReader.ReadNextPoint()) {
-				pt.update(lasReader.GetPoint());
-				
-				if(m_blockSize < 0) {
-					row = (uint32_t) ((pt.y - m_bounds.maxy()) / m_blockSize);
-				} else {
-					row = (uint32_t) ((pt.y - m_bounds.miny()) / m_blockSize);
-				}
-
-				m_rows.insert(row);
-
-				jump = row;
-				offset = jump * rowSize;
-				do {
-					if(offset >= size) {
-						g_warn("Offset larger than size " << offset << ", " << size);
-						dataIdx = offset / size;
-						if(m_mf.find(dataIdx) == m_mf.end()) {
-							m_mf[dataIdx] = std::move(Util::mapFile(Util::tmpFile(), size));
-							std::memset(m_mf[dataIdx]->data(), 0, m_size);
-						}
-						data = (char *) m_mf[dataIdx]->data();
-					} else {
-						data = (char *) m_mf[0]->data();
-					}
-					count = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
-					jump  = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
-					if(count == rowLen)
-						jump = ++nextRow + rows;
-					if(jump > 0)
-						offset = jump * rowSize;
-				} while(jump > 0);
-
-				*((uint32_t *) (data + offset)) = row;     offset += sizeof(uint32_t);
-				*((uint32_t *) (data + offset)) = ++count; offset += sizeof(uint32_t);
-				*((uint32_t *) (data + offset)) = 0;       offset += sizeof(uint32_t);
-
-				pt.write((void *) (data + offset + (count - 1) * LASPoint::dataSize));
-
+			LASPoint::setScale(lasHeader.GetScaleX(), lasHeader.GetScaleY(), lasHeader.GetScaleZ());
+			g_debug(" -- init computing bounds");
+			Bounds fileBounds;
+			if(!LasUtil::computeLasBounds(lasHeader, fileBounds, 2))
+				LasUtil::computeLasBounds(lasReader, fileBounds, 2); // If the header bounds are bogus.
+			if(fileBounds.intersects(workBounds)) {
+				m_bounds.extend(fileBounds);
+				m_pointCount += lasHeader.GetPointRecordsCount();
+				m_fileq.push(file);
 			}
 		}
+		m_bounds.snap(g_abs(m_blockSize));
+
+		m_rowCount = (uint32_t) (m_bounds.height() / m_blockSize) + 1;
+		m_running = true;
+		m_finalize = false;
+		m_filename = Util::tmpFile("/tmp");
+		m_nextJump = m_rowCount;
+
+		m_file = std::fopen(m_filename.c_str(), "wb");
+		if(!m_file)
+			g_runerr("Failed to open point file.");
+
+		std::thread consumer(_consume, this);
+
+		std::list<std::thread> producers;
+		for(uint32_t i = 0; i < 1; ++i)
+			producers.push_back(std::thread(_produce, this));
+
+		consumer.join();
+
+		m_finalize = true;
+
+		for(std::thread &t : producers)
+			t.join();
+
+		std::fclose(m_file);
+
 	}
 }
 
@@ -298,40 +346,28 @@ const Bounds& SortedPointStream::bounds() const {
 }
 
 bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
-	if(!m_rows.size())
-		return false;
-	uint32_t row = *(m_rows.begin());
-	m_rows.erase(row);
+	if(!m_file) {
+		m_file = std::fopen(m_filename.c_str(), "rb");
+		m_row = 0;
+		if(!m_file) 
+			g_argerr("Failed to open " << m_filename);
+	}
 
-	char *data = (char *) m_mf[0]->data();
+	uint32_t rowSize = 3 * sizeof(uint32_t) + 1024 * LASPoint::dataSize;
+	uint32_t row, count, jump;
 
-	uint64_t jump = row;
-	uint64_t offset;
-	uint32_t row0;
-	uint32_t dataIdx;
-	uint32_t count;
+	jump = m_row;
 	do {
-		offset = jump * m_rowSize;
-		if(offset >= m_size) {
-			g_warn("Offset larger than size " << offset << ", " << m_size);
-			dataIdx = offset / m_size;
-			if(m_mf.find(dataIdx) == m_mf.end())
-				g_runerr("Bad index " << dataIdx);
-			data = (char *) m_mf[dataIdx]->data();
-		} else {
-			data = (char *) m_mf[0]->data();
-		}
-		row0 = *((uint32_t *) (data + offset));  offset += sizeof(uint32_t);
-		if(row != row0)
-			g_runerr("Rows don't match " << row << ", " << row0);
-		count = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
-		jump  = *((uint32_t *) (data + offset)); offset += sizeof(uint32_t);
+		std::fseek(m_file, jump * rowSize, SEEK_SET);
+		std::fread((void *) &row, sizeof(uint32_t), 1, m_file);
+		std::fread((void *) &count, sizeof(uint32_t), 1, m_file);
+		std::fread((void *) &jump, sizeof(uint32_t), 1, m_file);
 		for(uint32_t i = 0; i < count; ++i) {
 			std::shared_ptr<LASPoint> pt(new LASPoint());
-			pt->read(data + offset);
+			pt->read(m_file);
 			pts.push_back(pt);
-			offset += LASPoint::dataSize;
 		}
 	} while(jump > 0);
-	return true;
+
+	return pts.size() > 0;
 }
