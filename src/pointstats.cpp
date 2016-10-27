@@ -274,12 +274,18 @@ namespace geotools {
 
 						for(const std::shared_ptr<LASPoint> &pt : row) {
 							uint64_t idx = grid.toRow(pt->y) * grid.cols() + grid.toCol(pt->x);
+							//g_debug(" -- " << grid.toCol(pt->x) << ", " << grid.toRow(pt->y));
 							values[idx].push_back(pt);
 						}
 
 						for(const auto &it : values) {
 							//g_debug(" -- index " << it.first);
-							mem.set(it.first, computer->compute(it.second));
+							float val = computer->compute(it.second);
+							uint64_t idx = it.first;
+							uint32_t col = idx % grid.cols();
+							uint32_t row = idx / grid.cols();
+							//g_debug(" -- " << col << ", " << row);
+							mem.set(it.first, val);
 						}
 
 					}

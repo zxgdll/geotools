@@ -14,6 +14,8 @@
 #include "sortedpointstream.hpp"
 #include "lasutil.hpp"
 
+#define CACHE_LEN 4096
+
 using namespace geotools::las;
 using namespace geotools::util;
 
@@ -88,40 +90,17 @@ void LASPoint::write(std::ostream &str) const {
 }
 
 void LASPoint::read(std::FILE *str) {
-	int32_t xx, yy, zz;
-	if(!std::fread((void *) &xx, sizeof(int32_t), 1, str))
-		g_runerr("Failed to read x.")
-	if(!std::fread((void *) &yy, sizeof(int32_t), 1, str))
-		g_runerr("Failed to read x.")
-	if(!std::fread((void *) &zz, sizeof(int32_t), 1, str))
-		g_runerr("Failed to read x.")
-	if(!std::fread((void *) &intensity, sizeof(uint16_t), 1, str))
-		g_runerr("Failed to read x.")
-	if(!std::fread((void *) &ret, sizeof(uint16_t), 1, str))
-		g_runerr("Failed to read x.")
-	if(!std::fread((void *) &numRets, sizeof(uint16_t), 1, str))
-		g_runerr("Failed to read x.")
-	if(!std::fread((void *) &cls, sizeof(uint8_t), 1, str))
-		g_runerr("Failed to read x.")
-	if(!std::fread((void *) &angle, sizeof(int8_t), 1, str))
-		g_runerr("Failed to read x.")
-	x = (double) (xx * scaleX);
-	y = (double) (yy * scaleY);
-	z = (double) (zz * scaleZ);
+	void *buf = calloc(LASPoint::dataSize, 1);
+	std::fread(buf, LASPoint::dataSize, 1, str);
+	read(buf);
+	std::free(buf);
 }
 
-void LASPoint::write(std::FILE *str) const {
-	int32_t xx = (int32_t) (x / scaleX);
-	int32_t yy = (int32_t) (y / scaleY);
-	int32_t zz = (int32_t) (z / scaleZ);
-	std::fwrite((const void *) &xx, sizeof(int32_t), 1, str);
-	std::fwrite((const void *) &yy, sizeof(int32_t), 1, str);
-	std::fwrite((const void *) &zz, sizeof(int32_t), 1, str);
-	std::fwrite((const void *) &intensity, sizeof(uint16_t), 1, str);
-	std::fwrite((const void *) &ret, sizeof(uint16_t), 1, str);
-	std::fwrite((const void *) &numRets, sizeof(uint16_t), 1, str);
-	std::fwrite((const void *) &cls, sizeof(uint8_t), 1, str);
-	std::fwrite((const void *) &angle, sizeof(int8_t), 1, str);
+void LASPoint::write(std::FILE *str) {
+	void *buf = calloc(LASPoint::dataSize, 1);
+	write(buf);
+	std::fwrite(buf, LASPoint::dataSize, 1, str);
+	std::free(buf);
 }
 
 void LASPoint::read(void *str) {
@@ -168,6 +147,8 @@ bool LASPoint::single() const {
 	return numRets == 1;
 }
 
+LASPoint::~LASPoint() {
+}
 
 SortedPointStream::SortedPointStream(const std::list<std::string> &files, double blockSize, bool rebuild) :
 	m_files(files),
@@ -190,24 +171,22 @@ uint32_t SortedPointStream::rowCount() const {
 	return m_rowCount;
 }
 
-void _produce(SortedPointStream *s) {
-	s->produce();
-}
-
 void SortedPointStream::produce() {
 
 	liblas::ReaderFactory rf;
 	while(m_fileq.size()) {
 
 		std::string file;
-
 		m_fmtx.lock();
 		if(m_fileq.size()) {
 			file = m_fileq.front();
 			m_fileq.pop();
 		}
 		m_fmtx.unlock();
+		if(file.empty())
+			continue; // queue is empty.
 
+		g_debug(" -- reading file " << file);
 		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
 		liblas::Reader lasReader = rf.CreateWithStream(instr);
 		liblas::Header lasHeader = lasReader.GetHeader();
@@ -227,24 +206,21 @@ void SortedPointStream::produce() {
 			m_cache[row].push_back(new LASPoint(pt));
 			m_cmtx.unlock();
 		}
-
 	}
-}
-
-void _consume(SortedPointStream *s) {
-	s->consume();
 }
 
 void SortedPointStream::consume() {
 
-	uint32_t rowSize = 3 * sizeof(uint32_t) + 1024 * LASPoint::dataSize;
+	uint32_t rowSize = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
+	uint64_t bufLen = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
+	void *buf = calloc(bufLen, 1);
 
-	while(m_running) {
+	while(m_running || m_cache.size()) {
+		std::list<uint32_t> rem;
 		for(const auto &it : m_cache) {
-			if(it.second.size() > 1024 || m_finalize) {
-
+			if(it.second.size() > CACHE_LEN || !m_running) {
 				uint32_t row = it.first;
-				uint32_t count = g_min(1024, it.second.size());
+				uint32_t count = g_min(CACHE_LEN, it.second.size());
 				uint32_t curIdx = 0;
 				uint32_t prevIdx = 0;
 				uint32_t nextIdx = 0;
@@ -257,29 +233,48 @@ void SortedPointStream::consume() {
 					curIdx = m_jump[row] = m_nextJump++;
 				}
 				
+				m_cmtx.lock();
 				auto it0 = m_cache[row].begin();
 				auto it1 = it0;
 				std::advance(it1, count);
 				std::list<LASPoint*> pts(it0, it1);
 				m_cache[row].erase(it0, it1);
+				m_cmtx.unlock();
 
 				if(prevIdx != curIdx) {
 					std::fseek(m_file, prevIdx *  rowSize + 2 * sizeof(uint32_t), SEEK_SET);
 					std::fwrite((const void *) &curIdx, sizeof(uint32_t), 1, m_file);
 				}
 
-				std::fseek(m_file, curIdx * rowSize, SEEK_SET);
-				std::fwrite((const void *) &row, sizeof(uint32_t), 1, m_file);
-				std::fwrite((const void *) &count, sizeof(uint32_t), 1, m_file);
-				std::fwrite((const void *) &nextIdx, sizeof(uint32_t), 1, m_file);
+				uint64_t offset = 0;
+				char *buf0 = (char *) buf;
 
+				*((uint32_t *) buf0) = row;     buf0 += sizeof(uint32_t);
+				*((uint32_t *) buf0) = count;   buf0 += sizeof(uint32_t);
+				*((uint32_t *) buf0) = nextIdx; buf0 += sizeof(uint32_t);
+
+				//g_debug(" -- writing row " << row << "; " << pts.size() << "; " << m_cache[row].size());
 				for(const LASPoint *pt : pts) {
-					pt->write(m_file);
+					pt->write((void *) buf0); buf0 += LASPoint::dataSize;
 					delete pt;
 				}
+
+				m_fmtx.lock();
+				std::fseek(m_file, curIdx * rowSize, SEEK_SET);
+				std::fwrite(buf, bufLen, 1, m_file);
+				m_fmtx.unlock();
+
+				if(!m_cache[row].size())
+					rem.push_back(row);
 			}
 		}
+		m_cmtx.lock();
+		for(const uint32_t &row : rem)
+			m_cache.erase(row);
+		m_cmtx.unlock();
 	}
+
+	free(buf);
 }
 
 void SortedPointStream::init() {
@@ -292,7 +287,6 @@ void SortedPointStream::init() {
 	if(m_rebuild) {
 
 		liblas::ReaderFactory rf;
-		std::queue<std::string> m_fileq;
 		Bounds workBounds; // Configure
 
 		for(const std::string &file : m_files) {
@@ -313,30 +307,38 @@ void SortedPointStream::init() {
 		}
 		m_bounds.snap(g_abs(m_blockSize));
 
-		m_rowCount = (uint32_t) (m_bounds.height() / m_blockSize) + 1;
+		uint32_t rowSize = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
+
+		m_rowCount = (uint32_t) (m_bounds.height() / g_abs(m_blockSize)) + 1;
 		m_running = true;
-		m_finalize = false;
 		m_filename = Util::tmpFile("/tmp");
 		m_nextJump = m_rowCount;
 
 		m_file = std::fopen(m_filename.c_str(), "wb");
 		if(!m_file)
 			g_runerr("Failed to open point file.");
+		void *buf = std::calloc(rowSize, 1);
+		for(uint32_t i = 0; i < m_rowCount; ++i)
+			std::fwrite((const void *) buf, rowSize, 1, m_file);
+		free(buf);
 
-		std::thread consumer(_consume, this);
+		std::thread consumer(&SortedPointStream::consume, this);
 
 		std::list<std::thread> producers;
-		for(uint32_t i = 0; i < 1; ++i)
-			producers.push_back(std::thread(_produce, this));
-
-		consumer.join();
-
-		m_finalize = true;
+		for(uint32_t i = 0; i < 4; ++i)
+			producers.push_back(std::thread(&SortedPointStream::produce, this));
 
 		for(std::thread &t : producers)
 			t.join();
 
+		m_running = false;
+
+		consumer.join();
+
+		g_debug(" -- sorting done.");
+
 		std::fclose(m_file);
+		m_file = nullptr;
 
 	}
 }
@@ -353,12 +355,14 @@ bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
 			g_argerr("Failed to open " << m_filename);
 	}
 
-	uint32_t rowSize = 3 * sizeof(uint32_t) + 1024 * LASPoint::dataSize;
+	uint32_t rowSize = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
 	uint32_t row, count, jump;
 
 	jump = m_row;
 	do {
-		std::fseek(m_file, jump * rowSize, SEEK_SET);
+		if(std::fseek(m_file, jump * rowSize, SEEK_SET))
+			return false;
+		// TODO: Read to a buffer		
 		std::fread((void *) &row, sizeof(uint32_t), 1, m_file);
 		std::fread((void *) &count, sizeof(uint32_t), 1, m_file);
 		std::fread((void *) &jump, sizeof(uint32_t), 1, m_file);
@@ -368,6 +372,8 @@ bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
 			pts.push_back(pt);
 		}
 	} while(jump > 0);
+
+	++m_row;
 
 	return pts.size() > 0;
 }
