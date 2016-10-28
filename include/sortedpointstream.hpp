@@ -6,6 +6,7 @@
 #include <fstream>
 #include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <mutex>
 #include <thread>
 #include <atomic>
@@ -88,8 +89,9 @@ namespace geotools {
 			uint32_t m_nextJump;
 			std::mutex m_fmtx;
 			std::mutex m_cmtx;
+			std::mutex m_wmtx;
 			std::queue<std::string> m_fileq;
-			std::list<uint32_t> m_flush;
+			std::unordered_set<uint32_t> m_flush;
 
 		public:
 

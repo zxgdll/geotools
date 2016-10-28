@@ -171,11 +171,20 @@ uint32_t SortedPointStream::rowCount() const {
 	return m_rowCount;
 }
 
+uint32_t _row(const LASPoint &pt, const Bounds &bounds, double blockSize) {
+	if(blockSize < 0) {
+		return (uint32_t) ((pt.y - bounds.maxy()) / blockSize);
+	} else {
+		return (uint32_t) ((pt.y - bounds.miny()) / blockSize);
+	}
+}
+
 void SortedPointStream::produce() {
 
 	liblas::ReaderFactory rf;
-	while(m_fileq.size()) {
+	while(true) {
 
+		// Get the file. If the queue is empty, quit.
 		std::string file;
 		m_fmtx.lock();
 		if(m_fileq.size()) {
@@ -183,90 +192,99 @@ void SortedPointStream::produce() {
 			m_fileq.pop();
 		}
 		m_fmtx.unlock();
-		if(file.empty())
-			continue; // queue is empty.
 
+		if(file.empty()) 
+			break;
+
+		// Prepare the LAS source.
 		g_debug(" -- reading file " << file);
 		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
 		liblas::Reader lasReader = rf.CreateWithStream(instr);
 		liblas::Header lasHeader = lasReader.GetHeader();
 
+		// Read each point and add to the cache for its row.
 		uint32_t row;
 		LASPoint pt;
 		while(lasReader.ReadNextPoint()) {
 			pt.update(lasReader.GetPoint());
-			
-			if(m_blockSize < 0) {
-				row = (uint32_t) ((pt.y - m_bounds.maxy()) / m_blockSize);
-			} else {
-				row = (uint32_t) ((pt.y - m_bounds.miny()) / m_blockSize);
-			}
-
+			row = _row(pt, m_bounds, m_blockSize);
 			m_cmtx.lock();
 			m_cache[row].push_back(new LASPoint(pt));
-			if(m_cache[row].size() >= CACHE_LEN)
-				m_flush.push_back(row);
 			m_cmtx.unlock();
 		}
 	}
+
 }
 
 void SortedPointStream::consume() {
 
 	uint64_t bufLen = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
+	void *buf = calloc(bufLen, 1);
+	std::list<LASPoint*> pts;
 
-	while(m_running || m_flush.size()) {
+	while(m_running || m_cache.size()) {
 
 		uint32_t row;
-		uint32_t count;
-		uint32_t curIdx = 0;
+		uint32_t count = 0;
+
+		m_cmtx.lock();
+		for(const auto &it : m_cache) {
+			if(!m_running || it.second.size() >= CACHE_LEN) {
+				row   = it.first;
+				count = g_min(CACHE_LEN, it.second.size());
+				auto it0 = m_cache[row].begin();
+				pts.resize(0);
+				pts.splice(pts.begin(), m_cache[row], it0, std::next(it0, count));
+				break;
+			}
+		}
+		m_cmtx.unlock();
+
+		if(!count) {
+			m_cmtx.lock();
+			m_cache.erase(row);
+			m_cmtx.unlock();
+			continue;
+		}
+
+		uint32_t curIdx  = 0;
 		uint32_t prevIdx = 0;
 		uint32_t nextIdx = 0;
 
 		m_cmtx.lock();
-			row = m_flush.front();
-			m_flush.pop_front();
-			count = g_min(CACHE_LEN, m_cache[row].size());
-			auto it0 = m_cache[row].begin();
-			auto it1 = it0;
-			std::advance(it1, count);
-			std::list<LASPoint*> pts(it0, it1);
-			m_cache[row].erase(it0, it1);
-			if(m_jump.find(row) == m_jump.end()) {
-				prevIdx = row;
-				curIdx = m_jump[row] = row;
-			} else {
-				prevIdx = m_jump[row];
-				curIdx = m_jump[row] = m_nextJump++;
-			}
+		if(m_jump.find(row) == m_jump.end()) {
+			prevIdx = row;
+			curIdx = m_jump[row] = row;
+		} else {
+			prevIdx = m_jump[row];
+			curIdx = m_jump[row] = m_nextJump++;
+		}
 		m_cmtx.unlock();
 	
-		uint64_t offset = 0;
-		void *buf = calloc(bufLen, 1);
 		char *buf0 = (char *) buf;
 
 		*((uint32_t *) buf0) = row;     buf0 += sizeof(uint32_t);
 		*((uint32_t *) buf0) = count;   buf0 += sizeof(uint32_t);
 		*((uint32_t *) buf0) = nextIdx; buf0 += sizeof(uint32_t);
 
-		g_debug(" -- writing row " << row << "; " << pts.size() << "; " << m_cache[row].size());
+		g_debug(" -- writing row " << row << "; " << pts.size() << "; " << m_cache[row].size() << "; " << std::this_thread::get_id());
 		for(const LASPoint *pt : pts) {
 			pt->write((void *) buf0); buf0 += LASPoint::dataSize;
 			delete pt;
 		}
 
-		m_fmtx.lock();
+		m_wmtx.lock();
 		if(prevIdx != curIdx) {
 			std::fseek(m_file, prevIdx *  bufLen + 2 * sizeof(uint32_t), SEEK_SET);
 			std::fwrite((const void *) &curIdx, sizeof(uint32_t), 1, m_file);
 		}
 		std::fseek(m_file, curIdx * bufLen, SEEK_SET);
 		std::fwrite(buf, bufLen, 1, m_file);
-		m_fmtx.unlock();
+		m_wmtx.unlock();
 
-		free(buf);
-		
 	}
+
+	free(buf);
 }
 
 void SortedPointStream::init() {
