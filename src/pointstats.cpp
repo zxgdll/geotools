@@ -26,17 +26,6 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/case_conv.hpp>
 
-/*
-#include <CGAL/Plane_3.h>
-#include <CGAL/linear_least_squares_fitting_3.h>
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
-#include <CGAL/Projection_traits_xy_3.h>
-#include <CGAL/Delaunay_triangulation_2.h>
-#include <CGAL/convex_hull_2.h>
-#include <CGAL/linear_least_squares_fitting_3.h>
-#include <CGAL/Polygon_2_algorithms.h>
-*/
-
 #include "pointstats.hpp"
 #include "lasutil.hpp"
 #include "sortedpointstream.hpp"
@@ -47,16 +36,6 @@ using namespace geotools::raster;
 using namespace geotools::point;
 using namespace geotools::las;
 using namespace geotools::point::stats;
-
-/*
-typedef CGAL::Exact_predicates_inexact_constructions_kernel	K;
-typedef CGAL::Projection_traits_xy_3<K>  					Gt;
-typedef CGAL::Delaunay_triangulation_2<Gt> 					Delaunay;
-typedef K::Point_3 											Point_3;
-typedef K::Plane_3 											Plane_3;
-typedef Delaunay::Finite_faces_iterator						Finite_faces_iterator;
-typedef Delaunay::Face										Face;
-*/
 
 namespace geotools {
 
@@ -235,7 +214,7 @@ namespace geotools {
 		 	}
 
 			SortedPointStream ps(config.sourceFiles, "cache.tmp", config.resolution, 
-				config.rebuild, config.snap);
+				config.rebuild, config.snap, config.threads);
 			ps.init();
 			Bounds workBounds = ps.bounds();
 			g_debug(" -- pointstats - work bounds: " << workBounds.print());

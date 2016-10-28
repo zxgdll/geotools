@@ -14,7 +14,7 @@
 #include "sortedpointstream.hpp"
 #include "lasutil.hpp"
 
-#define CACHE_LEN (4096 * 2)
+#define CACHE_LEN 2048
 #define HEADER_LEN 60
  
 using namespace geotools::las;
@@ -161,14 +161,15 @@ LASPoint::~LASPoint() {
 }
 
 SortedPointStream::SortedPointStream(const std::list<std::string> &files, const std::string &cacheFile, 
-	double blockSize, bool rebuild, bool snap) :
+	double blockSize, bool rebuild, bool snap, uint32_t threads) :
 	m_files(files),
 	m_cacheFile(cacheFile),
 	m_blockSize(blockSize),
 	m_rebuild(rebuild),
 	m_inited(false),
 	m_file(nullptr),
-	m_snap(snap) {
+	m_snap(snap), 
+	m_threads(threads) {
 }
 
 SortedPointStream::~SortedPointStream() {
@@ -221,9 +222,11 @@ void SortedPointStream::produce() {
 			std::shared_ptr<LASPoint> pt(new LASPoint());
 			pt->update(lasReader.GetPoint());
 			row = _row(pt, m_bounds, m_blockSize);
+			//g_debug(" -- point for row " << row);
 			m_cmtx.lock();
 			m_cache[row].push_back(std::move(pt));
 			if(m_cache[row].size() >= CACHE_LEN) {
+				g_debug(" -- sending row " << row);
 				auto it = m_cache[row].begin();
 				std::list<std::shared_ptr<LASPoint> > pts;
 				pts.splice(pts.begin(), m_cache[row], it, std::next(it, CACHE_LEN));
@@ -339,14 +342,17 @@ void SortedPointStream::init() {
 				std::fwrite((const void *) buffer.buf, rowSize, 1, m_file);
 		}
 		
+		uint32_t tp = g_max(1, m_threads / 2);
+		uint32_t tc = g_max(1, m_threads - tp);
+
 		// Start up a set of consumers to sort points.
 		std::list<std::thread> consumers;
-		for(uint32_t i = 0; i < 1; ++i)
+		for(uint32_t i = 0; i < tc; ++i)
 			consumers.push_back(std::thread(&SortedPointStream::consume, this));
 
 		// Start up a set of consumers to read las files.
 		std::list<std::thread> producers;
-		for(uint32_t i = 0; i < 1; ++i)
+		for(uint32_t i = 0; i < tp; ++i)
 			producers.push_back(std::thread(&SortedPointStream::produce, this));
 
 		// Wait for producers to finish
