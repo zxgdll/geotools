@@ -161,13 +161,14 @@ LASPoint::~LASPoint() {
 }
 
 SortedPointStream::SortedPointStream(const std::list<std::string> &files, const std::string &cacheFile, 
-	double blockSize, bool rebuild) :
+	double blockSize, bool rebuild, bool snap) :
 	m_files(files),
 	m_cacheFile(cacheFile),
 	m_blockSize(blockSize),
 	m_rebuild(rebuild),
 	m_inited(false),
-	m_file(nullptr) {
+	m_file(nullptr),
+	m_snap(snap) {
 }
 
 SortedPointStream::~SortedPointStream() {
@@ -318,7 +319,8 @@ void SortedPointStream::init() {
 				m_fileq.push(file);
 			}
 		}
-		m_bounds.snap(g_abs(m_blockSize));
+		if(m_snap)
+			m_bounds.snap(g_abs(m_blockSize));
 
 		uint32_t rowSize = 3 * sizeof(uint32_t) + CACHE_LEN * LASPoint::dataSize;
 
@@ -339,12 +341,12 @@ void SortedPointStream::init() {
 		
 		// Start up a set of consumers to sort points.
 		std::list<std::thread> consumers;
-		for(uint32_t i = 0; i < 4; ++i)
+		for(uint32_t i = 0; i < 1; ++i)
 			consumers.push_back(std::thread(&SortedPointStream::consume, this));
 
 		// Start up a set of consumers to read las files.
 		std::list<std::thread> producers;
-		for(uint32_t i = 0; i < 2; ++i)
+		for(uint32_t i = 0; i < 1; ++i)
 			producers.push_back(std::thread(&SortedPointStream::produce, this));
 
 		// Wait for producers to finish

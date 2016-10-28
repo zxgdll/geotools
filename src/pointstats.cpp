@@ -234,7 +234,8 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			SortedPointStream ps(config.sourceFiles, "cache.tmp", -config.resolution * 2.0, config.rebuild);
+			SortedPointStream ps(config.sourceFiles, "cache.tmp", config.resolution, 
+				config.rebuild, config.snap);
 			ps.init();
 			Bounds workBounds = ps.bounds();
 			g_debug(" -- pointstats - work bounds: " << workBounds.print());
@@ -263,31 +264,20 @@ namespace geotools {
 				#pragma omp for
 				for(uint32_t i = 0; i < ps.rowCount(); ++i) {
 
-					//g_debug(" -- row " << i << "; thread " << omp_get_thread_num());
 					std::list<std::shared_ptr<LASPoint> > row;
 					#pragma omp critical(__row)
 					ps.next(row);
 
 					if(row.size()) {
-
 						std::unordered_map<uint64_t, std::list<std::shared_ptr<LASPoint> > > values;
-
 						for(const std::shared_ptr<LASPoint> &pt : row) {
 							uint64_t idx = grid.toRow(pt->y) * grid.cols() + grid.toCol(pt->x);
-							//g_debug(" -- " << grid.toCol(pt->x) << ", " << grid.toRow(pt->y));
 							values[idx].push_back(pt);
 						}
-
 						for(const auto &it : values) {
-							//g_debug(" -- index " << it.first);
 							float val = computer->compute(it.second);
-							uint64_t idx = it.first;
-							uint32_t col = idx % grid.cols();
-							uint32_t row = idx / grid.cols();
-							//g_debug(" -- " << col << ", " << row);
 							mem.set(it.first, val);
 						}
-
 					}
 				}
 			}

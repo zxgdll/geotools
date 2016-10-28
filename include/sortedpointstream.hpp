@@ -76,6 +76,7 @@ namespace geotools {
 			bool m_rebuild;
 			bool m_inited;
 			std::FILE *m_file;
+			bool m_snap;
 			Bounds m_bounds;
 
 			uint64_t m_pointCount;
@@ -104,7 +105,7 @@ namespace geotools {
 			 * blocks are square and stored as individual files.
 			 */
 			SortedPointStream(const std::list<std::string> &files, const std::string &cacheFile,
-				double blockSize, bool rebuild = true);
+				double blockSize, bool rebuild = true, bool snap = false);
 
 			void init();
 
