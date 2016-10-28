@@ -204,11 +204,11 @@ void SortedPointStream::produce() {
 		if(m_fileq.size()) {
 			file = m_fileq.front();
 			m_fileq.pop();
+		} else {
+			m_fmtx.unlock();
+			break;
 		}
 		m_fmtx.unlock();
-
-		if(file.empty()) 
-			break;
 
 		// Prepare the LAS source.
 		g_debug(" -- reading file " << file);
