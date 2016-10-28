@@ -70,20 +70,22 @@ namespace geotools {
 
 		class SortedPointStream {
 		private:
-			Bounds m_bounds;
-			bool m_inited;
+			std::list<std::string> m_files;
+			std::string m_cacheFile;
+			double m_blockSize;
 			bool m_rebuild;
+			bool m_inited;
+			std::FILE *m_file;
+			Bounds m_bounds;
+
 			uint64_t m_pointCount;
 			uint32_t m_rowCount;
 			uint32_t m_row;
 			uint32_t m_rowLen;
 			uint32_t m_rowSize;
 			uint64_t m_size;
-			double m_blockSize;
-			std::FILE *m_file;
-			std::list<std::string> m_files;
-			std::string m_filename;
-			std::unordered_map<uint32_t, std::list<LASPoint*> > m_cache;
+
+			std::unordered_map<uint32_t, std::list<std::shared_ptr<LASPoint> > > m_cache;
 			std::unordered_map<uint32_t, uint32_t> m_jump;
 			bool m_running;
 			uint32_t m_nextJump;
@@ -91,7 +93,7 @@ namespace geotools {
 			std::mutex m_cmtx;
 			std::mutex m_wmtx;
 			std::queue<std::string> m_fileq;
-			std::unordered_set<uint32_t> m_flush;
+			std::queue<std::pair<uint32_t, std::list<std::shared_ptr<LASPoint> > > > m_flush;
 
 		public:
 
@@ -101,7 +103,8 @@ namespace geotools {
 			 * The block size gives the size, in map units, of a block,
 			 * blocks are square and stored as individual files.
 			 */
-			SortedPointStream(const std::list<std::string> &files, double blockSize, bool rebuild = true);
+			SortedPointStream(const std::list<std::string> &files, const std::string &cacheFile,
+				double blockSize, bool rebuild = true);
 
 			void init();
 

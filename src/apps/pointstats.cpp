@@ -19,6 +19,7 @@ void usage() {
 		<< " -g <type>					 Gap Fraction type. These are IR, FR, RR, BLa and BLb, adaped from \n"
 		<< "                             Hopkins and Chasmer, 2009: Testing LiDAR Models of Fractional Cover...\n"
 		<< " -r <resolution>             Resolution (default 2).\n"
+		<< " -C                          Use existing cache file.\n"
 		<< " -s <srid>                   The EPSG ID of the CRS.\n"
 		<< " -c <classes>                Comma-delimited (e.g. '2,0' (ground and unclassified)).\n"
 		<< " -a <attribute>              Use height, intensity (default height).\n"
@@ -94,7 +95,7 @@ int main(int argc, char **argv) {
 				g_loglevel(G_LOG_DEBUG);
 			} else if(s == "-g") {
 				gap = argv[++i];
-			} else if(s == "-d") {
+			} else if(s == "-C") {
 				rebuild = false;
 			} else if(s == "--angle-limit") {
 				angleLimit = (unsigned char) atoi(argv[++i]);

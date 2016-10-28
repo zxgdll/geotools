@@ -234,7 +234,7 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			SortedPointStream ps(config.sourceFiles, -config.resolution * 2.0, config.rebuild);
+			SortedPointStream ps(config.sourceFiles, "cache.tmp", -config.resolution * 2.0, config.rebuild);
 			ps.init();
 			Bounds workBounds = ps.bounds();
 			g_debug(" -- pointstats - work bounds: " << workBounds.print());
