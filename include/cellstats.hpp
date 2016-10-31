@@ -176,7 +176,8 @@ namespace geotools {
 				double compute(const std::list<std::shared_ptr<LASPoint> > &values) {
 					std::list<std::shared_ptr<LASPoint> > filt = filtered(values);
 					if(!filt.size())
-						return -9999.0;			
+						return -9999.0;
+					//g_debug(" -- mean: " << filt.size());
 					double sum = 0.0;
 					for(const std::shared_ptr<LASPoint> &v : filt)
 						sum += v->z;

@@ -67,9 +67,9 @@ void PointStream::init(const std::list<std::string> &files, bool deepBounds) {
 geotools::util::Bounds PointStream::filterFiles(const std::list<std::string> &infiles, 
 		std::vector<std::string> &outfiles, const geotools::util::Bounds &bounds) {
 	liblas::ReaderFactory rf;
-	Bounds workkBounds;
+	Bounds workBounds;
 	workBounds.collapse();
-	for(const std::string &file : files) {
+	for(const std::string &file : infiles) {
 		g_debug(" -- filterBounds opening file: " << file);
 		std::ifstream istr(file.c_str(), std::ios::binary);
 		liblas::Reader lasReader = rf.CreateWithStream(istr);

@@ -213,7 +213,7 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			SortedPointStream ps(config.sourceFiles, "cache.tmp", config.resolution, 
+			SortedPointStream ps(config.sourceFiles, "cache.tmp", -config.resolution, 
 				config.rebuild, config.snap, config.threads);
 			ps.init();
 			Bounds workBounds = ps.bounds();
@@ -230,7 +230,6 @@ namespace geotools {
 
 			#pragma omp parallel
 			{
-
 				std::unique_ptr<CellStats> computer(getComputer(config));
 				CellStatsFilter *filter = nullptr, *tmp;
 				if(config.hasClasses()) 
@@ -244,10 +243,11 @@ namespace geotools {
 				for(uint32_t i = 0; i < ps.rowCount(); ++i) {
 
 					std::list<std::shared_ptr<LASPoint> > row;
-					#pragma omp critical(__row)
+					#pragma omp critical(__sps_readrow)
 					ps.next(row);
 
 					if(row.size()) {
+						g_debug(" -- row " << i << "; " << row.size());
 						std::unordered_map<uint64_t, std::list<std::shared_ptr<LASPoint> > > values;
 						for(const std::shared_ptr<LASPoint> &pt : row) {
 							uint64_t idx = grid.toRow(pt->y) * grid.cols() + grid.toCol(pt->x);
@@ -260,7 +260,7 @@ namespace geotools {
 					}
 				}
 			}
-
+			
 			//_normalize(mem);
 
 			g_debug(" -- writing to output");

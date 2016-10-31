@@ -6,6 +6,7 @@
 #include <ostream>
 #include <vector>
 #include <map>
+#include <memory>
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -14,6 +15,20 @@
 namespace geotools {
 
 	namespace util {
+
+
+		// Provides access to an allocated buffer
+		// which will be safely disposed of.
+		class Buffer {
+		public:
+			void *buf;
+			Buffer(uint64_t size) {
+				buf = std::calloc(size, 1);
+			}
+			~Buffer() {
+				std::free(buf);
+			}
+		};
 
 		class Callbacks {
 		public:

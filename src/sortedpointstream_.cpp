@@ -5,7 +5,6 @@
 #include <memory>
 #include <cstdio>
 #include <cerrno>
-#include <parallel/algorithm>
 
 #include "liblas/liblas.hpp"
 
@@ -19,8 +18,7 @@
 
 // The size in bytes of the header row.
 #define HEADER_LEN 64
-
-
+ 
 using namespace geotools::las;
 using namespace geotools::util;
 
@@ -292,52 +290,106 @@ void SortedPointStream::init() {
 	m_inited = true;
 	m_bounds.collapse();
 
-	liblas::ReaderFactory rf;
-	Bounds workBounds; // Configure
-	for(const std::string &file : m_files) {
-		g_debug(" -- init: opening file: " << file);
-		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-		liblas::Reader lasReader = rf.CreateWithStream(instr);
-		liblas::Header lasHeader = lasReader.GetHeader();
+	if(m_rebuild) {
 
-		g_debug(" -- init computing bounds");
-		Bounds fileBounds;
-		if(!LasUtil::computeLasBounds(lasHeader, fileBounds, 2))
-			LasUtil::computeLasBounds(lasReader, fileBounds, 2); // If the header bounds are bogus.
-		if(fileBounds.intersects(workBounds)) {
-			m_bounds.extend(fileBounds);
-			m_pointCount += lasHeader.GetPointRecordsCount();
+		liblas::ReaderFactory rf;
+		Bounds workBounds; // Configure
+		for(const std::string &file : m_files) {
+			g_debug(" -- init: opening file: " << file);
+			std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+			liblas::Reader lasReader = rf.CreateWithStream(instr);
+			liblas::Header lasHeader = lasReader.GetHeader();
+			LASPoint::setScale(lasHeader.GetScaleX(), lasHeader.GetScaleY(), lasHeader.GetScaleZ());
+			g_debug(" -- init computing bounds");
+			Bounds fileBounds;
+			if(!LasUtil::computeLasBounds(lasHeader, fileBounds, 2))
+				LasUtil::computeLasBounds(lasReader, fileBounds, 2); // If the header bounds are bogus.
+			if(fileBounds.intersects(workBounds)) {
+				m_bounds.extend(fileBounds);
+				m_pointCount += lasHeader.GetPointRecordsCount();
+				m_fileq.push(file);
+			}
 		}
-	}
-	if(m_snap)
-		m_bounds.snap(g_abs(m_blockSize));
+		if(m_snap)
+			m_bounds.snap(g_abs(m_blockSize));
 
-	m_rowCount = (uint64_t) (m_bounds.height() / m_blockSize) + 1;
-	m_row = 0;
-	
-	std::string file = Util::tmpFile();
-	m_mfile.reset(Util::mapFile(file, 
-		sizeof(std::vector<liblas::Point>) + sizeof(liblas::Point) * m_pointCount).release());
-	void *ptr = m_mfile->data();
-	m_lst = (std::vector<liblas::Point>*) ptr;
+		uint64_t bufSize = 3 * sizeof(uint64_t) + CACHE_LEN * LASPoint::dataSize;
 
-	for(const std::string &file : m_files) {
-		g_debug(" -- init: opening file: " << file);
-		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-		liblas::Reader lasReader = rf.CreateWithStream(instr);
-		liblas::Header lasHeader = lasReader.GetHeader();
+		m_rowCount = (uint64_t) (m_bounds.height() / g_abs(m_blockSize)) + 1;
+		m_running = true;
+		m_nextJump = m_rowCount;
 
-		while(lasReader.ReadNextPoint())
-			m_lst->push_back(std::move(lasReader.GetPoint()));
-	}
-
-	struct {
-		bool operator()(const liblas::Point &p1, const liblas::Point &p2) {
-			return p1.GetX() < p2.GetX();
+		// Open file and write all zeroes for all rows.
+		m_file = std::fopen(m_cacheFile.c_str(), "wb");
+		if(!m_file)
+			g_runerr("Failed to open point file.");
+		{
+			Buffer buffer(bufSize);
+			std::fwrite((const void *) buffer.buf, HEADER_LEN, 1, m_file);
+			for(uint64_t i = 0; i < m_rowCount; ++i)
+				std::fwrite((const void *) buffer.buf, bufSize, 1, m_file);
 		}
-	} sortfn;
-	g_debug("sorting");
-	__gnu_parallel::sort(m_lst->begin(), m_lst->end(), sortfn);
+		
+		// Start up a set of consumers to sort points.
+		std::list<std::thread> consumers;
+		for(uint32_t i = 0; i < 2; ++i)
+			consumers.push_back(std::thread(&SortedPointStream::consume, this));
+
+		// Start up a set of consumers to read las files.
+		std::list<std::thread> producers;
+		for(uint32_t i = 0; i < 1; ++i)
+			producers.push_back(std::thread(&SortedPointStream::produce, this));
+
+		// Wait for producers to finish
+		for(std::thread &t : producers)
+			t.join();
+
+		m_cmtx.lock();
+		for(const auto it : m_cache)
+			m_flush.push(it.first);
+		m_cmtx.unlock();
+
+		// Tell the consumers to finish and wait.
+		m_running = false;
+		for(std::thread &t : consumers)
+			t.join();
+
+		double minx = m_bounds.minx(), miny = m_bounds.miny();
+		double maxx = m_bounds.maxx(), maxy = m_bounds.maxy();
+		double scaleX = LASPoint::scaleX, scaleY = LASPoint::scaleY, scaleZ = LASPoint::scaleZ;
+		// Write the bounds and row count toe the first line in the file.
+		std::fseek(m_file, 0, SEEK_SET);
+		std::fwrite((const void *) &minx, sizeof(double), 1, m_file);
+		std::fwrite((const void *) &miny, sizeof(double), 1, m_file);
+		std::fwrite((const void *) &maxx, sizeof(double), 1, m_file);
+		std::fwrite((const void *) &maxy, sizeof(double), 1, m_file);
+		std::fwrite((const void *) &scaleX, sizeof(double), 1, m_file);
+		std::fwrite((const void *) &scaleY, sizeof(double), 1, m_file);
+		std::fwrite((const void *) &scaleZ, sizeof(double), 1, m_file);
+		std::fwrite((const void *) &m_rowCount, sizeof(uint64_t), 1, m_file);
+		
+		std::fclose(m_file);
+		m_file = nullptr;
+		g_debug(" -- sorting done.");
+	} else {
+		m_file = std::fopen(m_cacheFile.c_str(), "rb");
+		if(!m_file)
+			g_runerr("Couldn't open cache file for reading.");
+		double minx, miny, maxx, maxy, scaleX, scaleY, scaleZ;
+		std::fread((void *) &minx, sizeof(double), 1, m_file);
+		std::fread((void *) &miny, sizeof(double), 1, m_file);
+		std::fread((void *) &maxx, sizeof(double), 1, m_file);
+		std::fread((void *) &maxy, sizeof(double), 1, m_file);
+		std::fread((void *) &scaleX, sizeof(double), 1, m_file);
+		std::fread((void *) &scaleY, sizeof(double), 1, m_file);
+		std::fread((void *) &scaleZ, sizeof(double), 1, m_file);
+		std::fread((void *) &m_rowCount, sizeof(uint64_t), 1, m_file);
+		std::fclose(m_file);
+		m_file = nullptr;
+		m_bounds.extend(minx, miny);
+		m_bounds.extend(maxx, maxy);
+		LASPoint::setScale(scaleX, scaleY, scaleZ);
+	}
 }
 
 const Bounds& SortedPointStream::bounds() const {
@@ -348,22 +400,32 @@ uint64_t SortedPointStream::bufferSize() const {
 	return 3 * sizeof(uint64_t) + CACHE_LEN * LASPoint::dataSize;
 }
 
-uint64_t idx = 0;
-
 bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
-	
-	uint32_t row;
-	for(uint64_t i = idx; i < m_lst->size(); ++i) {
-		liblas::Point pt = (*m_lst)[idx];
-		std::shared_ptr<LASPoint> pt0(new LASPoint());
-		pt0->update(pt);
-		row = _row(pt0, m_bounds, m_blockSize);
-		if(row == m_row) {
-			pts.push_back(std::move(pt0));
-		} else {
-			idx = i;
-			return true;
-		}
+	if(m_mmap.get() == nullptr) {
+		g_debug(" -- next opening file");
+		m_mmap.reset(Util::mapFile(m_cacheFile, 0).release());
+		m_row = 0;
 	}
-	return false;
+
+	uint64_t row, count, jump;
+	uint64_t bufSize = bufferSize();
+
+	jump = m_row;
+	do {
+		char *buf = ((char *) m_mmap->data()) + jump * bufSize + HEADER_LEN;
+		row   = *((uint64_t *) buf);  buf += sizeof(uint64_t);
+		count = *((uint64_t *) buf);  buf += sizeof(uint64_t);
+		jump  = *((uint64_t *) buf);  buf += sizeof(uint64_t);
+		if(row != m_row && (count > 0 || jump > 0))
+			g_runerr("Invalid row header " << row << "; " << m_row << " expected.");
+
+		for(uint64_t i = 0; i < count; ++i) {
+			std::shared_ptr<LASPoint> pt(new LASPoint());
+			pt->read(buf);
+			pts.push_back(std::move(pt));
+			buf += LASPoint::dataSize;
+		}
+	} while(jump > 0);
+
+	return ++m_row < m_rowCount;
 }

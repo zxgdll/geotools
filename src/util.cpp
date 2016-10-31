@@ -6,6 +6,7 @@
 #include <map>
 #include <cmath>
 #include <string>
+#include <tuple>
 
 #include "csv.h"
 #include "boost/filesystem.hpp"
@@ -422,9 +423,11 @@ MappedFile::MappedFile(const std::string &filename, uint64_t size) :
 
 	{
 		std::filebuf fbuf;
-		fbuf.open(filename, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
-		fbuf.pubseekoff(size - 1, std::ios_base::beg);
-		fbuf.sputc(0);
+		if(size > 0) {
+			fbuf.open(filename, std::ios_base::in | std::ios_base::out | std::ios_base::trunc | std::ios_base::binary);
+			fbuf.pubseekoff(size - 1, std::ios_base::beg);
+			fbuf.sputc(0);
+		}
 	}
 
 	m_mapping = new file_mapping(filename.c_str(), read_write);
@@ -441,7 +444,6 @@ uint64_t MappedFile::size() {
 
 MappedFile::~MappedFile() {
 	file_mapping::remove(m_filename.c_str());
-	Util::rm(m_filename);
 	delete m_region;
 	delete m_mapping;
 }

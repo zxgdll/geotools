@@ -18,10 +18,10 @@ endif()
 
 enable_language(C)
 enable_language(CXX)
-set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 14)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 set (CMAKE_CXX_EXTENSIONS OFF)
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++1y)
 
 option(CGAL_DISABLE_ROUNDING_MATH_CHECK "Disable rounding math check in CGAL. This permits Valgrind to run." ON)
 
