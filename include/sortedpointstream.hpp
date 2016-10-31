@@ -159,9 +159,10 @@ namespace geotools {
 
 			std::unique_ptr<geotools::util::MappedFile> m_mmap;
 
-			std::vector<liblas::Point> *m_lst;
+			LASPoint *m_lst;
 			std::unique_ptr<MappedFile> m_mfile;
-			
+			uint64_t m_idx;
+		
 			// Read source files and populate the point cache.
 			// To be run using (a) thread(s).
 			void produce();

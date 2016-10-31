@@ -312,32 +312,48 @@ void SortedPointStream::init() {
 	if(m_snap)
 		m_bounds.snap(g_abs(m_blockSize));
 
-	m_rowCount = (uint64_t) (m_bounds.height() / m_blockSize) + 1;
+	m_rowCount = (uint64_t) (m_bounds.height() / g_abs(m_blockSize)) + 1;
 	m_row = 0;
-	
-	std::string file = Util::tmpFile();
-	m_mfile.reset(Util::mapFile(file, 
-		sizeof(std::vector<liblas::Point>) + sizeof(liblas::Point) * m_pointCount).release());
+	m_idx = 0;
+
+	size_t s = sizeof(std::vector<LASPoint>) + sizeof(LASPoint) * m_pointCount * 1.1;
+	m_mfile.reset(Util::mapFile("cache.tmp", s).release());
 	void *ptr = m_mfile->data();
-	m_lst = (std::vector<liblas::Point>*) ptr;
+	m_lst = (LASPoint*) ptr;
 
-	for(const std::string &file : m_files) {
-		g_debug(" -- init: opening file: " << file);
-		std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-		liblas::Reader lasReader = rf.CreateWithStream(instr);
-		liblas::Header lasHeader = lasReader.GetHeader();
-
-		while(lasReader.ReadNextPoint())
-			m_lst->push_back(std::move(lasReader.GetPoint()));
+	try {
+		size_t idx = 0;
+		std::vector<std::string> files(m_files.begin(), m_files.end());
+		#pragma omp parallel
+		{
+		
+			#pragma omp for
+			for(uint32_t i = 0; i < files.size(); ++i) {
+				const std::string &file = files[i];
+				g_debug(" -- init: opening file: " << file);
+				std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+				liblas::Reader lasReader = rf.CreateWithStream(instr);
+				liblas::Header lasHeader = lasReader.GetHeader();
+				while(lasReader.ReadNextPoint()) {
+					LASPoint pt;
+					pt.update(lasReader.GetPoint());
+					m_lst[idx] = std::move(pt);
+					#pragma omp atomic
+					idx++;
+				}
+			}
+		}
+	} catch(const std::bad_alloc &c) {
+		g_runerr(" -- bad_alloc " << c.what());
 	}
 
 	struct {
-		bool operator()(const liblas::Point &p1, const liblas::Point &p2) {
-			return p1.GetX() < p2.GetX();
+		bool operator()(const LASPoint &p1, const LASPoint &p2) {
+			return p1.y > p2.y; // TODO: THis is because of negative res-y
 		}
 	} sortfn;
 	g_debug("sorting");
-	__gnu_parallel::sort(m_lst->begin(), m_lst->end(), sortfn);
+	std::sort(m_lst, m_lst + m_pointCount, sortfn);
 }
 
 const Bounds& SortedPointStream::bounds() const {
@@ -348,22 +364,20 @@ uint64_t SortedPointStream::bufferSize() const {
 	return 3 * sizeof(uint64_t) + CACHE_LEN * LASPoint::dataSize;
 }
 
-uint64_t idx = 0;
-
 bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
-	
-	uint32_t row;
-	for(uint64_t i = idx; i < m_lst->size(); ++i) {
-		liblas::Point pt = (*m_lst)[idx];
-		std::shared_ptr<LASPoint> pt0(new LASPoint());
-		pt0->update(pt);
-		row = _row(pt0, m_bounds, m_blockSize);
+	if(m_row >= m_rowCount)
+		return false;
+	for(uint64_t i = m_idx; i < m_pointCount; ++i) {
+		std::shared_ptr<LASPoint> pt(new LASPoint(*(m_lst + i)));
+		uint32_t row = _row(pt, m_bounds, m_blockSize);
 		if(row == m_row) {
-			pts.push_back(std::move(pt0));
+			pts.push_back(std::move(pt));
 		} else {
-			idx = i;
+			++m_row;
+			m_idx = i;
 			return true;
 		}
 	}
+	++m_row; // This happens at the end of the list.
 	return false;
 }

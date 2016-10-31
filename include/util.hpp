@@ -137,8 +137,9 @@ namespace geotools {
 			uint64_t m_size;
 			boost::interprocess::file_mapping *m_mapping;
 			boost::interprocess::mapped_region *m_region;
+			bool m_remove;
 		protected:
-			MappedFile(const std::string &filename, uint64_t size);
+			MappedFile(const std::string &filename, uint64_t size, bool remove);
 		public:
 			void* data();
 			uint64_t size();
@@ -201,7 +202,7 @@ namespace geotools {
 			static bool rm(const std::string &name);
 			static bool mkdir(const std::string &dir);
 
-			static std::unique_ptr<MappedFile> mapFile(const std::string &filename, uint64_t size);
+			static std::unique_ptr<MappedFile> mapFile(const std::string &filename, uint64_t size, bool remove = true);
 
 		};
 

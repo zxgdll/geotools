@@ -414,9 +414,10 @@ const std::string Util::tmpFile(const std::string &root) {
 
 using namespace boost::interprocess;
 
-MappedFile::MappedFile(const std::string &filename, uint64_t size) : 
+MappedFile::MappedFile(const std::string &filename, uint64_t size, bool remove) : 
 	m_filename(filename),
-	m_size(size) {
+	m_size(size),
+	m_remove(remove) {
 
 	using namespace boost::interprocess;
 	using namespace boost::filesystem;
@@ -443,12 +444,13 @@ uint64_t MappedFile::size() {
 }
 
 MappedFile::~MappedFile() {
-	file_mapping::remove(m_filename.c_str());
+	if(m_remove)
+		file_mapping::remove(m_filename.c_str());
 	delete m_region;
 	delete m_mapping;
 }
 
-std::unique_ptr<MappedFile> Util::mapFile(const std::string &filename, uint64_t size) {
-	std::unique_ptr<MappedFile> mf(new MappedFile(filename, size));
+std::unique_ptr<MappedFile> Util::mapFile(const std::string &filename, uint64_t size, bool remove) {
+	std::unique_ptr<MappedFile> mf(new MappedFile(filename, size, remove));
 	return std::move(mf);
 }
