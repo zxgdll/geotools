@@ -291,6 +291,7 @@ void SortedPointStream::init() {
 	if(m_inited) return;
 	m_inited = true;
 	m_bounds.collapse();
+	m_pointCount = 0;
 
 	liblas::ReaderFactory rf;
 	Bounds workBounds; // Configure
@@ -317,7 +318,7 @@ void SortedPointStream::init() {
 	m_idx = 0;
 
 	size_t s = sizeof(std::vector<LASPoint>) + sizeof(LASPoint) * m_pointCount * 1.1;
-	m_mfile.reset(Util::mapFile("cache.tmp", s).release());
+	m_mfile.reset(Util::mapFile("pointstats.cachels", m_rebuild ? s : 0, false).release());
 	void *ptr = m_mfile->data();
 	m_lst = (LASPoint*) ptr;
 
@@ -337,9 +338,11 @@ void SortedPointStream::init() {
 				while(lasReader.ReadNextPoint()) {
 					LASPoint pt;
 					pt.update(lasReader.GetPoint());
-					m_lst[idx] = std::move(pt);
-					#pragma omp atomic
-					idx++;
+					#pragma omp critical
+					{
+						m_lst[idx] = std::move(pt);
+						idx++;
+					}
 				}
 			}
 		}
