@@ -368,7 +368,7 @@ template <class T>
 T MemRaster<T>::get(size_t idx) {
 	checkInit();
 	if(idx >= size())
-		g_argerr("Index out of bounds.");
+		g_argerr("Index out of bounds: " << idx << "; size: " << size());
 	return m_grid[idx];
 }
 
@@ -398,7 +398,7 @@ template <class T>
 void MemRaster<T>::set(size_t idx, const T value) {
 	checkInit();
 	if(idx >= size())
-		g_argerr("Index out of bounds.");
+		g_argerr("Index out of bounds: " << idx << "; size: " << size() << "; value: " << value << "; col: " << (idx % m_cols) << "; row: " << (idx / m_cols));
 	m_grid[idx] = value;
 }
 
@@ -416,7 +416,7 @@ template <class T>
 T MemRaster<T>::operator[](size_t idx) {
 	checkInit();
 	if(idx >= size())
-		g_argerr("Index out of bounds.");
+		g_argerr("Index out of bounds: " << idx << "; size: " << size());
 	return m_grid[idx];
 }
 

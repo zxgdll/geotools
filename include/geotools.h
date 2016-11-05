@@ -44,7 +44,7 @@ extern int g__loglevel;
 #define g_log(x, y) _Pragma("omp critical") \
 	{ \
 		if(g__loglevel >= y) { \
-			std::cerr << x << std::endl; \
+			std::cerr << std::setprecision(12) << x << std::endl; \
 		} \
 	}
 #define g_trace(x) g_log("TRACE:   " << x, G_LOG_TRACE)

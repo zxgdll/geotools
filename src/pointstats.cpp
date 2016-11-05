@@ -28,7 +28,8 @@
 
 #include "pointstats.hpp"
 #include "lasutil.hpp"
-#include "sortedpointstream.hpp"
+#include "laspoint.hpp"
+#include "finalizedpointstream.hpp"
 #include "cellstats.hpp"
 
 using namespace geotools::util;
@@ -213,54 +214,51 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			SortedPointStream ps(config.sourceFiles, "cache.tmp", -config.resolution, 
-				config.rebuild, config.snap, config.threads);
-			ps.init();
-			Bounds workBounds = ps.bounds();
-			g_debug(" -- pointstats - work bounds: " << workBounds.print());
+			std::vector<std::string> files(config.sourceFiles.begin(), config.sourceFiles.end());
+			FinalizedPointStream ps(files, g_abs(config.resolution));
+			Bounds bounds = ps.bounds();
+			//size_t pointCount = ps.pointCount();
+			g_debug(" -- pointstats - work bounds: " << bounds.print() << "; " << ps.cols() << "x" << ps.rows());
 
 			// Prepare the grid
 			// TODO: Only works with UTM north.
-			Raster<float> grid(config.dstFile, 1, workBounds, config.resolution, 
+			Raster<float> grid(config.dstFile, 1, bounds, config.resolution, 
 				-config.resolution, -9999, config.hsrid);
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
-			MemRaster<float> mem(grid.cols(), grid.rows(), true);
+			MemRaster<float> mem(ps.cols(), ps.rows(), true);
 			mem.fill(-9999.0);
+
+			std::unique_ptr<CellStats> computer(getComputer(config));
+			CellStatsFilter *filter = nullptr, *tmp;
+			if(config.hasClasses()) 
+				tmp = filter = new ClassFilter(config.classes);
+			//if(config.hasQuantileFilter())
+			//	tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
+			if(filter)
+				computer->setFilter(filter);
+
+			std::unordered_map<size_t, std::list<std::shared_ptr<LASPoint> > > cache;
+			size_t finalIdx = 0;
 
 			#pragma omp parallel
 			{
-				std::unique_ptr<CellStats> computer(getComputer(config));
-				CellStatsFilter *filter = nullptr, *tmp;
-				if(config.hasClasses()) 
-					tmp = filter = new ClassFilter(config.classes);
-				//if(config.hasQuantileFilter())
-				//	tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
-				if(filter)
-					computer->setFilter(filter);
-
-				#pragma omp for
-				for(uint32_t i = 0; i < ps.rowCount(); ++i) {
-
-					std::list<std::shared_ptr<LASPoint> > row;
-					#pragma omp critical(__sps_readrow)
-					ps.next(row);
-
-					if(row.size()) {
-						g_debug(" -- row " << i << "; " << row.size());
-						std::unordered_map<uint64_t, std::list<std::shared_ptr<LASPoint> > > values;
-						for(const std::shared_ptr<LASPoint> &pt : row) {
-							uint64_t idx = grid.toRow(pt->y) * grid.cols() + grid.toCol(pt->x);
-							values[idx].push_back(pt);
-						}
-						for(const auto &it : values) {
-							float val = computer->compute(it.second);
-							mem.set(it.first, val);
+				LASPoint pt;
+				while(ps.next(pt, &finalIdx)) {
+					std::shared_ptr<LASPoint> up(new LASPoint(pt));
+					#pragma omp critical(__ps_cache)
+					cache[ps.toIdx(pt)].push_back(up);
+					if(finalIdx) {
+						//g_debug(" -- finalizing " << finalIdx << "; " << cache[finalIdx].size() << ", " <<  computer->compute(cache[finalIdx]));
+						#pragma omp critical(__ps_cache)
+						{
+							mem.set(finalIdx, computer->compute(cache[finalIdx]));
+							cache.erase(finalIdx);
 						}
 					}
 				}
 			}
-			
+				
 			//_normalize(mem);
 
 			g_debug(" -- writing to output");

@@ -25,16 +25,18 @@ namespace geotools {
 	namespace las {
 
 		class LASPoint {
-		public:
+		private:
 
 			// Determine the scale factors used by all
 			// points (coordinates are stored as ints in 
 			// the LAS format.)
-			static double scaleX, scaleY, scaleZ;
+			//static double m_scaleX, m_scaleY, m_scaleZ;
 
 			// Indicates the size taken up by a single
 			// LASPoint in memory or on disc.
-			const static uint64_t dataSize = 20;
+			const static uint64_t m_dataSize = 20;
+
+		public:
 
 			double x, y, z;
 			uint16_t intensity;
@@ -54,6 +56,13 @@ namespace geotools {
 
 			// Set fields from a liblas Point object.
 			void update(const liblas::Point &pt);
+
+			bool operator<(const LASPoint&) const;
+			bool operator>(const LASPoint&) const;
+			bool operator==(const LASPoint&) const;
+			bool operator!=(const LASPoint&) const;
+			bool operator<=(const LASPoint&) const;
+			bool operator>=(const LASPoint&) const;
 
 			void write(std::ostream &str) const;
 
@@ -81,6 +90,12 @@ namespace geotools {
 
 			// Return true if this is a single return.
 			bool single() const;
+
+			static double scaleX();
+			static double scaleY();
+			static double scaleZ();
+	
+			static uint64_t dataSize();
 
 		};
 

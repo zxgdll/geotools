@@ -24,10 +24,6 @@
 using namespace geotools::las;
 using namespace geotools::util;
 
-double LASPoint::scaleX = 0;
-double LASPoint::scaleZ = 0;
-double LASPoint::scaleY = 0;
-
 // Return the row number, given the point's y position,
 // bounds and block size.
 uint64_t _row(const std::shared_ptr<LASPoint> &pt, const Bounds &bounds, double blockSize) {
@@ -38,15 +34,58 @@ uint64_t _row(const std::shared_ptr<LASPoint> &pt, const Bounds &bounds, double 
 	}
 }
 
+double las_scaleX = 0, las_scaleY = 0, las_scaleZ = 0;
+
 LASPoint::LASPoint() {}
 LASPoint::LASPoint(const liblas::Point &pt) {
 	update(pt);
 }
 
 void LASPoint::setScale(double x, double y, double z) {
-	scaleX = x;
-	scaleY = y;
-	scaleZ = z;
+	las_scaleX = x;
+	las_scaleY = y;
+	las_scaleZ = z;
+}
+
+double LASPoint::scaleX() {
+	return las_scaleX;
+}
+ 
+double LASPoint::scaleY() {
+	return las_scaleY;
+}
+ 
+double LASPoint::scaleZ() {
+	return las_scaleZ;
+}
+
+uint64_t LASPoint::dataSize() {
+	return m_dataSize;
+}
+
+bool LASPoint::operator<(const LASPoint &p) const {
+//	g_debug(" -- laspoint < " << y << " < " << p.y << " -> " << (y < p.y));
+	return y < p.y;
+}
+
+bool LASPoint::operator>(const LASPoint &p) const {
+	return y > p.y;
+}
+
+bool LASPoint::operator==(const LASPoint &p) const {
+	return y == p.y && x == p.x && z == p.z;
+}
+
+bool LASPoint::operator<=(const LASPoint &p) const {
+	return y <= p.y;
+}
+
+bool LASPoint::operator>=(const LASPoint &p) const {
+	return y >= p.y;
+}
+
+bool LASPoint::operator!=(const LASPoint &p) const {
+	return y != p.y && x != p.x && z != p.z;
 }
 
 void LASPoint::update(const liblas::Point &pt) {
@@ -70,15 +109,15 @@ void LASPoint::read(std::istream &str) {
 	str.read((char *) &numReturns, sizeof(uint16_t));
 	str.read((char *) &cls, sizeof(uint8_t));
 	str.read((char *) &scanAngle, sizeof(int8_t));
-	x = (double) (xx * scaleX);
-	y = (double) (yy * scaleY);
-	z = (double) (zz * scaleZ);
+	x = (double) (xx * las_scaleX);
+	y = (double) (yy * las_scaleY);
+	z = (double) (zz * las_scaleZ);
 }
 
 void LASPoint::write(std::ostream &str) const {
-	int32_t xx = (int32_t) (x / scaleX);
-	int32_t yy = (int32_t) (y / scaleY);
-	int32_t zz = (int32_t) (z / scaleZ);
+	int32_t xx = (int32_t) (x / las_scaleX);
+	int32_t yy = (int32_t) (y / las_scaleY);
+	int32_t zz = (int32_t) (z / las_scaleZ);
 	str.write((char *) &xx, sizeof(int32_t));
 	str.write((char *) &yy, sizeof(int32_t));
 	str.write((char *) &zz, sizeof(int32_t));
@@ -90,22 +129,22 @@ void LASPoint::write(std::ostream &str) const {
 }
 
 void LASPoint::read(std::FILE *str) {
-	Buffer buffer(LASPoint::dataSize);
-	std::fread(buffer.buf, LASPoint::dataSize, 1, str);
+	Buffer buffer(LASPoint::dataSize());
+	std::fread(buffer.buf, LASPoint::dataSize(), 1, str);
 	read(buffer.buf);
 }
 
 void LASPoint::write(std::FILE *str) {
-	Buffer buffer(LASPoint::dataSize);
+	Buffer buffer(LASPoint::dataSize());
 	write(buffer.buf);
-	std::fwrite(buffer.buf, LASPoint::dataSize, 1, str);
+	std::fwrite(buffer.buf, LASPoint::dataSize(), 1, str);
 }
 
 void LASPoint::read(void *str) {
 	char *ptr  = (char *) str;
-	x          = *((int32_t *)  ptr) * scaleX; ptr += sizeof(int32_t);
-	y          = *((int32_t *)  ptr) * scaleY; ptr += sizeof(int32_t);
-	z          = *((int32_t *)  ptr) * scaleZ; ptr += sizeof(int32_t);
+	x          = *((int32_t *)  ptr) * las_scaleX; ptr += sizeof(int32_t);
+	y          = *((int32_t *)  ptr) * las_scaleY; ptr += sizeof(int32_t);
+	z          = *((int32_t *)  ptr) * las_scaleZ; ptr += sizeof(int32_t);
 	intensity  = *((uint16_t *) ptr);          ptr += sizeof(uint16_t);
 	returnNum  = *((uint16_t *) ptr);          ptr += sizeof(uint16_t);
 	numReturns = *((uint16_t *) ptr);          ptr += sizeof(uint16_t);
@@ -115,9 +154,9 @@ void LASPoint::read(void *str) {
 
 void LASPoint::write(void *str) const {
 	char *ptr = (char *) str;
-	*((int32_t *)  ptr) = (int32_t) (x / scaleX); ptr += sizeof(int32_t);
-	*((int32_t *)  ptr) = (int32_t) (y / scaleY); ptr += sizeof(int32_t);
-	*((int32_t *)  ptr) = (int32_t) (z / scaleZ); ptr += sizeof(int32_t);
+	*((int32_t *)  ptr) = (int32_t) (x / las_scaleX); ptr += sizeof(int32_t);
+	*((int32_t *)  ptr) = (int32_t) (y / las_scaleY); ptr += sizeof(int32_t);
+	*((int32_t *)  ptr) = (int32_t) (z / las_scaleZ); ptr += sizeof(int32_t);
 	*((uint16_t *) ptr) = intensity;              ptr += sizeof(uint16_t);
 	*((uint16_t *) ptr) = returnNum;              ptr += sizeof(uint16_t);
 	*((uint16_t *) ptr) = numReturns;             ptr += sizeof(uint16_t);
@@ -213,7 +252,7 @@ void SortedPointStream::produce() {
 
 void SortedPointStream::consume() {
 
-	uint64_t bufLen = 3 * sizeof(uint64_t) + CACHE_LEN * LASPoint::dataSize;
+	uint64_t bufLen = 3 * sizeof(uint64_t) + CACHE_LEN * LASPoint::dataSize();
 	Buffer buffer(bufLen);
 	std::list<std::shared_ptr<LASPoint> > pts;
 
@@ -272,7 +311,7 @@ void SortedPointStream::consume() {
 		//g_debug(" -- writing row " << row << "; " << pts.size() << "; " << m_cache[row].size() << "; " << std::this_thread::get_id());
 		for(const std::shared_ptr<LASPoint> &pt : pts) {
 			pt->write((void *) buf0); 
-			buf0 += LASPoint::dataSize;
+			buf0 += LASPoint::dataSize();
 		}
 
 		m_wmtx.lock();
@@ -317,46 +356,67 @@ void SortedPointStream::init() {
 	m_row = 0;
 	m_idx = 0;
 
-	size_t s = sizeof(std::vector<LASPoint>) + sizeof(LASPoint) * m_pointCount * 1.1;
-	m_mfile.reset(Util::mapFile("pointstats.cachels", m_rebuild ? s : 0, false).release());
-	void *ptr = m_mfile->data();
-	m_lst = (LASPoint*) ptr;
+	size_t s = sizeof(LASPoint) * m_pointCount;
+	m_mfile.reset(Util::mapFile("pointstats.cache", m_rebuild ? s : 0, false).release());
+	m_lst = (LASPoint*) m_mfile->data();
 
-	try {
-		size_t idx = 0;
-		std::vector<std::string> files(m_files.begin(), m_files.end());
-		#pragma omp parallel
-		{
-		
-			#pragma omp for
-			for(uint32_t i = 0; i < files.size(); ++i) {
-				const std::string &file = files[i];
-				g_debug(" -- init: opening file: " << file);
-				std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
-				liblas::Reader lasReader = rf.CreateWithStream(instr);
-				liblas::Header lasHeader = lasReader.GetHeader();
-				while(lasReader.ReadNextPoint()) {
-					LASPoint pt;
-					pt.update(lasReader.GetPoint());
-					#pragma omp critical
-					{
-						m_lst[idx] = std::move(pt);
-						idx++;
-					}
+	typedef struct {
+		uint64_t idx;
+		double y;
+	} token;
+
+	s = sizeof(token) * m_pointCount;
+	std::unique_ptr<MappedFile> tfile(Util::mapFile("pointstats-idx.cache", m_rebuild ? s : 0, false).release());
+	token *tlst = (token *) tfile->data();
+
+	size_t idx = 0;
+	std::vector<std::string> files(m_files.begin(), m_files.end());
+	#pragma omp parallel
+	{
+	
+		#pragma omp for
+		for(uint32_t i = 0; i < files.size(); ++i) {
+			const std::string &file = files[i];
+			g_debug(" -- init: opening file: " << file);
+			std::ifstream instr(file.c_str(), std::ios::in|std::ios::binary);
+			liblas::Reader lasReader = rf.CreateWithStream(instr);
+			liblas::Header lasHeader = lasReader.GetHeader();
+			while(lasReader.ReadNextPoint()) {
+				LASPoint pt;
+				pt.update(lasReader.GetPoint());
+				#pragma omp critical
+				{
+					tlst[idx] = {idx, pt.y};
+					m_lst[idx] = std::move(pt);
+					idx++;
 				}
 			}
 		}
-	} catch(const std::bad_alloc &c) {
-		g_runerr(" -- bad_alloc " << c.what());
 	}
-
-	struct {
-		bool operator()(const LASPoint &p1, const LASPoint &p2) {
-			return p1.y > p2.y; // TODO: THis is because of negative res-y
-		}
-	} sortfn;
 	g_debug("sorting");
-	std::sort(m_lst, m_lst + m_pointCount, sortfn);
+	struct {
+		bool operator()(const token &p1, const token &p2) {
+			return p1.y > p2.y;
+		}
+	} sorter;
+	std::sort(tlst, tlst + m_pointCount, sorter);
+	g_debug("reordering");
+	std::vector<bool> visited(m_pointCount);
+	#pragma omp parallel 
+	{
+		uint64_t idx;
+		#pragma omp for
+		for(size_t i = 0; i < m_pointCount; ++i) {
+			if(!visited[i]) {
+				idx = tlst[i].idx;
+				LASPoint tmp = std::move(m_lst[i]);
+				m_lst[i] = m_lst[idx];
+				m_lst[tlst[i].idx] = std::move(tmp);
+				visited[i] = true;
+				visited[idx] = true;
+			}
+		}
+	}
 }
 
 const Bounds& SortedPointStream::bounds() const {
@@ -364,14 +424,14 @@ const Bounds& SortedPointStream::bounds() const {
 }
 
 uint64_t SortedPointStream::bufferSize() const {
-	return 3 * sizeof(uint64_t) + CACHE_LEN * LASPoint::dataSize;
+	return 3 * sizeof(uint64_t) + CACHE_LEN * LASPoint::dataSize();
 }
 
 bool SortedPointStream::next(std::list<std::shared_ptr<LASPoint> > &pts) {
 	if(m_row >= m_rowCount)
 		return false;
 	for(uint64_t i = m_idx; i < m_pointCount; ++i) {
-		std::shared_ptr<LASPoint> pt(new LASPoint(*(m_lst + i)));
+		std::shared_ptr<LASPoint> pt(new LASPoint(*(m_lst + i))); // TODO: Copy necessary here?
 		uint32_t row = _row(pt, m_bounds, m_blockSize);
 		if(row == m_row) {
 			pts.push_back(std::move(pt));
