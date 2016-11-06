@@ -6,6 +6,7 @@
 #include <set>
 #include <map>
 #include <memory>
+#include <mutex>
 
 #include "geotools.h"
 #include "raster.hpp"
@@ -120,6 +121,12 @@ namespace geotools {
 
 		class PointStats {
 		private:
+			std::mutex m_rmtx;
+			bool m_running;
+			std::unordered_map<size_t, std::list<std::shared_ptr<geotools::las::LASPoint> > > m_cache;
+			std::queue<size_t> m_idxq;
+			std::unique_ptr<geotools::point::stats::CellStats> m_computer;
+			std::unique_ptr<geotools::raster::MemRaster<float> > m_mem;
 
 			/**
 			 * Check the configuration for validity. 
@@ -137,6 +144,8 @@ namespace geotools {
 				std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount);
 
 		public:
+
+			void runner();
 
 			/**
 			 * Execute the gridding process.

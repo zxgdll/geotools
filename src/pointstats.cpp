@@ -18,6 +18,8 @@
 #include <exception>
 #include <unordered_set>
 #include <cmath>
+#include <thread>
+#include <mutex>
 
 #include <ogr_spatialref.h>
 #include <gdal_priv.h>
@@ -202,6 +204,35 @@ namespace geotools {
 			}
 		}
 
+		void _runner(PointStats *ps) {
+			ps->runner();
+		}
+
+		void PointStats::runner() {
+			size_t idx;
+			std::list<std::shared_ptr<LASPoint> > pts;
+			while(m_running || m_idxq.size()) {
+				if(!m_idxq.size())
+					continue;
+				m_rmtx.lock();
+				if(!m_idxq.size()) {
+					m_rmtx.unlock();
+					continue;
+				}
+				idx = m_idxq.front();
+				pts = m_cache[idx];
+				m_idxq.pop();
+				m_rmtx.unlock();
+				
+				//g_debug(" -- computing stats for " << idx << "; " << pts.size());
+				m_mem->set(idx, m_computer->compute(pts));
+				m_rmtx.lock();
+				m_cache.erase(idx);
+				m_rmtx.unlock();
+			}
+			
+		}	
+				
 		void PointStats::pointstats(const PointStatsConfig &config, const Callbacks *callbacks) {
 
 			checkConfig(config);
@@ -226,43 +257,52 @@ namespace geotools {
 				-config.resolution, -9999, config.hsrid);
 			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
-			MemRaster<float> mem(ps.cols(), ps.rows(), true);
-			mem.fill(-9999.0);
+			m_mem.reset(new MemRaster<float>(ps.cols(), ps.rows(), true));
+			m_mem->fill(-9999.0);
 
-			std::unique_ptr<CellStats> computer(getComputer(config));
-			CellStatsFilter *filter = nullptr, *tmp;
+			m_computer.reset(getComputer(config));
+			CellStatsFilter *filter = nullptr;
 			if(config.hasClasses()) 
-				tmp = filter = new ClassFilter(config.classes);
+				filter = new ClassFilter(config.classes);
 			//if(config.hasQuantileFilter())
 			//	tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
 			if(filter)
-				computer->setFilter(filter);
+				m_computer->setFilter(filter);
 
-			std::unordered_map<size_t, std::list<std::shared_ptr<LASPoint> > > cache;
+			std::list<std::thread> threads;
+
+			m_running = true;
 			size_t finalIdx = 0;
 
-			#pragma omp parallel
-			{
-				LASPoint pt;
-				while(ps.next(pt, &finalIdx)) {
-					std::shared_ptr<LASPoint> up(new LASPoint(pt));
-					#pragma omp critical(__ps_cache)
-					cache[ps.toIdx(pt)].push_back(up);
-					if(finalIdx) {
-						//g_debug(" -- finalizing " << finalIdx << "; " << cache[finalIdx].size() << ", " <<  computer->compute(cache[finalIdx]));
-						#pragma omp critical(__ps_cache)
-						{
-							mem.set(finalIdx, computer->compute(cache[finalIdx]));
-							cache.erase(finalIdx);
-						}
-					}
+			for(uint32_t i = 0; i < config.threads; ++i) {
+				std::thread t(_runner, this);
+				threads.push_back(std::move(t));
+			}
+
+			g_debug(" -- streaming points");
+			LASPoint pt;
+			while(ps.next(pt, &finalIdx)) {
+				std::shared_ptr<LASPoint> up(new LASPoint(pt));
+				m_rmtx.lock();
+				m_cache[ps.toIdx(pt)].push_back(up);
+				m_rmtx.unlock();
+				if(finalIdx) {
+					//g_debug(" -- finalizing " << finalIdx << "; " << m_cache[finalIdx].size() << ", " <<  m_computer->compute(m_cache[finalIdx]));
+					m_rmtx.lock();
+					m_idxq.push(finalIdx);
+					m_rmtx.unlock();
 				}
 			}
-				
-			//_normalize(mem);
+			
+			m_running = false;
+
+			for(std::thread &t : threads)
+				t.join();
+
+			//_normalize(*(m_mem.get()));
 
 			g_debug(" -- writing to output");
-			grid.writeBlock(mem);
+			grid.writeBlock(*(m_mem.get()));
 
 			if(callbacks)
 				callbacks->overallCallback(1.0f);
