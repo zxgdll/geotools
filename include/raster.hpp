@@ -1,8 +1,8 @@
-/*
+/**
  * Raster.hpp
  *
  *  Created on: Jan 21, 2016
- *      Author: rob
+ *  Author: rob
  */
 
 #ifndef INCLUDE_RASTER_HPP_
@@ -32,9 +32,7 @@ namespace geotools {
 
 	namespace raster {
 
-		/**
-		 * Simple class to represent a single grid cell.
-		*/
+		// Simple class to represent a single grid cell.
 		class Cell {
 		public:
 			int col;
@@ -42,10 +40,8 @@ namespace geotools {
 			Cell(int col, int row);
 		};
 
-		/**
-		 * Used by Grid::floodFill to determine whether
-		 * a pixel should be filled.
-		 */
+		// Used by Grid::floodFill to determine whether
+		// a pixel should be filled.
 		template <class T>
 		class FillOperator {
 		public:
@@ -62,9 +58,7 @@ namespace geotools {
 			bool fill(T value) const;
 		};
 
-		/**
-		 * Abstract class for grids (rasters).
-		 */
+		// Abstract class for grids (rasters).
 		template <class T>
 		class Grid {
 		protected:
@@ -77,193 +71,134 @@ namespace geotools {
 			int m_count = 0;
 			bool m_stats = false;
 
-			/**
-			 * Compute the table of Gaussian weights given the size of the table
-			 * and the std. deviation.
-			 */
+			// Compute the table of Gaussian weights given the size of the table
+			// and the std. deviation.
 			void gaussianWeights(double *weights, int size, double sigma);
 
 		public:
-			/**
-			 * Return the number of rows in the dataset.
-			*/
+			// Return the number of rows in the dataset.
 			virtual int rows() const =0;
 
-			/**
-			 * Return the number of columns in the dataset.
-			 */
+			// Return the number of columns in the dataset.
 			virtual int cols() const =0;
 			
-			/**
-			 * Return the number of cells in the dataset.
-			 */
+			// Return the number of cells in the dataset.
 			virtual size_t size() const =0;
 
-			/**
-			 * Fill the entire dataset with the given value.
-			 */
+			// Fill the entire dataset with the given value.
 			virtual void fill(const T value) =0;
 
-			/**
-			 * Return a pointer to an in-memory grid of the raster data.
-			 * Throw an exception if this is not possible.
-			 */
+			// Return a pointer to an in-memory grid of the raster data.
+			// Throw an exception if this is not possible.
 			virtual T *grid() =0;
 			
-			/**
-			 * Returns true if this class has a complete, in-memory
-			 * grid that can be manipulated.
-			 */
+			// Returns true if this class has a complete, in-memory
+			// grid that can be manipulated.
 			virtual bool hasGrid() const =0;
 
-			/**
-			 * Return a reference to the value held at the given index in the grid.
-			 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
-			 */
+			// Return a reference to the value held at the given index in the grid.
+			// Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
 			virtual T get(size_t idx) =0;
 
-			/**
-			 * Return a reference to the value held at the given column and row.
-			 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
-			 */
+			// Return a reference to the value held at the given column and row.
+			// Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
 			virtual T get(int col, int row) =0;
 
-			/**
-			 * Set the value held at  the given index in the grid.
-			 */	
+			// Set the value held at  the given index in the grid.
 			virtual void set(size_t idx, const T value) =0;
 
-			/**
-			 * Set the value held at  the given column and row.
-			 */	
+			// Set the value held at  the given column and row.
 			virtual void set(int col, int row, const T value) =0;
 
-			/**
-			 * Get or set the value held at the given index in the grid.
-			 * Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
-			 */
+			// Get or set the value held at the given index in the grid.
+			// Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
 			virtual T operator[](size_t idx) =0;
 			
-			/* 
-			 * Return true if the dataset contains the given element.
-			 */
+			// Return true if the dataset contains the given element.
 			virtual bool has(int col, int row) const =0;
 			
-			/* 
-			 * Return true if the dataset contains the given element.
-			 */
+			// Return true if the dataset contains the given element.
 			virtual bool has(size_t idx) const =0;
 
-			/**
-			 * Returns trueif the dataset contains the given element and it is nodata.
-			 */
+			// Returns trueif the dataset contains the given element and it is nodata.
 			virtual bool isNoData(int col, int row) =0;
 			
-			/**
-			 * Returns trueif the dataset contains the given element and it is nodata.
-			 */
+			// Returns trueif the dataset contains the given element and it is nodata.
 			virtual bool isNoData(size_t idx) =0;
 
-			/**
-			 * Returns true if the grid is a perfect square.
-			 */
+			// Returns true if the grid is a perfect square.
 			virtual bool isSquare() const =0;
 
-			/**
-			 * Returns the nodata value.
-			 */
+			// Returns the nodata value.
 			virtual T nodata() const =0;
 
-			/**
-			 * Sets the nodata value.
-			 */
+			// Sets the nodata value.
 			virtual void nodata(T nodata) =0;
 
-			/**
-			 * Read data into Grid instance. Will attempt to read a region of the same size
-			 * as the given block.
-			 * col    - The column in the data source to read from.
-			 * row    - The row in the data source to read from.
-			 * block  - The block to read into.
-			 * dstCol - The column in the destination block to write to.
-			 * dstRow - The row in the destination block to write to. 
-			 * xcols  - The max number of cols to write.
-			 * xrows  - The max number of rows to write.
-			 */
+			// Read data into Grid instance. Will attempt to read a region of the same size
+			// as the given block.
+			// col    - The column in the data source to read from.
+			// row    - The row in the data source to read from.
+			// block  - The block to read into.
+			// dstCol - The column in the destination block to write to.
+			// dstRow - The row in the destination block to write to. 
+			// xcols  - The max number of cols to write.
+			// xrows  - The max number of rows to write.
 			virtual void readBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0, int xcols = 0, int xrows = 0) =0;
 
-			/**
-			 * Read data into Grid instance. Will attempt to read a region of the same size
-			 * as the given block.
-			 */
+			// Read data into Grid instance. Will attempt to read a region of the same size
+			// as the given block.
 			virtual void readBlock(Grid<T> &block) =0;
 			
-			/**
-			 * Write data from Grid instance. Will attempt to write a region of the same size
-			 * as the given block.
-			 * col    - The column in the data source to write to..
-			 * row    - The row in the data source to write to.
-			 * block  - The block to write from..
-			 * srcCol - The column in the source block to read from.
-			 * srcRow - The row in the source block to read from. 
-			 * xcols  - The max number of cols to write.
-			 * xrows  - The max number of rows to write.
-			 */
+			// Write data from Grid instance. Will attempt to write a region of the same size
+			// as the given block.
+			// col    - The column in the data source to write to..
+			// row    - The row in the data source to write to.
+			// block  - The block to write from..
+			// srcCol - The column in the source block to read from.
+			// srcRow - The row in the source block to read from. 
+			// xcols  - The max number of cols to write.
+			// xrows  - The max number of rows to write.
 			virtual void writeBlock(int col, int row, Grid<T> &block, int dstCol = 0, int dstRow = 0, int xcols = 0, int xrows = 0) =0;
 
-			/**
-			 * Write data from Grid instance. Will attempt to write a region of the same size
-			 * as the given block.
-			 */
+			// Write data from Grid instance. Will attempt to write a region of the same size
+			// as the given block.
 			virtual void writeBlock(Grid<T> &block) =0;
 
 
-			/**
-			 * Computes descriptive statistics for the values in the grid.
-			 * A nodata value must be set.
-			 */
+			// Computes descriptive statistics for the values in the grid.
+			// A nodata value must be set.
 			void computeStats();
 
-			/**
-			 * Return the maximum value in the raster.
-			 */
+			// Normalize the grid so that one standard deviation is +-1.
+			void normalize();
+
+			// Return the maximum value in the raster.
 			T max();
 
-			/**
-			 * Return the minimum value in the raster.
-			 */
+			// Return the minimum value in the raster.
 			T min();
 
-			/**
-			 * Return the mean value in the raster.
-			 */
+			// Return the mean value in the raster.
 			T mean();
 
-			/**
-			 * Return the standard deviation of  values in the raster.
-			 */	
+			// Return the standard deviation of  values in the raster.
 			T stddev();
 
-			/**
-			 * Return the variance of values in the raster.
-			 */
+			// Return the variance of values in the raster.
 			T variance();
 
-			/**
-			 * Convert a Grid to some other type.
-			 */
+			// Convert a Grid to some other type.
 			template <class U>
 			void convert(Grid<U> &g) {
 				for(size_t i = 0; i < size(); ++i)
 					g.set(i, (U) get(i));
 			}
 
-			/**
-			 * Fill the grid, beginning with the target cell, where any contiguous cell
-			 * satisfies the given FillOperator. The other grid is actually filled,
-			 * and the present grid is unchanged *unless* the present grid is passed
-			 * as other.
-			 */
+			// Fill the grid, beginning with the target cell, where any contiguous cell
+			// satisfies the given FillOperator. The other grid is actually filled,
+			// and the present grid is unchanged *unless* the present grid is passed
+			// as other.
 			// TODO: Moved here to allow compilation of different type combinations.
 			template <class U>
 			std::vector<int> floodFill(int col, int row, FillOperator<T> &op, Grid<U> &other, U fill) {
@@ -338,35 +273,25 @@ namespace geotools {
 				return {minc, minr, maxc, maxr, area};
 			}
 
-			/**
-			 * Begin flood fill at the given cell; fill cells equal to the target value.
-			 */
+			// Begin flood fill at the given cell; fill cells equal to the target value.
 			std::vector<int> floodFill(int col, int row, T target, T fill);
 
-			/**
-			 * Begin flood fill at the given cell; fill cells that satisfy the operator.
-			 */
+			// Begin flood fill at the given cell; fill cells that satisfy the operator.
 			std::vector<int> floodFill(int col, int row, FillOperator<T> &op, T fill);
 
-			/**
-			 * Smooth the raster and write the smoothed version to the output raster.
-			 */
+			// Smooth the raster and write the smoothed version to the output raster.
 			void smooth(Grid<T> &smoothed, double sigma, int size);
 
-			/**
-			 * The radius is given with cells as the unit, but
-			 * can be rational. When determining which cells to
-			 * include in the calculation, any cell which partially
-			 * falls in the radius will be included.
-			 */
+			// The radius is given with cells as the unit, but
+			// can be rational. When determining which cells to
+			// include in the calculation, any cell which partially
+			// falls in the radius will be included.
 			void voidFillIDW(double radius, int count = 4, double exp = 2.0);
 
 		};
 
-		/**
-		 * A convenience class for managing a grid of values.
-		 * Handles allocation and deallocation of memory.
-		 */
+		// A convenience class for managing a grid of values.
+		// Handles allocation and deallocation of memory.
 		template <class T>
 		class MemRaster : public Grid<T> {
 		private:
@@ -381,9 +306,7 @@ namespace geotools {
 			std::unique_ptr<boost::interprocess::mapped_region> m_region;
 			std::unique_ptr<boost::interprocess::file_mapping> m_mapping;
 	
-			/**
-			 * Checks if the grid has been initialized. Throws exception otherwise.
-			 */
+			// Checks if the grid has been initialized. Throws exception otherwise.
 			void checkInit() const;
 
 			void freeMem();
@@ -400,15 +323,11 @@ namespace geotools {
 
 			~MemRaster();
 
-			/**
-			 * A pointer to a function that can deallocate the grid
-			 * items. Not necessary if a primitive type is used (the usual case.)
-			 */
+			// A pointer to a function that can deallocate the grid
+			// items. Not necessary if a primitive type is used (the usual case.)
 			void setDeallocator(void (*item_dealloc)(T));
 
-			/**
-			 * Return a pointer to the allocated memory.
-			 */
+			// Return a pointer to the allocated memory.
 			T *grid();
 
 			bool hasGrid() const;
@@ -424,21 +343,15 @@ namespace geotools {
 			        init(tpl.cols(), tpl.rows(), mapped);
 			}
 
-			/**
-			 * Initialize with the given number of cols and rows.
-			 * (Re)allocates memory for the internal grid.
-			 */
+			// Initialize with the given number of cols and rows.
+			// (Re)allocates memory for the internal grid.
 			void init(int cols, int rows, bool mapped = false);
 
-			/**
-			 * Fill the grid with the given value.
-			 */
+			// Fill the grid with the given value.
 			void fill(const T value);
 
-			/**
-			 * Return a reference to the value held at
-			 * the given index in the grid.
-			 */
+			// Return a reference to the value held at
+			// the given index in the grid.
 			T get(size_t idx);
 
 			T get(int col, int row);
@@ -455,21 +368,15 @@ namespace geotools {
 
 			bool has(size_t idx) const;
 
-			/**
-			 * Return the element at the given index.
-			 */
+			// Return the element at the given index.
 			T operator[](size_t idx);
 
 			bool isSquare() const;
 
-			/**
-			 * Convert the grid to matrix.
-			 */
+			// Convert the grid to matrix.
 			void toMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx);
 
-			/**
-			 * Initialize the grid from a matrix.
-			 */
+			// Initialize the grid from a matrix.
 			void fromMatrix(Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> &mtx);
 
 			T nodata() const;
@@ -499,110 +406,72 @@ namespace geotools {
 			std::unordered_map<size_t, bool> m_dirty;      // idx, bool
 			std::map<size_t, size_t> m_time_idx;           // time, idx
 
-			/**
-			 * Flush the block at the given index to disk, if it is dirty.
-			 */
+			// Flush the block at the given index to disk, if it is dirty.
 			void flushBlock(size_t idx);
 
-			/**
-			 * Convert the row and column indices to an index.
-			 */
+			// Convert the row and column indices to an index.
 			size_t toIdx(int col, int row);
 
-			/**
-			 * Convert the index to a column index.
-			 */
+			// Convert the index to a column index.
 			int toCol(size_t idx);
 
-			/**
-			 * Convert the index to a row index.
-			 */
+			// Convert the index to a row index.
 			int toRow(size_t idx);
 
-			/**
-			 * Remove the oldest block from the cache and return a reference
-			 * to its memory. Flush first if dirty.
-			 */
+			// Remove the oldest block from the cache and return a reference
+			// to its memory. Flush first if dirty.
 			T* freeOldest();
 
-			/**
-			 * Remove a block from the cache and return a reference to its
-			 * memory for reuse. If there are more than the limit of blocks
-			 * keep removing until the cache is full-1.
-			 * Will flush dirty blocks.
-			 */
+			// Remove a block from the cache and return a reference to its
+			// memory for reuse. If there are more than the limit of blocks
+			// keep removing until the cache is full-1.
+			// Will flush dirty blocks.
 			T* freeOne();
 
 		public:
 			BlockCache();
 
-			/**
-			 * The number of columns in a single block.
-			 */
+			// The number of columns in a single block.
 			int blockWidth();
 
-			/**
-			 * The number of rows in a single block.
-			 */
+			// The number of rows in a single block.
 			int blockHeight();
 
-			/**
-			 * Convert the raster row and column into a row and
-			 * column index for a single block.
-			 */
+			// Convert the raster row and column into a row and
+			// column index for a single block.
 			size_t toBlockIdx(int col, int row);
 			
-			/**
-			 * Set the raster band for this cache to manage.
-			 */
+			// Set the raster band for this cache to manage.
 			void setRasterBand(GDALRasterBand *band);
 
-			/**
-			 * Return true if the cache is managing a block that contains the
-			 * given column and row.
-			 */
+			// Return true if the cache is managing a block that contains the
+			// given column and row.
 			bool hasBlock(int col, int row);
 
-			/**
-			 * Return true if the given index is valid for this cache.
-			 */
+			// Return true if the given index is valid for this cache.
 			bool hasBlock(size_t idx);
 
-			/**
-			 * Set the number of blocks managed by the cache.
-			 */
+			// Set the number of blocks managed by the cache.
 			void setSize(size_t size);
 
-			/**
-			 * Return the number of blocks managed by the cache.
-			 */
+			// Return the number of blocks managed by the cache.
 			size_t getSize();
 
-			/**
-			 * Return a pointer to the block containing the given column and row.
-			 * If the block is to be written, the forWrite argument flags it as 
-			 * dirty.
-			 */
+			// Return a pointer to the block containing the given column and row.
+			// If the block is to be written, the forWrite argument flags it as 
+			// dirty.
 			T* getBlock(int col, int row, bool forWrite);
 
-			/**
-			 * Get the value from the cache.
-			 */
+			// Get the value from the cache.
 			T get(int col, int row);
 
-			/**
-			 * Set the value in the cache. Implies a dirty block.
-			 */
+			// Set the value in the cache. Implies a dirty block.
 			void set(int col, int row, T value);
 
-			/**
-			 * Flush all blocks to disk.
-			 */
+			// Flush all blocks to disk.
 			void flush();
 
-			/**
-			 * Free all blocks.
-			 */
+			// Free all blocks.
 			void close();
 
 			~BlockCache();
@@ -624,9 +493,7 @@ namespace geotools {
 			std::string m_filename;		// Raster filename
 			BlockCache<T> m_cache;		// Block cache.
 
-			/**
-			 * Get the GDAL type for the given c++ type.
-			 */
+			// Get the GDAL type for the given c++ type.
 			GDALDataType getType(double v);
 
 			GDALDataType getType(float v);
@@ -647,14 +514,10 @@ namespace geotools {
 			
 			GDALDataType getType(char v);
 
-			/**
-			 * Get the GDAL type for the current raster.
-			 */
+			// Get the GDAL type for the current raster.
 			GDALDataType getType();
 
-			/**
-			 * Return the default nodata for the raster's type.
-			 */
+			// Return the default nodata for the raster's type.
 			T getDefaultNodata();
 
 		public:
@@ -667,14 +530,10 @@ namespace geotools {
 			const static int INT32 = 6;
 			const static int INT16 = 7;
 			
-			/**
-			 * Basic constructor.
-			 */
+			// Basic constructor.
 			Raster();
 
-			/**
-			 * Create a new raster for writing with a template of a different type.
-			 */
+			// Create a new raster for writing with a template of a different type.
 			template <class U>
 			Raster(const std::string &filename, int band, const Raster<U> &tpl) : Raster() {
 			        std::string proj;
@@ -683,38 +542,26 @@ namespace geotools {
 			                tpl.resolutionY(), (T) tpl.nodata(), proj);
 			}
 
-			/**
-			 * Create a new raster for writing with a template of a different type.
-			 */
+			// Create a new raster for writing with a template of a different type.
 			Raster(const std::string &filename, int band, const Raster<T> &tpl);
 
-			/**
-			 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
-			 */
+			// Build a new raster with the given filename, bounds, resolution, nodata and projection.
 			Raster(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
 					double resolutionX, double resolutionY, double nodata, const std::string &proj);
 
-			/**
-			 * Build a new raster with the given filename, bounds, resolution, nodata and projection.
-			 */
+			// Build a new raster with the given filename, bounds, resolution, nodata and projection.
 			Raster(const std::string &filename, int band, const Bounds &bounds, double resolutionX, double resolutionY, double nodata, int crs);
 			
-			/**
-			 * Build a new raster with the given filename, bounds, resolution, nodata and SRID.
-			 */
+			// Build a new raster with the given filename, bounds, resolution, nodata and SRID.
 			Raster(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
 					double resolutionX, double resolutionY, double nodata, int crs);
 
-			/**
-			 * Open the given raster and load the given band. Set the writable argument to true
-			 * to enable writing.
-			 */
+			// Open the given raster and load the given band. Set the writable argument to true
+			// to enable writing.
 			Raster(const std::string &filename, int band = 1, bool writable = false);
 
-			/**
-			 * Initialize the raster using the given file (which may not exist) using
-			 * another raster as a template. The raster pixel types need not be the same.
-			 */
+			// Initialize the raster using the given file (which may not exist) using
+			// another raster as a template. The raster pixel types need not be the same.
 			template <class U>
 			void init(const std::string &filename, int band, const Raster<U> &tpl) {
 			        g_debug("Raster init: " << filename << "; [tpl]");
@@ -727,56 +574,36 @@ namespace geotools {
 			void init(const std::string &filename, int band, const Bounds &bounds, double resolutionX, double resolutionY,
 				double nodata, const std::string &proj);
 
-			/**
-			 * Initializes the raster with the given filename, bounds, resolution, nodata and projection.
-			 */
+			// Initializes the raster with the given filename, bounds, resolution, nodata and projection.
 			void init(const std::string &filename, int band, double minx, double miny, double maxx, double maxy,
 					double resolutionX, double resolutionY, double nodata, const std::string &proj);
 
-			/**
-			 * Initializes a Raster from the existing file.
-			 */
+			// Initializes a Raster from the existing file.
 			void init(const std::string &filename, int band = 1, bool writable = false);
 
-			/**
-			 * Attempts to return the datatype of the raster
-			 * with the given filename.
-			 */
+			// Attempts to return the datatype of the raster
+			// with the given filename.
 			static int getType(const std::string &filename);
 			
-			/**
-			 * Set the number of blocks in the cache.
-			 */
+			// Set the number of blocks in the cache.
 			void setCacheSize(size_t size);
 
-			/**
-			 * Return the filename for this raster.
-			 */
+			// Return the filename for this raster.
 			std::string filename() const;
 
-			/**
-			 * Return the number of bands in the raster.
-			 */
+			// Return the number of bands in the raster.
 			int bandCount() const;
 
-			/**
-			 * Converts a numerical (EPSG) crs code to a projection string.
-			 */
+			// Converts a numerical (EPSG) crs code to a projection string.
 			std::string epsg2ProjText(int crs) const;
 
-			/**
-			 * Set the band number. Invokes a flush and loads the new band.
-			 */
+			// Set the band number. Invokes a flush and loads the new band.
 			void setBand(int band);
 
-			/**
-			 * Returns the current band number.
-			 */
+			// Returns the current band number.
 			int getBandNum();
 
-			/**
-			 * Returns true if the raster is initialized.
-			 */
+			// Returns true if the raster is initialized.
 			bool inited() const;
 
 			void fill(T value);
@@ -789,83 +616,53 @@ namespace geotools {
 			
 			void readBlock(Grid<T> &block);
 			
-			/**
-			 * Get the x resolution.
-			 */
+			// Get the x resolution.
 			double resolutionX() const;
 
-			/**
-			 * Get the y resolution.
-			 */
+			// Get the y resolution.
 			double resolutionY() const;
 
 			bool positiveX() const;
 
 			bool positiveY() const;
 
-			/**
-			 * Write the projection data to the given string object.
-			 */
+			// Write the projection data to the given string object.
 			void projection(std::string &proj) const;
 
-			/**
-			 * Return the GDAL datatype of the raster.
-			 */
+			// Return the GDAL datatype of the raster.
 			GDALDataType type() const;
 
-			/**
-			 * Return the raster's geographic bounds.
-			 */
+			// Return the raster's geographic bounds.
 			geotools::util::Bounds bounds() const;
 
-			/**
-			 * The minimum bounding x.
-			 */
+			// The minimum bounding x.
 			double minx() const;
 
-			/**
-			 * The maximum bounding x.
-			 */
+			// The maximum bounding x.
 			double maxx() const;
 
-			/**
-			 * The left x.
-			 */
+			// The left x.
 			double leftx() const;
 
-			/**
-			 * The right x.
-			 */
+			// The right x.
 			double rightx() const;
 
-			/**
-			 * The minimum bounding y.
-			 */
+			// The minimum bounding y.
 			double miny() const;
 
-			/**
-			 * The maximum bounding y.
-			 */
+			// The maximum bounding y.
 			double maxy() const;
 
-			/**
-			 * The top y.
-			 */
+			// The top y.
 			double topy() const;
 
-			/**
-			 * The bottom y.
-			 */
+			// The bottom y.
 			double bottomy() const;
 
-			/**
-			 * The width of the raster in map units.
-			 */
+			// The width of the raster in map units.
 			double width() const;
 
-			/**
-			 * The height of the raster in map units.
-			 */
+			// The height of the raster in map units.
 			double height() const;
 
 			T nodata() const;
@@ -876,61 +673,39 @@ namespace geotools {
 
 			int rows() const;
 
-			/**
-			 * Returns the row for a given y-coordinate.
-			 */
+			// Returns the row for a given y-coordinate.
 			int toRow(double y) const;
 
-			/**
-			 * Returns the column for a given x-coordinate.
-			 */
+			// Returns the column for a given x-coordinate.
 			int toCol(double x) const;
 
-			/**
-			 * Returns the x-coordinate for a given column.
-			 */
+			// Returns the x-coordinate for a given column.
 			double toX(int col) const;
 
-			/**
-			 * Returns the y-coordinate for a given row.
-			 */
+			// Returns the y-coordinate for a given row.
 			double toY(int row) const;
 
 			size_t size() const;
 
-			/**
-			 * Returns true if the pixel is nodata.
-			 */
+			// Returns true if the pixel is nodata.
 			bool isNoData(int col, int row);
 
-			/**
-			 * Returns true if the pixel is nodata.
-			 */
+			// Returns true if the pixel is nodata.
 			bool isNoData(size_t idx);
 
-			/**
-			 * Returns true if the pixel is nodata.
-			 */
+			// Returns true if the pixel is nodata.
 			bool isNoData(double x, double y);
 
-			/**
-			 * Returns true if the pixel exists and is not nodata.
-			 */
+			// Returns true if the pixel exists and is not nodata.
 			bool isValid(int c, int r);
 
-			/**
-			 * Returns true if the pixel exists and is not nodata.
-			 */
+			// Returns true if the pixel exists and is not nodata.
 			bool isValid(double x, double y);
 
-			/**
-			 * Gets the pixel value or nodata if the pixel doesn't exist.
-			 */
+			// Gets the pixel value or nodata if the pixel doesn't exist.
 			T getOrNodata(double x, double y);
 
-			/**
-			 * Gets the pixel value or nodata if the pixel doesn't exist.
-			 */
+			// Gets the pixel value or nodata if the pixel doesn't exist.
 			T getOrNodata(int col, int row);
 
 			T *grid();
@@ -959,9 +734,7 @@ namespace geotools {
 
 			bool has(size_t idx) const;
 
-			/**
-			 * Flush the current block to the dataset.
-			 */
+			// Flush the current block to the dataset.
 			void flush();
 
 			~Raster();

@@ -11,48 +11,11 @@
 using namespace geotools::las;
 
 FinalizedPointStream::FinalizedPointStream(const std::vector<std::string> &files, 
-		double cellSize, uint32_t threads) :
+		double cellSize) :
 	m_files(files), 
-	m_cellSize(cellSize),
-	m_threads(threads) {
+	m_cellSize(cellSize) {
 
 	init();
-}
-
-void _initializer(FinalizedPointStream *fps) {
-	fps->initializer();
-}
-
-void FinalizedPointStream::initializer() {
-	std::string file;
-	while(true) {
-		if(!m_fileq.size())
-			return;
-		m_fqm.lock();
-		if(!m_fileq.size()) {
-			m_fqm.unlock();
-			return;
-		}
-		file = m_fileq.front();
-		m_fileq.pop();
-		m_fqm.unlock();
-
-		g_debug(" -- reading file " << file << "; " << m_fileq.size());
-		std::ifstream str(file.c_str(), std::ios::binary);
-		liblas::Reader r(str);
-		liblas::Header h = r.GetHeader();
-		LASPoint pt;
-		while(r.ReadNextPoint()) {
-			pt.update(r.GetPoint());
-			size_t idx = toIdx(pt);
-			m_fqm.lock();
-			if(m_cells.find(idx) == m_cells.end())
-				m_cells[idx] = 0;
-			++m_cells[idx];
-			++m_pointCount;
-			m_fqm.unlock();
-		}
-	}
 }
 
 void FinalizedPointStream::init() {
@@ -76,17 +39,22 @@ void FinalizedPointStream::init() {
 	m_bounds.snap(m_cellSize);
 	g_debug(" -- bounds " << m_bounds.print());
 
-	for(const std::string &file : m_files)
-		m_fileq.push(file);
-
-	std::list<std::thread> threads;
-	g_debug(" -- starting initialization")
-	for(uint32_t i = 0; i < m_threads; ++i) {
-		std::thread t(_initializer, this);
-		threads.push_back(std::move(t));
+	for(const std::string &file : m_files) {
+		g_debug(" -- reading file " << file);
+		std::ifstream str(file.c_str(), std::ios::binary);
+		liblas::Reader r(str);
+		liblas::Header h = r.GetHeader();
+		LASPoint pt;
+		while(r.ReadNextPoint()) {
+			pt.update(r.GetPoint());
+			size_t idx = toIdx(pt);
+			if(m_cells.find(idx) == m_cells.end())
+				m_cells[idx] = 0;
+			++m_cells[idx];
+			++m_pointCount;
+		}
 	}
-	for(std::thread &t : threads)
-		t.join();
+
 	g_debug(" -- finished initialization")
 } 
 

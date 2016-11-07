@@ -26,15 +26,11 @@ private:
 	std::unique_ptr<liblas::Reader> m_reader;
 	size_t m_cols;
 	size_t m_pointCount;
-	uint32_t m_threads;
-	std::mutex m_fqm;
-	std::queue<std::string> m_fileq;
 
 	void init();
 
 public:
-	void initializer();
-	FinalizedPointStream(const std::vector<std::string> &files, double cellSize, uint32_t threads = 1);
+	FinalizedPointStream(const std::vector<std::string> &files, double cellSize);
 	bool next(LASPoint &pt, size_t *finalIdx);
 	size_t pointCount() const;
 	const Bounds& bounds() const;

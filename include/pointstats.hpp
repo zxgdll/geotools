@@ -13,6 +13,7 @@
 #include "util.hpp"
 #include "laspoint.hpp"
 #include "cellstats.hpp"
+#include "finalizedpointstream.hpp"
 
 #define TYPE_MIN 1
 #define TYPE_MAX 2
@@ -43,6 +44,7 @@ namespace geotools {
 
 			extern double defaultResolution;
 			extern bool defaultSnapToGrid;
+			extern bool defaultNormalize;
 			extern unsigned char defaultType;
 			extern unsigned char defaultAngleLimit;
 			extern unsigned char defaultAttribute;
@@ -73,6 +75,7 @@ namespace geotools {
 			bool fill;
 			bool snap;
 			bool rebuild;
+			bool normalize;
 			double resolution;
 			unsigned int threads;
 			unsigned short hsrid;
@@ -121,12 +124,14 @@ namespace geotools {
 
 		class PointStats {
 		private:
-			std::mutex m_rmtx;
+			std::mutex m_cmtx;
+			std::mutex m_qmtx;
 			bool m_running;
 			std::unordered_map<size_t, std::list<std::shared_ptr<geotools::las::LASPoint> > > m_cache;
 			std::queue<size_t> m_idxq;
 			std::unique_ptr<geotools::point::stats::CellStats> m_computer;
 			std::unique_ptr<geotools::raster::MemRaster<float> > m_mem;
+			std::unique_ptr<geotools::las::FinalizedPointStream> m_ps;
 
 			/**
 			 * Check the configuration for validity. 
@@ -145,7 +150,15 @@ namespace geotools {
 
 		public:
 
+			/**
+			 * Runs the compute loop. Inteded to be used by a thread.
+			 */
 			void runner();
+
+			/**
+			 * Runs the read loop. Inteded to be used by a thread.
+			 */
+			void reader();
 
 			/**
 			 * Execute the gridding process.

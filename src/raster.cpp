@@ -84,6 +84,29 @@ void Grid<T>::computeStats() {
 }
 
 template <class T>
+void Grid<T>::normalize() {
+	double sum = 0.0;
+	for(size_t i = 0; i < size(); ++i) {
+		double v = get(i);
+		if(v != nodata() && !std::isnan(v))
+			sum += v;
+	}
+	double mean = sum / size();
+	sum = 0.0;
+	for(size_t i = 0; i < size(); ++i) {
+		double v = get(i);
+		if(v != nodata() && !std::isnan(v))
+			sum += std::pow(v - mean, 2.0);
+	}
+	double stdDev = std::sqrt(sum);
+	for(size_t i = 0; i < size(); ++i) {
+		double v = get(i);
+		if(v != nodata() && !std::isnan(v))
+			set(i, (v - mean) / stdDev);
+	}
+}
+
+template <class T>
 T Grid<T>::max() {
 	if(!m_stats)
 		computeStats();

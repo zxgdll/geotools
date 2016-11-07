@@ -25,6 +25,7 @@ void usage() {
 		<< " -a <attribute>              Use height, intensity (default height).\n"
 		<< " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size.\n"
 		<< " -p                          Snap to the resolution.\n"
+		<< " -n                          Normalize the output so that one std. dev is represented as +-1.\n"
 		<< " -v                          Verbose output.\n"
 		<< " -h                          Print this message.\n"
 		<< " --threads                   The number of threads to use for computing output.\n"
@@ -56,6 +57,7 @@ int main(int argc, char **argv) {
 		bool gui = false;
 		bool snap = false;
 		bool rebuild = true;
+		bool normalize = false;
 		double resolution = 2.0;
 		unsigned char angleLimit = 100;
 		std::string dstFile;
@@ -83,6 +85,8 @@ int main(int argc, char **argv) {
 				fill = true;
 			} else if(s == "-t") {
 				type = argv[++i];
+			} else if(s == "-n") {
+				normalize = true;
 			} else if(s == "-r") {
 				resolution = atof(argv[++i]);
 			} else if(s == "-c") {
@@ -129,7 +133,8 @@ int main(int argc, char **argv) {
 			config.threads = threads;
 			config.gapFractionType = config.parseGap(gap);
 			config.rebuild = rebuild;
-
+			config.normalize = normalize;
+			
 			lg.pointstats(config);
 		}
 

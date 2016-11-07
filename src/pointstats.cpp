@@ -48,6 +48,7 @@ namespace geotools {
 			
 			double defaultResolution = 10.0; 
 			bool defaultSnapToGrid = true;
+			bool defaultNormalize = false;
 			uint8_t defaultType = TYPE_MEAN;
 			uint8_t defaultAttribute = ATT_HEIGHT;
 			uint8_t defaultAngleLimit = 180;
@@ -182,28 +183,6 @@ namespace geotools {
 			}
 		}
 
-		void _normalize(MemRaster<float> &mem) {
-			double sum = 0.0;
-			for(uint64_t i = 0; i < mem.size(); ++i) {
-				double v = mem[i];
-				if(v != -9999.0 && !std::isnan(v))
-					sum += mem[i];
-			}
-			double mean = sum / mem.size();
-			sum = 0.0;
-			for(uint64_t i = 0; i < mem.size(); ++i) {
-				double v = mem[i];
-				if(v != -9999.0 && !std::isnan(v))
-					sum += std::pow(mem[i] - mean, 2.0);
-			}
-			double stdDev = std::sqrt(sum);
-			for(uint64_t i = 0; i < mem.size(); ++i) {
-				double v = mem[i];
-				if(v != -9999.0 && !std::isnan(v))
-					mem.set(i, (mem[i] - mean) / stdDev);
-			}
-		}
-
 		void _runner(PointStats *ps) {
 			ps->runner();
 		}
@@ -214,21 +193,21 @@ namespace geotools {
 			while(m_running || m_idxq.size()) {
 				if(!m_idxq.size())
 					continue;
-				m_rmtx.lock();
+				m_qmtx.lock();
 				if(!m_idxq.size()) {
-					m_rmtx.unlock();
+					m_qmtx.unlock();
 					continue;
 				}
 				idx = m_idxq.front();
 				pts = m_cache[idx];
 				m_idxq.pop();
-				m_rmtx.unlock();
+				m_qmtx.unlock();
 				
 				//g_debug(" -- computing stats for " << idx << "; " << pts.size());
 				m_mem->set(idx, m_computer->compute(pts));
-				m_rmtx.lock();
+				m_cmtx.lock();
 				m_cache.erase(idx);
-				m_rmtx.unlock();
+				m_cmtx.unlock();
 			}
 			
 		}	
@@ -283,14 +262,13 @@ namespace geotools {
 			LASPoint pt;
 			while(ps.next(pt, &finalIdx)) {
 				std::shared_ptr<LASPoint> up(new LASPoint(pt));
-				m_rmtx.lock();
+				m_cmtx.lock();
 				m_cache[ps.toIdx(pt)].push_back(up);
-				m_rmtx.unlock();
+				m_cmtx.unlock();
 				if(finalIdx) {
-					//g_debug(" -- finalizing " << finalIdx << "; " << m_cache[finalIdx].size() << ", " <<  m_computer->compute(m_cache[finalIdx]));
-					m_rmtx.lock();
+					m_qmtx.lock();
 					m_idxq.push(finalIdx);
-					m_rmtx.unlock();
+					m_qmtx.unlock();
 				}
 			}
 			
@@ -299,7 +277,8 @@ namespace geotools {
 			for(std::thread &t : threads)
 				t.join();
 
-			//_normalize(*(m_mem.get()));
+			if(config.normalize)
+				m_mem->normalize();
 
 			g_debug(" -- writing to output");
 			grid.writeBlock(*(m_mem.get()));
