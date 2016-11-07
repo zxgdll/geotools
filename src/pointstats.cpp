@@ -204,18 +204,20 @@ namespace geotools {
 					continue;
 				}
 				idx = m_idxq.front();
-				pts = m_cache[idx];
 				m_idxq.pop();
 				m_qmtx.unlock();
-				
-				for(size_t i = 0; i < m_computers.size(); ++i)
-					m_mem[i]->set(idx, m_computers[i]->compute(pts));
 
-				m_cmtx.lock();
+				m_cmtx.lock();				
+				pts = m_cache[idx];
 				m_cache.erase(idx);
 				m_cmtx.unlock();
-			}
-			
+				
+				for(size_t i = 0; i < m_computers.size(); ++i) {
+					m_fmtx.lock();
+					m_mem[i]->set(idx, m_computers[i]->compute(pts));
+					m_fmtx.unlock();
+				}
+			}			
 		}	
 				
 		void PointStats::pointstats(const PointStatsConfig &config, const Callbacks *callbacks) {

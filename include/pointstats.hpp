@@ -126,6 +126,7 @@ namespace geotools {
 		private:
 			std::mutex m_cmtx;
 			std::mutex m_qmtx;
+			std::mutex m_fmtx;
 			bool m_running;
 			std::unordered_map<size_t, std::list<std::shared_ptr<geotools::las::LASPoint> > > m_cache;
 			std::queue<size_t> m_idxq;
