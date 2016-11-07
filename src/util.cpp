@@ -291,6 +291,20 @@ void Util::parseRanges(std::set<int> &values, const char *str) {
 	}
 }
 
+void Util::splitString(const std::string &str, std::list<std::string> &lst) {
+	std::stringstream ss(str);
+	std::string item;
+	while(std::getline(ss, item, ','))
+		lst.push_back(item);
+}
+
+void Util::splitString(const std::string &str, std::vector<std::string> &lst) {
+	std::stringstream ss(str);
+	std::string item;
+	while(std::getline(ss, item, ','))
+		lst.push_back(item);
+}
+
 /**
  * Split a comma-delimited string into a set of unique integers.
  */

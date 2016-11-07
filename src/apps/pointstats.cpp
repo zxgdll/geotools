@@ -16,15 +16,16 @@ void usage() {
 		<< " -o <output file>\n"
 		<< " -t <type>                   Output median, mean, max, min, variance (sample), pvariance (population),\n"
 		<< "                             count, density, stddev (sample), pstddev (population). Default mean.\n"
+		<< "                             Use a Comma-delimited list to do more than one. Requires a Comma-delimited\n"
+		<< "                             list of filenames.\n"
 		<< " -g <type>					 Gap Fraction type. These are IR, FR, RR, BLa and BLb, adaped from \n"
 		<< "                             Hopkins and Chasmer, 2009: Testing LiDAR Models of Fractional Cover...\n"
 		<< " -r <resolution>             Resolution (default 2).\n"
-		<< " -C                          Use existing cache file.\n"
 		<< " -s <srid>                   The EPSG ID of the CRS.\n"
 		<< " -c <classes>                Comma-delimited (e.g. '2,0' (ground and unclassified)).\n"
 		<< " -a <attribute>              Use height, intensity (default height).\n"
 		<< " -b <minx miny maxx maxy>    Extract points from the given box and create a raster of this size.\n"
-		<< " -p                          Snap to the resolution.\n"
+//		<< " -p                          Snap to the resolution.\n"
 		<< " -n                          Normalize the output so that one std. dev is represented as +-1.\n"
 		<< " -v                          Verbose output.\n"
 		<< " -h                          Print this message.\n"
@@ -55,17 +56,17 @@ int main(int argc, char **argv) {
 		int threads = 1;
 		bool fill = false;
 		bool gui = false;
-		bool snap = false;
+		bool snap = true;
 		bool rebuild = true;
 		bool normalize = false;
 		double resolution = 2.0;
 		unsigned char angleLimit = 100;
-		std::string dstFile;
-		std::string type = "mean";
+		std::vector<std::string> dstFiles;
+		std::vector<std::string> files;
+		std::vector<std::string> types;
 		std::string att = "height";
 		std::string gap;
 		std::set<unsigned char> classes;
-		std::list<std::string> files;
 		Bounds bounds;
 
 		g_loglevel(0);
@@ -78,13 +79,13 @@ int main(int argc, char **argv) {
 			} else if(s == "-gui") {
 				gui = true;
 			} else if(s == "-o") {
-				dstFile = argv[++i];
+				Util::splitString(argv[++i], dstFiles);
 			} else if(s == "-s") {
 				crs = atoi(argv[++i]);
 			} else if(s == "-f") {
 				fill = true;
 			} else if(s == "-t") {
-				type = argv[++i];
+				Util::splitString(argv[++i], types);
 			} else if(s == "-n") {
 				normalize = true;
 			} else if(s == "-r") {
@@ -119,12 +120,12 @@ int main(int argc, char **argv) {
 		} else {
 			PointStats lg;
 			PointStatsConfig config;
-			config.dstFile = dstFile;
+			config.dstFiles = dstFiles;
 			config.sourceFiles = files;
 			config.classes = classes;
 			config.hsrid = crs;
 			config.attribute = config.parseAtt(att);
-			config.type = config.parseType(type);
+			config.types = config.parseTypes(types);
 			config.resolution = resolution;
 			config.bounds = bounds;
 			config.angleLimit = angleLimit;
@@ -134,7 +135,7 @@ int main(int argc, char **argv) {
 			config.gapFractionType = config.parseGap(gap);
 			config.rebuild = rebuild;
 			config.normalize = normalize;
-			
+
 			lg.pointstats(config);
 		}
 

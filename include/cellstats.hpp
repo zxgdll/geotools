@@ -376,11 +376,7 @@ namespace geotools {
 				double densityFactor(const std::list<std::shared_ptr<LASPoint> > &values) {
 					if(values.size() == 0 || m_avgDensity <= 0.0 || m_density.area() <= 0.0)
 						return 1.0;
-
-					double a = 2.49127261 + 9.01659384 * std::sqrt(m_density.compute(values) * 32.65748276);
-					double b = 2.49127261 + 9.01659384 * std::sqrt(m_avgDensity * 32.65748276);
-					//g_debug(" -- density " << m_density.compute(values) << ", " << m_avgDensity);
-					return b / a;
+					return 1.0 / (2.49127261 + 9.01659384 * std::sqrt(m_density.compute(values) * 32.65748276));
 				}
 
 				double polyArea(const std::list<Point_3> &hull, const Plane_3 &plane, const Point_3 &centroid) {
@@ -435,7 +431,7 @@ namespace geotools {
 					// POBF surface area.
 					double parea = polyArea(hull, plane, centroid);
 					double df = densityFactor(filt);
-					return (tarea / parea) * df;
+					return (tarea / parea);//* df;
 				}
 			};
 

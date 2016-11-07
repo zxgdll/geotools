@@ -45,21 +45,21 @@ namespace geotools {
 			extern double defaultResolution;
 			extern bool defaultSnapToGrid;
 			extern bool defaultNormalize;
-			extern unsigned char defaultType;
-			extern unsigned char defaultAngleLimit;
-			extern unsigned char defaultAttribute;
-			extern unsigned char defaultGapFraction;
-			extern unsigned int defaultQuantile;
-			extern unsigned int defaultQuantiles;
-			extern unsigned int defaultFilterQuantiles;
-			extern unsigned int defaultFilterQuantileFrom;
-			extern unsigned int defaultFilterQuantileTo;
-			extern unsigned int defaultThreads;
+			extern uint8_t defaultType;
+			extern uint8_t defaultAngleLimit;
+			extern uint8_t defaultAttribute;
+			extern uint8_t defaultGapFraction;
+			extern uint32_t defaultQuantile;
+			extern uint32_t defaultQuantiles;
+			extern uint32_t defaultFilterQuantiles;
+			extern uint32_t defaultFilterQuantileFrom;
+			extern uint32_t defaultFilterQuantileTo;
+			extern uint32_t defaultThreads;
 
-			extern std::set<unsigned char> defaultClasses;
-			extern std::map<std::string, unsigned char> types;
-			extern std::map<std::string, unsigned char> attributes;
-			extern std::map<std::string, unsigned char> gapFractionTypes;
+			extern std::set<uint8_t> defaultClasses;
+			extern std::map<std::string, uint8_t> types;
+			extern std::map<std::string, uint8_t> attributes;
+			extern std::map<std::string, uint8_t> gapFractionTypes;
 
 		}
 
@@ -68,44 +68,44 @@ namespace geotools {
 		 */
 		class PointStatsConfig {
 		public:
-			std::string dstFile;
-			std::list<std::string> sourceFiles;
-			std::set<unsigned char> classes;
+			std::vector<std::string> dstFiles;
+			std::vector<std::string> sourceFiles;
+			std::vector<uint8_t> types;
+			std::set<uint8_t> classes;
 			geotools::util::Bounds bounds;
 			bool fill;
 			bool snap;
 			bool rebuild;
 			bool normalize;
 			double resolution;
-			unsigned int threads;
-			unsigned short hsrid;
-			unsigned short vsrid;
-			unsigned char attribute;
-			unsigned char type;
-			unsigned char angleLimit;
-			unsigned char quantile;
-			unsigned char quantiles;
-			unsigned char gapFractionType;
-			unsigned int quantileFilter;
-			unsigned int quantileFilterFrom;
-			unsigned int quantileFilterTo;
+			uint32_t threads;
+			uint16_t hsrid;
+			uint16_t vsrid;
+			uint8_t attribute;
+			uint8_t angleLimit;
+			uint8_t quantile;
+			uint8_t quantiles;
+			uint8_t gapFractionType;
+			uint32_t quantileFilter;
+			uint32_t quantileFilterFrom;
+			uint32_t quantileFilterTo;
 
 			/**
 			 * Interpret the attribute and  return the constant int value.
 			 */
-			unsigned char parseAtt(const std::string &attStr);
+			uint8_t parseAtt(const std::string &attStr);
 
 			/**
 			 * Interpret the output type and return the constant int value.
 			 */
-			unsigned char parseType(const std::string &typeStr);
+			std::vector<uint8_t> parseTypes(const std::vector<std::string> &typeStrs);
 
-			unsigned char parseGap(const std::string &typeStr);
+			uint8_t parseGap(const std::string &typeStr);
 
 			/**
 			 * Returns true if the classes set contains the class.
 			 */
-			bool hasClass(unsigned char cls) const {
+			bool hasClass(uint8_t cls) const {
 				return classes.find(cls) != classes.end();
 			}
 
@@ -129,8 +129,8 @@ namespace geotools {
 			bool m_running;
 			std::unordered_map<size_t, std::list<std::shared_ptr<geotools::las::LASPoint> > > m_cache;
 			std::queue<size_t> m_idxq;
-			std::unique_ptr<geotools::point::stats::CellStats> m_computer;
-			std::unique_ptr<geotools::raster::MemRaster<float> > m_mem;
+			std::vector<std::unique_ptr<geotools::point::stats::CellStats> > m_computers;
+			std::vector<std::unique_ptr<geotools::raster::MemRaster<float> > > m_mem;
 			std::unique_ptr<geotools::las::FinalizedPointStream> m_ps;
 
 			/**
@@ -139,13 +139,13 @@ namespace geotools {
 			 */
 			void checkConfig(const PointStatsConfig &config);
 
-			geotools::point::stats::CellStats* getComputer(const PointStatsConfig &config);
+			geotools::point::stats::CellStats* getComputer(const uint8_t &type, const PointStatsConfig &config);
 
 			/**
 			 * Compute the working bounds and the selection of files
 			 * to include in the working set.
 			 */
-			void computeWorkBounds(const std::list<std::string> &files, const Bounds &bounds, 
+			void computeWorkBounds(const std::vector<std::string> &files, const Bounds &bounds, 
 				std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount);
 
 		public:

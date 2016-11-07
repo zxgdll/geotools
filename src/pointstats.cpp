@@ -87,37 +87,40 @@ namespace geotools {
 			return 0;
 		}
 
-		uint8_t PointStatsConfig::parseType(const std::string &typeStr) {
-			if("min" == typeStr) {
-				return TYPE_MIN;
-			} else if("max" == typeStr) {
-				return TYPE_MAX;
-			} else if("mean" == typeStr) {
-				return TYPE_MEAN;
-			} else if("density" == typeStr) {
-				return TYPE_DENSITY;
-			} else if("variance" == typeStr) {
-				return TYPE_VARIANCE;
-			} else if("stddev" == typeStr) {
-				return TYPE_STDDEV;
-			} else if("pvariance" == typeStr) {
-				return TYPE_PVARIANCE;
-			} else if("pstddev" == typeStr) {
-				return TYPE_PSTDDEV;
-			} else if("count" == typeStr) {
-				return TYPE_COUNT;
-			} else if("median" == typeStr) {
-				return TYPE_MEDIAN;
-			} else if("skew" == typeStr) {
-				return TYPE_SKEW;
-			} else if("rugosity" == typeStr) {
-				return TYPE_RUGOSITY;
-			} else if("kurtosis" == typeStr) {
-				return TYPE_KURTOSIS;
-			} else if("gap" == typeStr) {
-				return TYPE_GAP_FRACTION;
+		std::vector<uint8_t> PointStatsConfig::parseTypes(const std::vector<std::string> &typeStrs) {
+			std::vector<uint8_t> types;
+			for(const std::string &typeStr : typeStrs) {
+				if("min" == typeStr) {
+					types.push_back(TYPE_MIN);
+				} else if("max" == typeStr) {
+					types.push_back(TYPE_MAX);
+				} else if("mean" == typeStr) {
+					types.push_back(TYPE_MEAN);
+				} else if("density" == typeStr) {
+					types.push_back(TYPE_DENSITY);
+				} else if("variance" == typeStr) {
+					types.push_back(TYPE_VARIANCE);
+				} else if("stddev" == typeStr) {
+					types.push_back(TYPE_STDDEV);
+				} else if("pvariance" == typeStr) {
+					types.push_back(TYPE_PVARIANCE);
+				} else if("pstddev" == typeStr) {
+					types.push_back(TYPE_PSTDDEV);
+				} else if("count" == typeStr) {
+					types.push_back(TYPE_COUNT);
+				} else if("median" == typeStr) {
+					types.push_back(TYPE_MEDIAN);
+				} else if("skew" == typeStr) {
+					types.push_back(TYPE_SKEW);
+				} else if("rugosity" == typeStr) {
+					types.push_back(TYPE_RUGOSITY);
+				} else if("kurtosis" == typeStr) {
+					types.push_back(TYPE_KURTOSIS);
+				} else if("gap" == typeStr) {
+					types.push_back(TYPE_GAP_FRACTION);
+				}
 			}
-			return 0;
+			return types;
 		}
 
 		uint8_t PointStatsConfig::parseGap(const std::string &gapStr) {
@@ -138,31 +141,33 @@ namespace geotools {
 		void PointStats::checkConfig(const PointStatsConfig &config) {
 			if(config.resolution <= 0.0)
 				g_argerr("Resolution must be > 0: " << config.resolution);
-			if(config.sourceFiles.size() == 0)
+			if(!config.sourceFiles.size())
 				g_argerr("At least one input file is required.");
-			if(config.dstFile.empty()) 
-				g_argerr("An output file is required.");
+			if(!config.dstFiles.size()) 
+				g_argerr("At least one output file is required.");
 			if(config.attribute == 0)
 				g_argerr("An attribute is required.");
-			if(config.type == 0)
-				g_argerr("A valid type is required.");
+			if(!config.types.size())
+				g_argerr("At least one valid type is required.");
 			if(config.classes.size() == 0)
 				g_warn("No classes given. Matching all classes.");
 			if(config.angleLimit <= 0)
 				g_argerr("Angle limit must be greater than zero.");
+			if(config.dstFiles.size() != config.types.size())
+				g_argerr("There should be one output file for each type.");
 
 			g_debug("Resolution: " << config.resolution);
 			g_debug("Files: " << config.sourceFiles.size());
-			g_debug("Destination: " << config.dstFile);
+			g_debug("Destinations: " << config.dstFiles.size());
 			g_debug("Attribute: " << config.attribute);
-			g_debug("Type: " << config.type);
+			g_debug("Types: " << config.types.size());
 			g_debug("Classes: " << config.classes.size());
 			g_debug("Angle Limit: " << config.angleLimit);
 		}
 
-		CellStats* PointStats::getComputer(const PointStatsConfig &config) {
+		CellStats* PointStats::getComputer(const uint8_t &type, const PointStatsConfig &config) {
 			using namespace geotools::point::stats;
-			switch(config.type) {
+			switch(type) {
 			case TYPE_MEAN: 		return new CellMean();
 			case TYPE_MEDIAN: 		return new CellMedian();
 			case TYPE_COUNT: 		return new CellCount();
@@ -171,7 +176,7 @@ namespace geotools {
 			case TYPE_PSTDDEV: 		return new CellPopulationStdDev();
 			case TYPE_PVARIANCE:	return new CellPopulationVariance();
 			case TYPE_DENSITY: 		return new CellDensity(g_sq(config.resolution));
-			case TYPE_RUGOSITY: 	return new CellRugosity(config.resolution * config.resolution, 20.0);
+			case TYPE_RUGOSITY: 	return new CellRugosity(g_sq(config.resolution), 20.0);
 			case TYPE_MAX: 			return new CellMax();
 			case TYPE_MIN: 			return new CellMin();
 			case TYPE_KURTOSIS: 	return new CellKurtosis();
@@ -179,7 +184,7 @@ namespace geotools {
 			case TYPE_QUANTILE: 	return new CellQuantile(config.quantile, config.quantiles);
 			case TYPE_GAP_FRACTION:	return new CellGapFraction(config.gapFractionType);
 			default:
-				g_argerr("Invalid statistic type: " << config.type);
+				g_argerr("Invalid statistic type: " << type);
 			}
 		}
 
@@ -203,8 +208,9 @@ namespace geotools {
 				m_idxq.pop();
 				m_qmtx.unlock();
 				
-				//g_debug(" -- computing stats for " << idx << "; " << pts.size());
-				m_mem->set(idx, m_computer->compute(pts));
+				for(size_t i = 0; i < m_computers.size(); ++i)
+					m_mem[i]->set(idx, m_computers[i]->compute(pts));
+
 				m_cmtx.lock();
 				m_cache.erase(idx);
 				m_cmtx.unlock();
@@ -230,23 +236,26 @@ namespace geotools {
 			//size_t pointCount = ps.pointCount();
 			g_debug(" -- pointstats - work bounds: " << bounds.print() << "; " << ps.cols() << "x" << ps.rows());
 
-			// Prepare the grid
-			// TODO: Only works with UTM north.
-			Raster<float> grid(config.dstFile, 1, bounds, config.resolution, 
-				-config.resolution, -9999, config.hsrid);
-			g_debug(" -- pointstats - raster size: " << grid.cols() << ", " << grid.rows());
 
-			m_mem.reset(new MemRaster<float>(ps.cols(), ps.rows(), true));
-			m_mem->fill(-9999.0);
-
-			m_computer.reset(getComputer(config));
 			CellStatsFilter *filter = nullptr;
 			if(config.hasClasses()) 
 				filter = new ClassFilter(config.classes);
 			//if(config.hasQuantileFilter())
 			//	tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
-			if(filter)
-				m_computer->setFilter(filter);
+
+			for(size_t i = 0; i < config.types.size(); ++i) {
+				// Create computers for each stat
+				g_debug(" -- configuring computer " << (int) config.types[i]);
+				std::unique_ptr<CellStats> cs(getComputer(config.types[i], config));
+				if(filter)
+					cs->setFilter(filter);
+				m_computers.push_back(std::move(cs));
+				// Create raster grid for each stat.
+				std::unique_ptr<MemRaster<float> > mr(new MemRaster<float>(ps.cols(), ps.rows(), true));
+				mr->fill(-9999.0);
+				mr->nodata(-9999.0);
+				m_mem.push_back(std::move(mr));
+			}
 
 			std::list<std::thread> threads;
 
@@ -277,11 +286,21 @@ namespace geotools {
 			for(std::thread &t : threads)
 				t.join();
 
-			if(config.normalize)
-				m_mem->normalize();
 
-			g_debug(" -- writing to output");
-			grid.writeBlock(*(m_mem.get()));
+			for(size_t i = 0; i < m_mem.size(); ++i) {
+				if(config.normalize) {
+					g_debug(" -- normalizing");
+					m_mem[i]->normalize();
+				}
+				// Prepare the grid
+				// TODO: Only works with UTM north.
+				g_debug(" -- preparing " << config.dstFiles[i]);
+				Raster<float> grid(config.dstFiles[i], 1, bounds, config.resolution, 
+					-config.resolution, -9999, config.hsrid);
+
+				g_debug(" -- writing " << config.types[i]);
+				grid.writeBlock(*(m_mem[i].get()));
+			}
 
 			if(callbacks)
 				callbacks->overallCallback(1.0f);

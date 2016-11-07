@@ -180,6 +180,10 @@ namespace geotools {
 
 			static bool inList(std::vector<int> &values, int value);
 
+			static void splitString(const std::string &str, std::list<std::string> &lst);
+			// TODO: Use back inserter.
+			static void splitString(const std::string &str, std::vector<std::string> &lst);
+			
 			/**
 			 * Prints out a status message; a percentage representing current
 			 * of total steps.
