@@ -194,20 +194,28 @@ namespace geotools {
 		void PointStats::runner() {
 			size_t idx;
 			std::list<std::shared_ptr<LASPoint> > pts;
-			std::unique_lock<std::mutex> lk(m_qmtx);
 			while(m_running) {
-				m_cdn.wait(lk);
-				idx = m_idxq.front();
-				g_debug(" -- " << idx << "; " << std::this_thread::get_id());
-				m_idxq.pop();
-				pts.clear();
-				pts.assign(m_cache[idx].begin(), m_cache[idx].end());
-				m_cache.erase(idx);
-				for(size_t i = 0; i < m_computers.size(); ++i) {
-					m_mtx[i]->lock();
-					m_mem[i]->set(idx, m_computers[i]->compute(pts));
-					m_mtx[i]->unlock();
+				{
+					std::unique_lock<std::mutex> lk(m_qmtx);
+					m_cdn.wait(lk);
+					if(m_idxq.empty())
+						continue;
+					idx = m_idxq.front();
+					//g_debug(" -- " << idx << "; " << std::this_thread::get_id());
+					m_idxq.pop();
 				}
+				pts.clear();
+				{
+					std::unique_lock<std::mutex> lk(m_cmtx);	
+					pts.assign(m_cache[idx].begin(), m_cache[idx].end());
+					m_cache.erase(idx);
+				}
+				for(size_t i = 0; i < m_computers.size(); ++i) {
+					std::unique_lock<std::mutex> lk(*(m_mtx[i].get()));
+					m_mem[i]->set(idx, m_computers[i]->compute(pts));
+				}
+				if(m_idxq.size())
+					m_cdn.notify_one();
 			}			
 		}	
 				
@@ -272,9 +280,15 @@ namespace geotools {
 			LASPoint pt;
 			while(ps.next(pt, &finalIdx)) {
 				std::shared_ptr<LASPoint> up(new LASPoint(pt));
-				m_cache[ps.toIdx(pt)].push_back(up);
+				{
+					std::unique_lock<std::mutex> lk(m_cmtx);
+					m_cache[ps.toIdx(pt)].push_back(up);
+				}
 				if(finalIdx) {
-					m_idxq.push(finalIdx);
+					{
+						std::unique_lock<std::mutex> lk(m_qmtx);
+						m_idxq.push(finalIdx);
+					}
 					m_cdn.notify_one();
 				}
 			}
