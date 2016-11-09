@@ -226,25 +226,24 @@ namespace geotools {
 			
 		 	if(config.threads > 0) {
 		 		g_debug(" -- pointstats running with " << config.threads << " threads");
-		 		omp_set_dynamic(1);
-		 		omp_set_num_threads(config.threads);
 		 	} else {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
+			// Initialize the point stream; it expects a vector. 
 			std::vector<std::string> files(config.sourceFiles.begin(), config.sourceFiles.end());
 			FinalizedPointStream ps(files, g_abs(config.resolution));
 			Bounds bounds = ps.bounds();
-			//size_t pointCount = ps.pointCount();
 			g_debug(" -- pointstats - work bounds: " << bounds.print() << "; " << ps.cols() << "x" << ps.rows());
 
-
+			// Initialize the filter group.
 			CellStatsFilter *filter = nullptr;
 			if(config.hasClasses()) 
 				filter = new ClassFilter(config.classes);
 			//if(config.hasQuantileFilter())
 			//	tmp = tmp->chain(new QuantileFilter(config.quantileFilter, config.quantileFilterFrom, config.quantileFilterTo));
 
+			// Create a computer, grid and mutex for each statistic.
 			for(size_t i = 0; i < config.types.size(); ++i) {
 				// Create computers for each stat
 				g_debug(" -- configuring computer " << (int) config.types[i]);
@@ -252,41 +251,51 @@ namespace geotools {
 				if(filter)
 					cs->setFilter(filter);
 				m_computers.push_back(std::move(cs));
+				
 				// Create raster grid for each stat.
+				g_debug(" -- configuring grid");
 				std::unique_ptr<MemRaster<float> > mr(new MemRaster<float>(ps.cols(), ps.rows(), true));
 				mr->fill(-9999.0);
 				mr->nodata(-9999.0);
 				m_mem.push_back(std::move(mr));
 
+				// Create mutex for grid.
+				g_debug(" -- creating mutex");
 				std::unique_ptr<std::mutex> m(new std::mutex());
 				m_mtx.push_back(std::move(m));
 			}
 
+			// Initialize the thread group for runner.
 			std::list<std::thread> threads;
-
 			m_running = true;
 			size_t finalIdx = 0;
 
+			// Start the runner threads.
 			for(uint32_t i = 0; i < config.threads; ++i) {
 				std::thread t(_runner, this);
 				threads.push_back(std::move(t));
 			}
 
+			// Begin streaming the points into the cache for processing.
 			g_debug(" -- streaming points");
 			LASPoint pt;
 			while(ps.next(pt, &finalIdx)) {
 				std::shared_ptr<LASPoint> up(new LASPoint(pt));
+				m_cmtx.lock();
 				m_cache[ps.toIdx(pt)].push_back(up);
+				m_cmtx.unlock();
 				if(finalIdx)
 					m_idxq.push(finalIdx);
 			}
 			
+			// Shut down and join the runners.
 			m_running = false;
-
 			for(std::thread &t : threads)
 				t.join();
 
+			// Write the grids to files.
 			for(size_t i = 0; i < m_mem.size(); ++i) {
+				// Normalize the grids if desired.
 				if(config.normalize) {
 					g_debug(" -- normalizing");
 					m_mem[i]->normalize();
@@ -297,6 +306,7 @@ namespace geotools {
 				Raster<float> grid(config.dstFiles[i], 1, bounds, config.resolution, 
 					-config.resolution, -9999, config.hsrid);
 
+				// Write grid to file.
 				g_debug(" -- writing " << config.types[i]);
 				grid.writeBlock(*(m_mem[i].get()));
 			}
