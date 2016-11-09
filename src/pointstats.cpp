@@ -196,26 +196,26 @@ namespace geotools {
 			size_t idx;
 			std::list<std::shared_ptr<LASPoint> > pts;
 			while(m_running || m_idxq.size()) {
-				if(!m_idxq.size())
-					continue;
 				m_qmtx.lock();
-				if(!m_idxq.size()) {
+				if(m_idxq.size()) {
+					idx = m_idxq.front();
+					m_idxq.pop();
+				} else {
 					m_qmtx.unlock();
 					continue;
 				}
-				idx = m_idxq.front();
-				m_idxq.pop();
 				m_qmtx.unlock();
 
 				m_cmtx.lock();				
-				pts = m_cache[idx];
+				pts.clear();
+				pts.assign(m_cache[idx].begin(), m_cache[idx].end());
 				m_cache.erase(idx);
 				m_cmtx.unlock();
 				
 				for(size_t i = 0; i < m_computers.size(); ++i) {
-					m_fmtx.lock();
+					m_mtx[i]->lock();
 					m_mem[i]->set(idx, m_computers[i]->compute(pts));
-					m_fmtx.unlock();
+					m_mtx[i]->unlock();
 				}
 			}			
 		}	
@@ -257,6 +257,9 @@ namespace geotools {
 				mr->fill(-9999.0);
 				mr->nodata(-9999.0);
 				m_mem.push_back(std::move(mr));
+
+				std::unique_ptr<std::mutex> m(new std::mutex());
+				m_mtx.push_back(std::move(m));
 			}
 
 			std::list<std::thread> threads;
@@ -273,21 +276,15 @@ namespace geotools {
 			LASPoint pt;
 			while(ps.next(pt, &finalIdx)) {
 				std::shared_ptr<LASPoint> up(new LASPoint(pt));
-				m_cmtx.lock();
 				m_cache[ps.toIdx(pt)].push_back(up);
-				m_cmtx.unlock();
-				if(finalIdx) {
-					m_qmtx.lock();
+				if(finalIdx)
 					m_idxq.push(finalIdx);
-					m_qmtx.unlock();
-				}
 			}
 			
 			m_running = false;
 
 			for(std::thread &t : threads)
 				t.join();
-
 
 			for(size_t i = 0; i < m_mem.size(); ++i) {
 				if(config.normalize) {

@@ -7,8 +7,10 @@
 #include "geotools.h"
 #include "lasutil.hpp"
 #include "finalizedpointstream.hpp"
+#include "raster.hpp"
 
 using namespace geotools::las;
+using namespace geotools::raster;
 
 FinalizedPointStream::FinalizedPointStream(const std::vector<std::string> &files, 
 		double cellSize) :
@@ -39,6 +41,9 @@ void FinalizedPointStream::init() {
 	m_bounds.snap(m_cellSize);
 	g_debug(" -- bounds " << m_bounds.print());
 
+	m_cells.reset(new MemRaster<uint32_t>(cols(), rows(), true));
+	m_cells->fill(0);
+
 	for(const std::string &file : m_files) {
 		g_debug(" -- reading file " << file);
 		std::ifstream str(file.c_str(), std::ios::binary);
@@ -48,9 +53,7 @@ void FinalizedPointStream::init() {
 		while(r.ReadNextPoint()) {
 			pt.update(r.GetPoint());
 			size_t idx = toIdx(pt);
-			if(m_cells.find(idx) == m_cells.end())
-				m_cells[idx] = 0;
-			++m_cells[idx];
+			m_cells->set(idx, m_cells->get(idx) + 1);
 			++m_pointCount;
 		}
 	}
@@ -87,11 +90,15 @@ bool FinalizedPointStream::next(LASPoint &pt, size_t *finalIdx) {
 	}
 	pt.update(m_reader->GetPoint());
 	size_t idx = toIdx(pt);
-	if(--m_cells[idx] == 0) {
-		m_cells.erase(idx);
+	uint32_t count = m_cells->get(idx);
+	if(count == 1) {
+		m_cells->set(idx, 0);
 		*finalIdx = idx;
-	} else {
+	} else if(count > 1) {
+		m_cells->set(idx, count - 1);
 		*finalIdx = 0;
+	} else {
+		g_runerr("Illegal count.");
 	}
 	return true;
 }

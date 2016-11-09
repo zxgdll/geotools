@@ -11,6 +11,7 @@
 
 #include "laspoint.hpp"
 #include "util.hpp"
+#include "raster.hpp"
 
 namespace geotools {
 namespace las {
@@ -18,7 +19,7 @@ namespace las {
 class FinalizedPointStream {
 private:
 	std::vector<std::string> m_files;
-	std::unordered_map<size_t, size_t> m_cells;
+	std::unique_ptr<geotools::raster::MemRaster<uint32_t> > m_cells;
 	geotools::util::Bounds m_bounds;
 	double m_cellSize;
 	size_t m_fileIdx;
