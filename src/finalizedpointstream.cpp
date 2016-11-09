@@ -1,6 +1,7 @@
 #include <fstream>
 #include <thread>
 #include <mutex>
+#include <condition_variable>
 
 #include "liblas/liblas.hpp"
 
@@ -120,6 +121,7 @@ size_t FinalizedPointStream::toRow(const LASPoint &pt) const {
 }
 
 size_t FinalizedPointStream::toIdx(const LASPoint &pt) const {
+	//_debug(" -- toidx " << pt.x << ", " << pt.y << "; " << toRow(pt) << "; " << cols() << "; " << toCol(pt));
 	return toRow(pt) * cols() + toCol(pt);
 }
 
