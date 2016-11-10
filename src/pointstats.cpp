@@ -197,19 +197,17 @@ namespace geotools {
 			while(m_running) {
 				if(!m_bq.pop(&idx))
 					continue;
-				g_debug(" -- out " << idx);// << "; " << std::this_thread::get_id());
-				pts.clear();
 				{
 					std::unique_lock<std::mutex> lk(m_cmtx);
 					pts.assign(m_cache[idx].begin(), m_cache[idx].end());
 					m_cache.erase(idx);
 				}
-
 				if(!pts.empty()) {
 					for(size_t i = 0; i < m_computers.size(); ++i) {
 						std::unique_lock<std::mutex> flk(*(m_mtx[i].get()));
 						m_mem[i]->set(idx, m_computers[i]->compute(pts));
 					}
+					pts.clear();
 				}
 			}			
 		}	
@@ -278,10 +276,8 @@ namespace geotools {
 					std::unique_lock<std::mutex> lk(m_cmtx);
 					m_cache[ps.toIdx(pt)].push_back(pt);
 				}
-				if(finalIdx) {
-					g_debug(" -- in " << finalIdx);
+				if(finalIdx)
 					m_bq.push(finalIdx);
-				}
 			}
 
 			m_bq.flush();

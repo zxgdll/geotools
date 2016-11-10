@@ -130,13 +130,17 @@ namespace geotools {
 			std::mutex m_m;
 		public:
 			bool pop(size_t *idx) {
-				std::unique_lock<std::mutex> lk(m_m);
-				m_c.wait(lk);
-				if(m_q.empty())
-					return false;
-				*idx = m_q.front();
-				m_q.pop();
-				return true;
+				bool ret = false;
+				{
+					std::unique_lock<std::mutex> lk(m_m);
+					m_c.wait(lk);
+					if(!m_q.empty()) {
+						*idx = m_q.front();
+						m_q.pop();
+						ret = true;
+					}
+				}
+				return ret;
 			}
 			void push(size_t idx) {
 				{
@@ -146,9 +150,11 @@ namespace geotools {
 				m_c.notify_one();
 			}
 			size_t size() {
+				std::lock_guard<std::mutex> lk(m_m);
 				return m_q.size();
 			}
 			bool empty() {
+				std::lock_guard<std::mutex> lk(m_m);
 				return m_q.empty();
 			}
 			void flush() {

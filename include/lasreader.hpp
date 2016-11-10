@@ -90,8 +90,7 @@ private:
 		// TODO: Extended point count.
 
 		LASPoint::setScale(m_xScale, m_yScale, m_zScale);
-		m_curPoint = 0;
-		std::fseek(m_f, m_offset, SEEK_SET);
+		reset();
 	}
 
 public:
@@ -109,6 +108,11 @@ public:
 
 	size_t m_batchSize;
 	size_t BATCH_SIZE = 100000;
+
+	void reset() {
+		m_curPoint = 0;
+		std::fseek(m_f, m_offset, SEEK_SET);
+	}
 
 	bool loadBatch() {
 		if(!m_f || m_curPoint >= m_pointCount) 
