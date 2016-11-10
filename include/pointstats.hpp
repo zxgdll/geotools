@@ -167,7 +167,7 @@ namespace geotools {
 			std::condition_variable m_cdn;
 
 			bool m_running;
-			std::unordered_map<size_t, std::list<std::shared_ptr<geotools::las::LASPoint> > > m_cache;
+			std::unordered_map<size_t, std::list<geotools::las::LASPoint> > m_cache;
 			std::queue<size_t> m_idxq;
 			std::vector<std::unique_ptr<geotools::point::stats::CellStats> > m_computers;
 			std::vector<std::unique_ptr<geotools::raster::MemRaster<float> > > m_mem;

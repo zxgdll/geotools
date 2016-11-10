@@ -7,11 +7,12 @@
 #include <fstream>
 #include <queue>
 
-#include "liblas/liblas.hpp"
+//#include "liblas/liblas.hpp"
 
 #include "laspoint.hpp"
 #include "util.hpp"
 #include "raster.hpp"
+#include "lasreader.hpp"
 
 namespace geotools {
 namespace las {
@@ -24,7 +25,7 @@ private:
 	double m_cellSize;
 	size_t m_fileIdx;
 	std::unique_ptr<std::ifstream> m_instr;
-	std::unique_ptr<liblas::Reader> m_reader;
+	std::unique_ptr<LASReader> m_reader;
 	size_t m_cols;
 	size_t m_pointCount;
 

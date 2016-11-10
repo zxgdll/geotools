@@ -193,11 +193,11 @@ namespace geotools {
 
 		void PointStats::runner() {
 			size_t idx;
-			std::list<std::shared_ptr<LASPoint> > pts;
+			std::list<LASPoint> pts;
 			while(m_running) {
 				if(!m_bq.pop(&idx))
 					continue;
-				//g_debug(" -- out " << idx << "; " << m_bq.size() << "; " << std::this_thread::get_id());
+				g_debug(" -- out " << idx);// << "; " << std::this_thread::get_id());
 				pts.clear();
 				{
 					std::unique_lock<std::mutex> lk(m_cmtx);
@@ -274,13 +274,12 @@ namespace geotools {
 			g_debug(" -- streaming points");
 			LASPoint pt;
 			while(ps.next(pt, &finalIdx)) {
-				std::shared_ptr<LASPoint> up(new LASPoint(pt));
 				{
 					std::unique_lock<std::mutex> lk(m_cmtx);
-					m_cache[ps.toIdx(pt)].push_back(up);
+					m_cache[ps.toIdx(pt)].push_back(pt);
 				}
 				if(finalIdx) {
-					//g_debug(" -- in " << finalIdx);
+					g_debug(" -- in " << finalIdx);
 					m_bq.push(finalIdx);
 				}
 			}

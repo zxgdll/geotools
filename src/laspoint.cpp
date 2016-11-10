@@ -119,6 +119,111 @@ void LASPoint::read(std::FILE *str) {
 	read(buffer.buf);
 }
 
+void LASPoint::readLAS0(char *buf) {
+		int32_t xx, yy, zz;
+		uint8_t props, cprops;
+		xx        = *((int32_t *) buf);  buf += sizeof(int32_t);
+		yy        = *((int32_t *) buf);  buf += sizeof(int32_t);
+		zz        = *((int32_t *) buf);  buf += sizeof(int32_t);
+		intensity = *((uint16_t *) buf); buf += sizeof(uint16_t);
+		props     = *((uint8_t *) buf);  buf += sizeof(uint8_t);
+		cprops    = *((uint8_t *) buf);  buf += sizeof(uint8_t);
+		scanAngle = *((int8_t *) buf);   buf += sizeof(int8_t);
+		userData  = *((uint8_t *) buf);  buf += sizeof(uint8_t);
+		sourceId  = *((uint16_t *) buf); buf += sizeof(uint16_t);
+		x = las_scaleX * xx;
+		y = las_scaleY * yy;
+		z = las_scaleZ * zz;
+		returnNum = props & 6;
+		numReturns = (props >> 3) & 6;
+		scanDir = ((props >> 6) & 1);
+		isEdge = ((props >> 7) & 1) == 1;
+		cls = cprops & 31;
+		clsFlags = cprops >> 5;	
+}
+
+void LASPoint::readLAS1(char *buf) {
+	gpsTime = *((double *) buf); buf += sizeof(double);	
+}
+
+void LASPoint::readLAS2(char *buf) {
+	red   = *((uint16_t *) buf); buf += sizeof(uint16_t);
+	green = *((uint16_t *) buf); buf += sizeof(uint16_t);
+	blue  = *((uint16_t *) buf); buf += sizeof(uint16_t);
+}
+
+void LASPoint::readLAS8(char *buf) {
+	nir   = *((uint16_t *) buf); buf += sizeof(uint16_t);
+}
+
+void LASPoint::readLAS6(char *buf) {
+		int32_t xx, yy, zz;
+		uint8_t props, cprops;
+		xx        = *((int32_t *) buf);  buf += sizeof(int32_t);
+		yy        = *((int32_t *) buf);  buf += sizeof(int32_t);
+		zz        = *((int32_t *) buf);  buf += sizeof(int32_t);
+		intensity = *((uint16_t *) buf); buf += sizeof(uint16_t);
+		props     = *((uint8_t *) buf);  buf += sizeof(uint8_t);
+		cprops    = *((uint8_t *) buf);  buf += sizeof(uint8_t);
+		cls       = *((uint8_t *) buf);  buf += sizeof(uint8_t);
+		userData  = *((uint8_t *) buf);  buf += sizeof(uint8_t);
+		scanAngle = *((int16_t *) buf);  buf += sizeof(int16_t);
+		sourceId  = *((uint16_t *) buf); buf += sizeof(uint16_t);
+		gpsTime   = *((double *) buf);   buf += sizeof(double);
+		x = las_scaleX * xx;
+		y = las_scaleY * yy;
+		z = las_scaleZ * zz;
+		returnNum = props & 15;
+		numReturns = (props >> 4) & 15;
+		clsFlags = cprops & 15;	
+		channel = (cprops >> 4) & 3;
+		scanDir = ((cprops >> 6) & 1);
+		isEdge = ((cprops >> 7) & 1) == 1;
+
+}
+
+void LASPoint::readLAS(char *buf, uint8_t format) {
+	switch(format) {
+	case 0:
+		readLAS0(buf);
+		break;
+	case 1:
+		readLAS0(buf);
+		readLAS1(buf);
+		break;
+	case 2:
+		readLAS0(buf);
+		readLAS2(buf);
+		break;
+	case 3:
+		readLAS0(buf);
+		readLAS1(buf);
+		readLAS2(buf);
+		break;
+	case 6:
+		readLAS6(buf);
+		break;
+	case 7:
+		readLAS6(buf);
+		readLAS2(buf);
+		break;
+	case 8:
+		readLAS6(buf);
+		readLAS2(buf);
+		readLAS8(buf);
+		break;
+	case 4:
+	case 5:
+	case 9:
+	case 10:
+		g_runerr("Waveform not implemented.");
+		break;
+	default:
+		g_runerr("Invalid format " << format);
+		break;
+	}
+}
+
 void LASPoint::write(std::FILE *str) {
 	Buffer buffer(LASPoint::dataSize());
 	write(buffer.buf);

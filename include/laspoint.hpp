@@ -26,6 +26,12 @@ namespace geotools {
 			// LASPoint in memory or on disc.
 			const static uint64_t m_dataSize = 20;
 
+			void readLAS0(char *buf);
+			void readLAS1(char *buf);
+			void readLAS2(char *buf);
+			void readLAS6(char *buf);
+			void readLAS8(char *buf);
+
 		public:
 
 			double x, y, z;
@@ -33,8 +39,16 @@ namespace geotools {
 			uint16_t returnNum, numReturns;
 			uint16_t scanDirection;
 			uint8_t cls;
+			uint8_t clsFlags;
 			int8_t scanAngle;
-
+			uint8_t scanDir;
+			bool isEdge;
+			uint8_t red, green, blue, nir;
+			uint8_t channel;
+			double gpsTime;
+			uint16_t sourceId;
+			uint16_t userData;
+			
 			LASPoint();
 
 			LASPoint(const liblas::Point &pt);
@@ -61,6 +75,8 @@ namespace geotools {
 			void write(std::FILE *str);
 
 			void read(std::FILE *str);
+
+			void readLAS(char *buf, uint8_t format);
 
 			void write(void *str) const;
 

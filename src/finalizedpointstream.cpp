@@ -28,6 +28,7 @@ void FinalizedPointStream::init() {
 	m_pointCount = 0;
 	m_fileIdx = 0;
 
+	/*
 	liblas::ReaderFactory rf;
 	Bounds bounds;
 	for(const std::string &file : m_files) {
@@ -58,7 +59,27 @@ void FinalizedPointStream::init() {
 			++m_pointCount;
 		}
 	}
+	*/
 
+	for(const std::string &file : m_files) {
+		LASReader r(file);
+		m_bounds.extend(r.bounds());
+		m_pointCount += r.pointCount();
+	}
+
+	m_cells.reset(new MemRaster<uint32_t>(cols(), rows(), true));
+	m_cells->fill(0);
+
+	for(const std::string &file : m_files) {
+		LASReader r(file);
+		LASPoint pt;
+		while(r.next(pt)) {
+			size_t idx = toIdx(pt);
+			m_cells->set(idx, m_cells->get(idx) + 1);
+		}
+	}
+	m_bounds.snap(m_cellSize);
+	g_debug(" -- bounds " << m_bounds.print());
 	g_debug(" -- finished initialization")
 } 
 
@@ -71,6 +92,7 @@ const Bounds& FinalizedPointStream::bounds() const {
 }
 
 bool FinalizedPointStream::next(LASPoint &pt, size_t *finalIdx) {
+	/*
 	if(m_fileIdx >= m_files.size())
 		return false;
 	if(!m_reader.get()) {
@@ -90,6 +112,33 @@ bool FinalizedPointStream::next(LASPoint &pt, size_t *finalIdx) {
 			return false;
 	}
 	pt.update(m_reader->GetPoint());
+	size_t idx = toIdx(pt);
+	uint32_t count = m_cells->get(idx);
+	if(count == 1) {
+		m_cells->set(idx, 0);
+		*finalIdx = idx;
+	} else if(count > 1) {
+		m_cells->set(idx, count - 1);
+		*finalIdx = 0;
+	} else {
+		g_runerr("Illegal count.");
+	}
+	return true;
+	*/
+	if(m_fileIdx >= m_files.size())
+		return false;
+	if(!m_reader.get()) {
+		g_debug(" -- reading file " << m_files[m_fileIdx]);
+		m_reader.reset(new LASReader(m_files[m_fileIdx]));
+	}
+	if(!m_reader->next(pt)) {
+		m_reader.release();
+		if(++m_fileIdx >= m_files.size())
+			return false;
+		m_reader.reset(new LASReader(m_files[m_fileIdx]));
+		if(!m_reader->next(pt))
+			return false;
+	}
 	size_t idx = toIdx(pt);
 	uint32_t count = m_cells->get(idx);
 	if(count == 1) {
