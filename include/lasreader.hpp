@@ -41,54 +41,60 @@ private:
 	std::unique_ptr<Buffer> m_buf;
 	std::queue<LASPoint> m_pts;
 
+	void _read(void *buf, size_t l1, size_t l2, std::FILE *f) {
+		if(!std::fread(buf, l1, l2, f))
+			g_runerr("Failed to read.");
+	}
+	
 	void load() {
 		m_f = std::fopen(m_file.c_str(), "rb");
 		if(!m_f)
 			g_runerr("Failed to open " << m_file);
 
 		std::fseek(m_f, 4, SEEK_SET);
-		std::fread((void *) &m_sourceId, sizeof(uint16_t), 1, m_f);
+		_read((void *) &m_sourceId, sizeof(uint16_t), 1, m_f);
 
 		std::fseek(m_f, 24, SEEK_SET);
 		char maj, min;
-		std::fread((void *) &maj, sizeof(char), 1, m_f);
-		std::fread((void *) &min, sizeof(char), 1, m_f);
+		_read((void *) &maj, sizeof(char), 1, m_f);
+		_read((void *) &min, sizeof(char), 1, m_f);
 		//m_version = "" + maj + "." + min;
 
 		std::fseek(m_f, 94, SEEK_SET);
-		std::fread((void *) &m_headerSize, sizeof(uint16_t), 1, m_f);
+		_read((void *) &m_headerSize, sizeof(uint16_t), 1, m_f);
 	
 		std::fseek(m_f, 96, SEEK_SET);
-		std::fread((void *) &m_offset, sizeof(uint32_t), 1, m_f);
+		_read((void *) &m_offset, sizeof(uint32_t), 1, m_f);
 
 		std::fseek(m_f, 104, SEEK_SET);
-		std::fread((void *) &m_pointFormat, sizeof(uint8_t), 1, m_f);
-		std::fread((void *) &m_pointLength, sizeof(uint16_t), 1, m_f);
+		_read((void *) &m_pointFormat, sizeof(uint8_t), 1, m_f);
+		_read((void *) &m_pointLength, sizeof(uint16_t), 1, m_f);
 
 		uint32_t pc, pcbr[5];
-		std::fread((void *) &pc, sizeof(uint32_t), 1, m_f);
-		std::fread((void *) &pcbr, 5 * sizeof(uint32_t), 1, m_f);
+		_read((void *) &pc, sizeof(uint32_t), 1, m_f);
+		_read((void *) &pcbr, 5 * sizeof(uint32_t), 1, m_f);
 		m_pointCount = pc;
 		for(int i = 0; i < 5; ++i)
 			m_pointCountByReturn[i] = pcbr[i];
 
-		std::fread((void *) &m_xScale, sizeof(double), 1, m_f);
-		std::fread((void *) &m_yScale, sizeof(double), 1, m_f);
-		std::fread((void *) &m_zScale, sizeof(double), 1, m_f);
+		_read((void *) &m_xScale, sizeof(double), 1, m_f);
+		_read((void *) &m_yScale, sizeof(double), 1, m_f);
+		_read((void *) &m_zScale, sizeof(double), 1, m_f);
 
-		std::fread((void *) &m_xOffset, sizeof(double), 1, m_f);
-		std::fread((void *) &m_yOffset, sizeof(double), 1, m_f);
-		std::fread((void *) &m_zOffset, sizeof(double), 1, m_f);
+		_read((void *) &m_xOffset, sizeof(double), 1, m_f);
+		_read((void *) &m_yOffset, sizeof(double), 1, m_f);
+		_read((void *) &m_zOffset, sizeof(double), 1, m_f);
 
-		std::fread((void *) &m_xMax, sizeof(double), 1, m_f);
-		std::fread((void *) &m_xMin, sizeof(double), 1, m_f);
-		std::fread((void *) &m_yMax, sizeof(double), 1, m_f);
-		std::fread((void *) &m_yMin, sizeof(double), 1, m_f);
-		std::fread((void *) &m_zMax, sizeof(double), 1, m_f);
-		std::fread((void *) &m_zMin, sizeof(double), 1, m_f);
+		_read((void *) &m_xMax, sizeof(double), 1, m_f);
+		_read((void *) &m_xMin, sizeof(double), 1, m_f);
+		_read((void *) &m_yMax, sizeof(double), 1, m_f);
+		_read((void *) &m_yMin, sizeof(double), 1, m_f);
+		_read((void *) &m_zMax, sizeof(double), 1, m_f);
+		_read((void *) &m_zMin, sizeof(double), 1, m_f);
 
 		// TODO: Extended point count.
 
+		//g_debug(" -- " << m_file << " has " << m_pointCount << " points");
 		LASPoint::setScale(m_xScale, m_yScale, m_zScale);
 		reset();
 	}
@@ -103,11 +109,12 @@ public:
 	~LASReader() {
 		if(m_f)
 			std::fclose(m_f);
-		m_buf.release();
+		if(m_buf.get())
+			delete m_buf.release();
 	}
 
 	size_t m_batchSize;
-	size_t BATCH_SIZE = 100000;
+	size_t BATCH_SIZE = 1000000;
 
 	void reset() {
 		m_curPoint = 0;
@@ -118,9 +125,12 @@ public:
 		if(!m_f || m_curPoint >= m_pointCount) 
 			return false;
 		m_batchSize = g_min(BATCH_SIZE, m_pointCount - m_curPoint);
+		if(m_buf.get())
+			delete m_buf.release();
 		m_buf.reset(new Buffer(m_batchSize * m_pointLength));
-		g_debug(" -- loading " << m_batchSize << " points");
-		std::fread((void *) m_buf->buf, m_batchSize * m_pointLength, 1, m_f);
+		//g_debug(" -- loading " << m_batchSize << " points");
+		_read((void *) m_buf->buf, m_batchSize * m_pointLength, 1, m_f);
+
 		return true;
 	}
 

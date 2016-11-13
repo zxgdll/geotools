@@ -7,6 +7,9 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <condition_variable>
+#include <mutex>
+#include <queue>
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -16,7 +19,50 @@ namespace geotools {
 
 	namespace util {
 
-
+		template <class T>
+		class blocking_queue {
+		private:
+			std::queue<T> m_q;
+			std::condition_variable m_c;
+			std::mutex m_m;
+		public:
+			bool pop(T *idx) {
+				bool ret = false;
+				{
+					std::unique_lock<std::mutex> lk(m_m);
+					m_c.wait(lk);
+					if(!m_q.empty()) {
+						*idx = m_q.front();
+						m_q.pop();
+						ret = true;
+					}
+				}
+				return ret;
+			}
+			void push(T idx) {
+				{
+					std::lock_guard<std::mutex> lk(m_m);
+					m_q.push(idx);
+				}
+				m_c.notify_one();
+			}
+			size_t size() {
+				std::lock_guard<std::mutex> lk(m_m);
+				return m_q.size();
+			}
+			bool empty() {
+				std::lock_guard<std::mutex> lk(m_m);
+				return m_q.empty();
+			}
+			void flush() {
+				while(!empty())
+					m_c.notify_one();
+			}
+			void finish() {
+				m_c.notify_all();
+			}
+		};
+		
 		// Provides access to an allocated buffer
 		// which will be safely disposed of.
 		class Buffer {

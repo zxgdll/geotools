@@ -28,49 +28,18 @@ void FinalizedPointStream::init() {
 	m_pointCount = 0;
 	m_fileIdx = 0;
 
-	/*
-	liblas::ReaderFactory rf;
-	Bounds bounds;
-	for(const std::string &file : m_files) {
-		std::ifstream str(file.c_str(), std::ios::binary);
-		liblas::Reader r = rf.CreateWithStream(str);
-		liblas::Header h = r.GetHeader();
-		bounds.collapse();
-		if(!LasUtil::computeLasBounds(h, bounds))
-			LasUtil::computeLasBounds(r, bounds);
-		m_bounds.extend(bounds);
-	}
-	m_bounds.snap(m_cellSize);
-	g_debug(" -- bounds " << m_bounds.print());
-
-	m_cells.reset(new MemRaster<uint32_t>(cols(), rows(), true));
-	m_cells->fill(0);
-
-	for(const std::string &file : m_files) {
-		g_debug(" -- reading file " << file);
-		std::ifstream str(file.c_str(), std::ios::binary);
-		liblas::Reader r(str);
-		liblas::Header h = r.GetHeader();
-		LASPoint pt;
-		while(r.ReadNextPoint()) {
-			pt.update(r.GetPoint());
-			size_t idx = toIdx(pt);
-			m_cells->set(idx, m_cells->get(idx) + 1);
-			++m_pointCount;
-		}
-	}
-	*/
-
 	for(const std::string &file : m_files) {
 		LASReader r(file);
 		m_bounds.extend(r.bounds());
 		m_pointCount += r.pointCount();
 	}
+	m_bounds.snap(m_cellSize);
 
 	m_cells.reset(new MemRaster<uint32_t>(cols(), rows(), true));
 	m_cells->fill(0);
 
 	for(const std::string &file : m_files) {
+		g_debug(" -- counting " << file);
 		LASReader r(file);
 		LASPoint pt;
 		while(r.next(pt)) {
@@ -78,7 +47,6 @@ void FinalizedPointStream::init() {
 			m_cells->set(idx, m_cells->get(idx) + 1);
 		}
 	}
-	m_bounds.snap(m_cellSize);
 	g_debug(" -- bounds " << m_bounds.print());
 	g_debug(" -- finished initialization")
 } 
@@ -92,65 +60,29 @@ const Bounds& FinalizedPointStream::bounds() const {
 }
 
 bool FinalizedPointStream::next(LASPoint &pt, size_t *finalIdx) {
-	/*
-	if(m_fileIdx >= m_files.size())
-		return false;
 	if(!m_reader.get()) {
-		g_debug(" -- reading file " << m_files[m_fileIdx]);
-		m_instr.reset(new std::ifstream(m_files[m_fileIdx].c_str(), std::ios::binary));
-		m_reader.reset(new liblas::Reader(*m_instr));
-	}
-	if(!m_reader->ReadNextPoint()) {
-		delete m_reader.release();
-		delete m_instr.release();
-		if(++m_fileIdx >= m_files.size())
-			return false;
-		g_debug(" -- reading file " << m_files[m_fileIdx]);
-		m_instr.reset(new std::ifstream(m_files[m_fileIdx].c_str(), std::ios::binary));
-		m_reader.reset(new liblas::Reader(*m_instr));
-		if(!m_reader->ReadNextPoint())
-			return false;
-	}
-	pt.update(m_reader->GetPoint());
-	size_t idx = toIdx(pt);
-	uint32_t count = m_cells->get(idx);
-	if(count == 1) {
-		m_cells->set(idx, 0);
-		*finalIdx = idx;
-	} else if(count > 1) {
-		m_cells->set(idx, count - 1);
-		*finalIdx = 0;
-	} else {
-		g_runerr("Illegal count.");
-	}
-	return true;
-	*/
-	if(m_fileIdx >= m_files.size())
-		return false;
-	if(!m_reader.get()) {
-		g_debug(" -- reading file " << m_files[m_fileIdx]);
+		g_debug(" -- reading file 1 " << m_files[m_fileIdx]);
 		m_reader.reset(new LASReader(m_files[m_fileIdx]));
+		++m_fileIdx;
 	}
 	if(!m_reader->next(pt)) {
-		m_reader.release();
-		if(++m_fileIdx >= m_files.size())
+		delete m_reader.release();
+		if(m_fileIdx >= m_files.size())
 			return false;
+		g_debug(" -- reading file 2 " << m_files[m_fileIdx]);
 		m_reader.reset(new LASReader(m_files[m_fileIdx]));
+		++m_fileIdx;
 		if(!m_reader->next(pt))
 			return false;
 	}
 	size_t idx = toIdx(pt);
 	uint32_t count = m_cells->get(idx);
-	if(count == 1) {
-		m_cells->set(idx, 0);
-		*finalIdx = idx;
-	} else if(count > 1) {
+	if(count > 0) {
 		m_cells->set(idx, count - 1);
-		*finalIdx = 0;
-	} else {
-		g_runerr("Illegal count.");
+		*finalIdx = count == 1 ? idx : 0;
+		return true;
 	}
-	return true;
+	return false;
 }
 
 size_t FinalizedPointStream::cols() const {

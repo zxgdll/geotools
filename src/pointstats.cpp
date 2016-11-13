@@ -191,25 +191,48 @@ namespace geotools {
 			ps->runner();
 		}
 
+		PointStats::PointStats() {
+		}
+
+		PointStats::~PointStats() {
+		}
+
 		void PointStats::runner() {
 			size_t idx;
-			std::list<LASPoint> pts;
-			while(m_running) {
-				if(!m_bq.pop(&idx))
-					continue;
+			std::list<LASPoint*> pts;
+			while(m_running || !m_bq.empty()) {
+				{
+					std::unique_lock<std::mutex> lk(m_qmtx);
+					m_cdn.wait(lk);
+					if(m_bq.empty())
+						continue;
+					idx = m_bq.front();
+					m_bq.pop();
+				}
+
 				{
 					std::unique_lock<std::mutex> lk(m_cmtx);
 					pts.assign(m_cache[idx].begin(), m_cache[idx].end());
 					m_cache.erase(idx);
+					/*
+					int cnt = 0;
+					for(const auto &it : m_cache)
+						cnt += it.second.size();
+					g_debug(" -- cache size " << cnt);
+					*/
 				}
+
 				if(!pts.empty()) {
 					for(size_t i = 0; i < m_computers.size(); ++i) {
 						std::unique_lock<std::mutex> flk(*(m_mtx[i].get()));
 						m_mem[i]->set(idx, m_computers[i]->compute(pts));
 					}
+					for(LASPoint *pt : pts)
+						delete pt;
 					pts.clear();
 				}
-			}			
+			}	
+			g_debug(" -- exit thread");		
 		}	
 			
 		void PointStats::pointstats(const PointStatsConfig &config, const Callbacks *callbacks) {
@@ -222,8 +245,31 @@ namespace geotools {
 		 		g_argerr("Run with >=1 threads.");
 		 	}
 
-			// Initialize the point stream; it expects a vector. 
+		 	class FileSorter {
+		 	private:
+		 		double m_colSize;
+		 		double m_rowSize;
+		 	public:
+		 		FileSorter(double colSize, double rowSize) : 
+		 			m_colSize(colSize), m_rowSize(rowSize) {
+		 		}
+		 		bool operator()(const std::string &a, const std::string &b) {
+		 			LASReader ar(a);
+		 			LASReader br(b);
+		 			Bounds ab = ar.bounds();
+		 			Bounds bb = br.bounds();
+		 			int idxa = ((int) (ab.miny() / m_rowSize)) * ((int) (ab.width() / m_colSize)) + ((int) (ab.minx() / m_colSize));
+		 			int idxb = ((int) (bb.miny() / m_rowSize)) * ((int) (bb.width() / m_colSize)) + ((int) (bb.minx() / m_colSize));
+		 			return idxa < idxb;
+		 		}
+		 	};
+
+		 	// Initialize and spatially sort the file list.
+		 	FileSorter fileSorter(config.resolution, -config.resolution);
 			std::vector<std::string> files(config.sourceFiles.begin(), config.sourceFiles.end());
+			std::sort(files.begin(), files.end(), fileSorter);
+
+			// Initialize the point stream; it expects a vector. 
 			FinalizedPointStream ps(files, g_abs(config.resolution));
 			Bounds bounds = ps.bounds();
 			g_debug(" -- pointstats - work bounds: " << bounds.print() << "; " << ps.cols() << "x" << ps.rows());
@@ -274,15 +320,18 @@ namespace geotools {
 			while(ps.next(pt, &finalIdx)) {
 				{
 					std::unique_lock<std::mutex> lk(m_cmtx);
-					m_cache[ps.toIdx(pt)].push_back(pt);
+					m_cache[ps.toIdx(pt)].push_back(new LASPoint(pt));
 				}
-				if(finalIdx)
+				if(finalIdx) {
+					std::unique_lock<std::mutex> lk(m_qmtx);
 					m_bq.push(finalIdx);
+					m_cdn.notify_one();
+				}
 			}
 
-			m_bq.flush();
 			m_running = false;
-			m_bq.finish();
+			while(!m_bq.empty())
+				m_cdn.notify_one();
 			g_debug("done");
 
 			// Shut down and join the runners.

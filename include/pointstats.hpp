@@ -123,49 +123,6 @@ namespace geotools {
 
 		};
 
-		class blocking_queue {
-		private:
-			std::queue<size_t> m_q;
-			std::condition_variable m_c;
-			std::mutex m_m;
-		public:
-			bool pop(size_t *idx) {
-				bool ret = false;
-				{
-					std::unique_lock<std::mutex> lk(m_m);
-					m_c.wait(lk);
-					if(!m_q.empty()) {
-						*idx = m_q.front();
-						m_q.pop();
-						ret = true;
-					}
-				}
-				return ret;
-			}
-			void push(size_t idx) {
-				{
-					std::lock_guard<std::mutex> lk(m_m);
-					m_q.push(idx);
-				}
-				m_c.notify_one();
-			}
-			size_t size() {
-				std::lock_guard<std::mutex> lk(m_m);
-				return m_q.size();
-			}
-			bool empty() {
-				std::lock_guard<std::mutex> lk(m_m);
-				return m_q.empty();
-			}
-			void flush() {
-				while(!empty())
-					m_c.notify_one();
-			}
-			void finish() {
-				m_c.notify_all();
-			}
-		};
-
 		class PointStats {
 		private:
 			std::mutex m_cmtx;
@@ -173,13 +130,13 @@ namespace geotools {
 			std::condition_variable m_cdn;
 
 			bool m_running;
-			std::unordered_map<size_t, std::list<geotools::las::LASPoint> > m_cache;
+			std::unordered_map<size_t, std::list<geotools::las::LASPoint*> > m_cache;
 			std::queue<size_t> m_idxq;
 			std::vector<std::unique_ptr<geotools::point::stats::CellStats> > m_computers;
 			std::vector<std::unique_ptr<geotools::raster::MemRaster<float> > > m_mem;
 			std::vector<std::unique_ptr<std::mutex> > m_mtx;
 			std::unique_ptr<geotools::las::FinalizedPointStream> m_ps;
-			blocking_queue m_bq;
+			std::queue<size_t> m_bq;
 
 			/**
 			 * Check the configuration for validity. 
@@ -197,6 +154,10 @@ namespace geotools {
 				std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount);
 
 		public:
+
+			PointStats();
+
+			~PointStats();
 
 			/**
 			 * Runs the compute loop. Inteded to be used by a thread.

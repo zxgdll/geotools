@@ -142,13 +142,13 @@ T Grid<T>::variance() {
 }
 
 template <class T>
-std::vector<int> Grid<T>::floodFill(int col, int row, T target, T fill) {
+std::vector<int32_t> Grid<T>::floodFill(int col, int row, T target, T fill) {
 	TargetOperator<T> op(target);
 	return floodFill(col, row, op, *this, fill);
 }
 
 template <class T>
-std::vector<int> Grid<T>::floodFill(int col, int row, FillOperator<T> &op, T fill) {
+std::vector<int32_t> Grid<T>::floodFill(int col, int row, FillOperator<T> &op, T fill) {
 	return floodFill(col, row, op, *this, fill);
 }
 
@@ -735,7 +735,7 @@ BlockCache<T>::~BlockCache() {
 
 // Implementations for Raster
 template <class T>
-GDALDataType Raster<T>::getType(unsigned long v) {
+GDALDataType Raster<T>::getType(uint64_t v) {
 	(void) v;
 	g_runerr("Raster with 64 bit integral type requested. Not implemented.");
 }
@@ -759,7 +759,7 @@ GDALDataType Raster<T>::getType(float v) {
 }
 
 template <class T>
-GDALDataType Raster<T>::getType(unsigned int v) {
+GDALDataType Raster<T>::getType(uint32_t v) {
 	(void) v;
 	return GDT_UInt32;
 }
@@ -771,7 +771,7 @@ GDALDataType Raster<T>::getType(int v) {
 }
 
 template <class T>
-GDALDataType Raster<T>::getType(unsigned short v) {
+GDALDataType Raster<T>::getType(uint16_t v) {
 	(void) v;
 	return GDT_UInt16;
 }
@@ -783,7 +783,7 @@ GDALDataType Raster<T>::getType(short v) {
 }
 
 template <class T>
-GDALDataType Raster<T>::getType(unsigned char v) {
+GDALDataType Raster<T>::getType(uint8_t v) {
 	(void) v;
 	return GDT_Byte;
 }
@@ -1368,36 +1368,37 @@ Raster<T>::~Raster() {
 
 template class geotools::raster::Grid<float>;
 template class geotools::raster::Grid<double>;
-template class geotools::raster::Grid<unsigned int>;
-template class geotools::raster::Grid<unsigned short>;
-template class geotools::raster::Grid<unsigned char>;
-template class geotools::raster::Grid<unsigned long>;
-template class geotools::raster::Grid<int>;
-template class geotools::raster::Grid<short>;
-template class geotools::raster::Grid<char>;
-template class geotools::raster::Grid<long>;
+template class geotools::raster::Grid<uint64_t>;
+template class geotools::raster::Grid<uint32_t>;
+template class geotools::raster::Grid<uint16_t>;
+template class geotools::raster::Grid<uint8_t>;
+template class geotools::raster::Grid<int64_t>;
+template class geotools::raster::Grid<int32_t>;
+template class geotools::raster::Grid<int16_t>;
+template class geotools::raster::Grid<int8_t>;
 
 template class geotools::raster::Raster<float>;
 template class geotools::raster::Raster<double>;
-template class geotools::raster::Raster<unsigned int>;
-template class geotools::raster::Raster<unsigned short>;
-template class geotools::raster::Raster<unsigned char>;
-template class geotools::raster::Raster<unsigned long>;
-template class geotools::raster::Raster<int>;
-template class geotools::raster::Raster<short>;
-template class geotools::raster::Raster<char>;
-template class geotools::raster::Raster<long>;
+template class geotools::raster::Raster<uint64_t>;
+template class geotools::raster::Raster<uint32_t>;
+template class geotools::raster::Raster<uint16_t>;
+template class geotools::raster::Raster<uint8_t>;
+template class geotools::raster::Raster<int64_t>;
+template class geotools::raster::Raster<int32_t>;
+template class geotools::raster::Raster<int16_t>;
+template class geotools::raster::Raster<int8_t>;
 
 template class geotools::raster::MemRaster<float>;
 template class geotools::raster::MemRaster<double>;
-template class geotools::raster::MemRaster<unsigned int>;
-template class geotools::raster::MemRaster<unsigned short>;
-template class geotools::raster::MemRaster<unsigned char>;
-template class geotools::raster::MemRaster<unsigned long>;
-template class geotools::raster::MemRaster<int>;
-template class geotools::raster::MemRaster<short>;
-template class geotools::raster::MemRaster<char>;
-template class geotools::raster::MemRaster<long>;
+template class geotools::raster::MemRaster<uint64_t>;
+template class geotools::raster::MemRaster<uint32_t>;
+template class geotools::raster::MemRaster<uint16_t>;
+template class geotools::raster::MemRaster<uint8_t>;
+template class geotools::raster::MemRaster<int64_t>;
+template class geotools::raster::MemRaster<int32_t>;
+template class geotools::raster::MemRaster<int16_t>;
+template class geotools::raster::MemRaster<int8_t>;
+
 template class geotools::raster::MemRaster<std::vector<double>*>;
 
 
