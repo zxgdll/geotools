@@ -18,9 +18,6 @@ using namespace geotools::raster;
 using namespace geotools::util;
 using namespace geotools::db;
 
-// Include, rather than link to ensure that template instantiations occur.
-#include "raster.cpp"
-
 namespace geotools {
 
 	namespace trees {

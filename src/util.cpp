@@ -421,9 +421,9 @@ const std::string Util::tmpFile(const std::string &root) {
 	path p = unique_path();
 	if(!root.empty()) {
 		path r(root);
-		return (r / p).native();
+		return (r / p).string();
 	}
-	return p.native();
+	return p.string(); // Windows can have wide string paths.
 }
 
 using namespace boost::interprocess;
