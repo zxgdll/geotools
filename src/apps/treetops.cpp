@@ -5,7 +5,7 @@
 #include "omp.h"
 
 #include "geotools.h"
-#include "trees.hpp"
+#include "treetops.hpp"
 
 void usage() {
 	std::cerr << "Usage: treecrowns <options>\n"
@@ -58,14 +58,11 @@ int main(int argc, char **argv) {
 		std::string crownrast;
 		std::string crownvect;
 		std::string smoothed;
-		int window = 3;
-		double tminHeight = 4;
 		double threshold = 0.65;
 		double radius = 5;
 		double cminHeight = 4;
 		bool d8 = false;
 		int threads = 1;
-		int srid = 0;
 
 		int i = 1;
 		for(; i < argc; ++i) {
@@ -120,6 +117,10 @@ int main(int argc, char **argv) {
 
 		// Create tree tops.
 		tu.treetops(ttConfig);
+
+		// Substitute the input raster for the smoothed raster (because there isn't one)
+		if(ttConfig.smoothedFilename.empty())
+			ttConfig.setSmoothedFilename(ttConfig.inputFilename);
 
 		// Create crowns if desired.
 		if(crowns)

@@ -44,10 +44,12 @@ namespace geotools {
 
 			SQLite(const std::string &file, int type, int srid, 
 				const std::map<std::string, int> &fields) :
-				m_file(file),
 				m_type(type), 
 				m_srid(srid),
-				m_fields(fields) {
+				m_trans(false),
+				m_file(file),
+				m_fields(fields),
+				m_db(nullptr), m_stmt(nullptr), m_cache(nullptr) {
 				init();
 			}
 

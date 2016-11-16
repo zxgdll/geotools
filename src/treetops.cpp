@@ -11,7 +11,7 @@
 
 #include "raster.hpp"
 #include "util.hpp"
-#include "trees.hpp"
+#include "treetops.hpp"
 #include "sqlite.hpp"
 
 using namespace geotools::raster;
@@ -29,16 +29,13 @@ namespace geotools {
 			 */
 			class Node {
 			public:
+				uint64_t id;
 				int c, r, tc, tr;
 				double z, tz;
-				size_t id;
-				Node(size_t id, int c, int r, double z, int tc, int tr, double tz) :
+				Node(uint64_t id, int c, int r, double z, int tc, int tr, double tz) :
 					id(id), 
-					c(c), r(r), z(z), 
-					tc(tc), tr(tr), tz(tz) {
-				}
-				Node(const trees::util::Top *top) :
-					Node(top->id, top->col, top->row, top->z, top->col, top->row, top->z) {
+					c(c), r(r), tc(tc), tr(tr),
+					z(z), tz(tz) {
 				}
 			};
 
@@ -60,7 +57,7 @@ namespace geotools {
 				if(raster.get(cc, cr)  == nd)
 					return false;
 				*max = 0;
-				int mc, mr;
+				int mc = 0, mr = 0;
 				for(int r = row; r < row + window; ++r) {
 					for(int c = col; c < col + window; ++c) {
 						float v = raster.get(c, r);
@@ -114,14 +111,10 @@ using namespace geotools::trees;
 using namespace geotools::trees::util;
 using namespace geotools::trees::config;
 
-Top::Top(size_t id, double x, double y, double z, int col, int row) :
+Top::Top(uint64_t id, double x, double y, double z, int col, int row) :
 	id(id),
-        x(x), y(y), z(z),
-        col(col), row(row) {
-}
-
-Top::Top(const Top &t) :
-	Top(t.id, t.x, t.y, t.z, t.col, t.row) {
+    x(x), y(y), z(z),
+    col(col), row(row) {
 }
 
 Top::Top() :
@@ -129,7 +122,7 @@ Top::Top() :
 }
 
 
-void Trees::smooth(const std::string &inraster, const std::string &outraster, double sigma, double window) {
+void Trees::smooth(const std::string &inraster, const std::string &outraster, double sigma, uint32_t window) {
 	if(inraster.empty())
 		g_argerr("Input raster must be given.");
 	if(outraster.empty())
@@ -139,7 +132,7 @@ void Trees::smooth(const std::string &inraster, const std::string &outraster, do
 	in.smooth(out, sigma, window);
 }
 
-void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<trees::util::Top> > *tops) {
+void Trees::treetops(const TreeTopConfig &config) {
 	
 	config.check();
 	
@@ -149,18 +142,15 @@ void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<tr
 	std::string inputFilename;
 	if(config.performSmoothing) {
 		smooth(config.inputFilename, config.smoothedFilename, config.smoothingSigma, config.smoothingWindow);
-		inputFilename.assign(config.smoothedFilename);
+		inputFilename = config.smoothedFilename;
 	} else {
-		inputFilename.assign(config.inputFilename);
+		inputFilename = config.inputFilename;
 	}
 
 	Util::status(0, 1, "Locating tops... [Preparing input raster.]");
 
 	// Initialize input raster.
 	Raster<float> raster(inputFilename);
-	size_t count = raster.size();
-	int cols = raster.cols();
-	int rows = raster.rows();
 
 	size_t row = 0;	
 	size_t tid = 0;
@@ -177,21 +167,21 @@ void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<tr
 	// This is the size of the cache used by each thread.
 	int cachedRows = g_max(100, (config.rowCacheSize / raster.rows() / sizeof(float))); // TODO: Make row cache configurable.
 	int blockHeight = config.searchWindow + cachedRows;
-	size_t tc = 0;
-	size_t topCount = 0;
+	uint64_t tc = 0;
+	uint64_t topCount = 0;
 
 	#pragma omp parallel
 	{
 		g_debug(" - thread: " << omp_get_thread_num() << "/" << omp_get_num_threads());
-		MemRaster<float> blk(cols, blockHeight);
-		std::map<size_t, std::unique_ptr<Top> > tops0;
+		MemRaster<float> blk(raster.cols(), blockHeight);
+		std::map<uint64_t, std::unique_ptr<Top> > tops0;
 		double max;
-		size_t topCount0 = 0;
+		uint64_t topCount0 = 0;
 		int curRow;
 
 		while(true) {
 			
-			Util::status(row / 2, rows, "Locating tops...");
+			Util::status(row / 2, raster.rows(), "Locating tops...");
 
 			#pragma omp critical(a)
 			{
@@ -199,7 +189,7 @@ void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<tr
 				row += cachedRows;
 			}
 			
-			if(curRow >= rows)
+			if(curRow >= raster.rows())
 				break;
 			
 			blk.nodata(raster.nodata());
@@ -209,13 +199,13 @@ void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<tr
 			}
 			
 			for(int r = 0; r < cachedRows - config.searchWindow; ++r) {
-				for(int c = 0; c < cols - config.searchWindow; ++c) {
-					size_t id = ((size_t) c << 32) | (r + curRow);
+				for(int c = 0; c < raster.cols() - config.searchWindow; ++c) {
+					uint64_t id = ((uint64_t) c << 32) | (r + curRow);
 					if(blk.get(c, r) >= config.minHeight && isMaxCenter(blk, c, r, config.searchWindow, &max)) {
 						std::unique_ptr<Top> t(new Top(
 							++tid, 
-							raster.toX(c + config.searchWindow / 2) + raster.resolutionX() / 2.0, // center of pixel
-							raster.toY(r + curRow + config.searchWindow / 2) + raster.resolutionY() / 2.0, 
+							raster.toCentroidX(c + config.searchWindow / 2), // center of pixel
+							raster.toCentroidY(r + curRow + config.searchWindow / 2), 
 							max,
 							c + config.searchWindow / 2,
 							r + curRow + config.searchWindow / 2
@@ -231,20 +221,18 @@ void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<tr
 		topCount += topCount0; // TODO: Doesn't work for status because there's no barrier here.
 		
 		g_debug(" - writing " << topCount << " tops.");
-
 		Util::status(1, 2, "Locating tops... [Saving to database.]");
 
-		size_t b = 0;
-		size_t batch = db.maxAddPointCount();
+		uint64_t b = 0;
+		uint64_t batch = db.maxAddPointCount();
 
 		std::vector<std::unique_ptr<Point> > points;
 		for(auto it = tops0.begin(); it != tops0.end(); ++it) {
-			Top *t = it->second.get();
-			Point *pt = new Point(t->x, t->y, t->z, {{"id", std::to_string(t->id)}});
-			points.push_back(std::unique_ptr<Point>(pt));
-			// Only add the result if the output vector is defined.
-			if(tops)
-				tops->push_back(std::move(it->second));
+			
+			const std::unique_ptr<Top> &t = it->second;
+			
+			std::unique_ptr<Point> pt(new Point(t->x, t->y, t->z, {{"id", std::to_string(t->id)}}));
+			points.push_back(std::move(pt));
 
 			if(++b % batch == 0 || b == topCount0) {	
 				#pragma omp critical(b)
@@ -252,7 +240,6 @@ void Trees::treetops(const TreeTopConfig &config, std::vector<std::unique_ptr<tr
 					tc += points.size();
 					g_debug("inserting " << points.size() << " points");
 					db.begin();	
-					// Add to the file.
 					db.addPoints(points);
 					db.commit();
 				}
@@ -285,7 +272,7 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 
 	// Initialize the rasters.
 	Raster<float> inrast(inraster);
-	Raster<unsigned int> outrast(crownsrast, 1, inrast);
+	Raster<uint32_t> outrast(crownsrast, 1, inrast);
 	outrast.nodata(0);
 	outrast.fill(0);
 	double nodata = inrast.nodata();
@@ -295,7 +282,7 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 
 	// Initialize the database, get the treetop cound and estimate the buffer size.
 	SQLite db(topsvect);
-	size_t geomCount;
+	uint64_t geomCount;
 	db.getGeomCount(&geomCount);
 	g_debug("Processing " << geomCount << " tree tops.");
 
@@ -325,9 +312,9 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 		Util::status(rowCompleted, inrast.rows(), "Delineating crowns...");
 		
 		// To keep track of visited cells.
-		std::vector<bool> visited((size_t) inrast.cols() * rowHeight);
+		std::vector<bool> visited((uint64_t) inrast.cols() * rowHeight);
 		MemRaster<float> buf(inrast.cols(), rowHeight);
-		MemRaster<unsigned int> blk(inrast.cols(), rowHeight);
+		MemRaster<uint32_t> blk(inrast.cols(), rowHeight);
 		buf.fill(inrast.nodata());
 		blk.fill(0);
 
@@ -368,7 +355,7 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 				if(r < 0 || c < 0 || r >= inrast.rows() || c >= inrast.cols()) continue;
 				if(r - row + bufRows < 0 || r - row  + bufRows >= buf.rows()) continue;
 
-				size_t idx = (size_t) (r - row + bufRows) * inrast.cols() + c;
+				uint64_t idx = (uint64_t) (r - row + bufRows) * inrast.cols() + c;
 				if(visited[idx])
 					continue;
 
