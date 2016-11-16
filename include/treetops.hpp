@@ -185,14 +185,14 @@ namespace geotools {
 			// A simple class for maintaining information about a tree top.
 			class Top {
 			public:
-				size_t id;
+				uint64_t id;
 				double x;
 				double y;
 				double z;
 				int col;
 				int row;
 				
-				Top(size_t id, double x, double y, double z, int col, int row);
+				Top(uint64_t id, double x, double y, double z, int col, int row);
 				
 				Top();
 
