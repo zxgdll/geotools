@@ -975,7 +975,7 @@ int32_t Raster<T>::bandCount() const {
 template <class T>
 std::string Raster<T>::epsg2ProjText(int32_t crs) const {
 	OGRSpatialReference ref;
-	int8_t *wkt;
+	char *wkt;
 	ref.importFromEPSG(crs);
 	ref.exportToWkt(&wkt);
 	return std::string(wkt);
@@ -1225,11 +1225,21 @@ int32_t Raster<T>::toCol(double x) const {
 
 template <class T>
 double Raster<T>::toX(int32_t col) const {
-	return m_trans[0] + col * m_trans[1] + m_trans[1] / 2.0;
+	return m_trans[0] + col * m_trans[1];
 }
 
 template <class T>
 double Raster<T>::toY(int32_t row) const {
+	return m_trans[3] + row * m_trans[5];
+}
+
+template <class T>
+double Raster<T>::toCentroidX(int32_t col) const {
+	return m_trans[0] + col * m_trans[1] + m_trans[1] / 2.0;
+}
+
+template <class T>
+double Raster<T>::toCentroidY(int32_t row) const {
 	return m_trans[3] + row * m_trans[5] + m_trans[5] / 2.0;
 }
 

@@ -685,6 +685,12 @@ namespace geotools {
 			// Returns the y-coordinate for a given row.
 			double toY(int32_t row) const;
 
+			// Returns the x-coordinate for the cell centroid of a given column.
+			double toCentroidX(int32_t col) const;
+
+			// Returns the y-coordinate for the cell centorid of a given row.
+			double toCentroidY(int32_t row) const;
+
 			size_t size() const;
 
 			// Returns true if the pixel is nodata.
