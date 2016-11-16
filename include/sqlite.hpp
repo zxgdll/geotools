@@ -99,8 +99,8 @@ namespace geotools {
 			 * addPoints. This is computed from the parameter limit and the 
 			 * number of fields.
 			 */
-			size_t maxAddPointCount() {
-				size_t c = (size_t) (sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1) / (m_fields.size() + 1));
+			uint64_t maxAddPointCount() {
+				uint64_t c = (uint64_t) (sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1) / (m_fields.size() + 1));
 				g_debug("max point count: " << c << ", " << sqlite3_limit(m_db, SQLITE_LIMIT_VARIABLE_NUMBER, -1));
 				return c;
 			}
@@ -196,12 +196,12 @@ namespace geotools {
 			}
 
 			static int countCallback(void *resultPtr, int cols, char **values, char **colnames) {
-				size_t *result = (size_t *) resultPtr;
+				uint64_t *result = (uint64_t *) resultPtr;
 				*result = atoi(values[0]);
 				return 0;
 			}
 
-			void getGeomCount(size_t *count) {
+			void getGeomCount(uint64_t *count) {
 				char *err;
 				begin();
 				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT COUNT(*) FROM data", 
