@@ -112,18 +112,18 @@ struct with_errno {
 struct can_not_open_file: base, with_file_name, with_errno {
 	void format_error_message() const {
 		if (errno_value != 0)
-			std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+			_snprintf(error_message_buffer, sizeof(error_message_buffer),
 					"Can not open file \"%s\" because \"%s\".", file_name,
 					std::strerror(errno_value));
 		else
-			std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+			_snprintf(error_message_buffer, sizeof(error_message_buffer),
 					"Can not open file \"%s\".", file_name);
 	}
 };
 
 struct line_length_limit_exceeded: base, with_file_name, with_file_line {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Line number %d in file \"%s\" exceeds the maximum length of 2^24-1.",
 				file_line, file_name);
 	}
@@ -367,10 +367,11 @@ private:
 	}
 
 public:
+	/*
 	LineReader() = delete;
 	LineReader(const LineReader&) = delete;
 	LineReader&operator=(const LineReader&) = delete;
-
+	*/
 	explicit LineReader(const char*file_name) {
 		set_file_name(file_name);
 		init(open_file(file_name));
@@ -553,7 +554,7 @@ struct with_column_content {
 
 struct extra_column_in_header: base, with_file_name, with_column_name {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Extra column \"%s\" in header of file \"%s\".", column_name,
 				file_name);
 	}
@@ -561,7 +562,7 @@ struct extra_column_in_header: base, with_file_name, with_column_name {
 
 struct missing_column_in_header: base, with_file_name, with_column_name {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Missing column \"%s\" in header of file \"%s\".", column_name,
 				file_name);
 	}
@@ -569,7 +570,7 @@ struct missing_column_in_header: base, with_file_name, with_column_name {
 
 struct duplicated_column_in_header: base, with_file_name, with_column_name {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Duplicated column \"%s\" in header of file \"%s\".",
 				column_name, file_name);
 	}
@@ -577,14 +578,14 @@ struct duplicated_column_in_header: base, with_file_name, with_column_name {
 
 struct header_missing: base, with_file_name {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Header missing in file \"%s\".", file_name);
 	}
 };
 
 struct too_few_columns: base, with_file_name, with_file_line {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Too few columns in line %d in file \"%s\".", file_line,
 				file_name);
 	}
@@ -592,7 +593,7 @@ struct too_few_columns: base, with_file_name, with_file_line {
 
 struct too_many_columns: base, with_file_name, with_file_line {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Too many columns in line %d in file \"%s\".", file_line,
 				file_name);
 	}
@@ -600,7 +601,7 @@ struct too_many_columns: base, with_file_name, with_file_line {
 
 struct escaped_string_not_closed: base, with_file_name, with_file_line {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"Escaped string was not closed in line %d in file \"%s\".",
 				file_line, file_name);
 	}
@@ -612,7 +613,7 @@ struct integer_must_be_positive: base,
 		with_column_name,
 		with_column_content {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"The integer \"%s\" must be positive or 0 in column \"%s\" in file \"%s\" in line \"%d\".",
 				column_content, column_name, file_name, file_line);
 	}
@@ -624,7 +625,7 @@ struct no_digit: base,
 		with_column_name,
 		with_column_content {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"The integer \"%s\" contains an invalid digit in column \"%s\" in file \"%s\" in line \"%d\".",
 				column_content, column_name, file_name, file_line);
 	}
@@ -636,7 +637,7 @@ struct integer_overflow: base,
 		with_column_name,
 		with_column_content {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"The integer \"%s\" overflows in column \"%s\" in file \"%s\" in line \"%d\".",
 				column_content, column_name, file_name, file_line);
 	}
@@ -648,7 +649,7 @@ struct integer_underflow: base,
 		with_column_name,
 		with_column_content {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"The integer \"%s\" underflows in column \"%s\" in file \"%s\" in line \"%d\".",
 				column_content, column_name, file_name, file_line);
 	}
@@ -660,7 +661,7 @@ struct invalid_single_character: base,
 		with_column_name,
 		with_column_content {
 	void format_error_message() const {
-		std::snprintf(error_message_buffer, sizeof(error_message_buffer),
+		_snprintf(error_message_buffer, sizeof(error_message_buffer),
 				"The content \"%s\" of column \"%s\" in file \"%s\" in line \"%d\" is not a single character.",
 				column_content, column_name, file_name, file_line);
 	}

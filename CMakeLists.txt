@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.1)
 
 set (WITH_GUI false CACHE BOOL "If true, will build the Qt GUI.")
 
@@ -14,22 +14,19 @@ if (${APPLE})
 	set (CMAKE_CXX_COMPILER /usr/local/bin/clang-omp++ CACHE STRING "C++ compiler" FORCE)
 elseif(${WIN32})
 	set (Boost_DEBUG ON)
-	set (BOOST_DIR C:/boost_1_62_0)
-	set (BOOST_INCLUDEDIR C:/boost_1_62_0)
-	set (BOOST_LIBRARYDIR C:/boost_1_62_0/lib64-msvc-14.0)
+	set (BOOST_INCLUDEDIR C:\\OSGeo4W64\\include\\boost-1_56)
+	set (BOOST_LIBRARYDIR C:\\OSGeo4W64\\lib)
 else()
 	set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-long-long -pedantic -frounding-math -D_GLIBCXX_PARALLEL")
+	option(CGAL_DISABLE_ROUNDING_MATH_CHECK "Disable rounding math check in CGAL. This permits Valgrind to run." ON)
 endif()
-
 
 enable_language(C)
 enable_language(CXX)
-set (CMAKE_CXX_STANDARD 14)
+set (CMAKE_CXX_STANDARD 11)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 set (CMAKE_CXX_EXTENSIONS OFF)
 add_compile_options(-std=c++1y)
-
-option(CGAL_DISABLE_ROUNDING_MATH_CHECK "Disable rounding math check in CGAL. This permits Valgrind to run." ON)
 
 find_package (OpenMP)
 find_package (Boost)
@@ -75,19 +72,17 @@ include (CPack)
 project (geotools)
 
 if(${WIN32})
-	# NOTE: boost libs in the osgeo folder should be replaced by versions from
-	# the boost install dir, and renamed to match the osgeo versions.
-	link_directories(C:/boost_1_62_0/lib64-msvc-14.0 C:/OSGeo4W64/lib)
-	include_directories(include C:/boost_1_62_0 C:/OSGeo4W64/include C:/OSGeo4W64/apps/gdal-dev/include)
+	link_directories(C:/OSGeo4W64/lib ${Boost_LIBRARY_DIR})
+	include_directories(include C:/Users/admin/Documents/software/cgal/include C:/OSGeo4W64/include ${Boost_INCLUDE_DIR})
 else()
 	link_directories(${Boost_LIBRARY_DIR} /usr/local/opt/sqlite/lib /usr/local/lib /usr/lib)
 	include_directories(${Boost_INCLUDE_DIR} /usr/local/opt/sqlite/include include /usr/local/include /usr/include /usr/include/x86_64-linux-gnu/qt5 /usr/local/include/gdal /usr/local/include/geos /usr/include/gdal /usr/include/geos)
 endif()
 
-add_library (geotools SHARED src/geotools.cpp)
-add_library (util SHARED src/util.cpp)
+add_library (geotools STATIC src/geotools.cpp)
+add_library (util STATIC src/util.cpp)
 target_link_libraries (util boost_system boost_filesystem)
-add_library (raster SHARED src/raster.cpp)
+add_library (raster STATIC src/raster.cpp)
 target_link_libraries (raster gdal util geotools)
 
 
@@ -109,10 +104,10 @@ else()
 	target_link_libraries (mosaic-app PUBLIC mosaic)
 endif()
 
-add_library (treetops SHARED src/treetops.cpp)
-target_link_libraries (treetops gdal sqlite3 spatialite raster util geotools)
+add_library (treetops STATIC src/treetops.cpp)
+target_link_libraries (treetops boost_system boost_filesystem gdal_i geos_c sqlite3_i spatialite_i raster util geotools)
 add_executable (treetops-app src/apps/treetops.cpp)
-target_link_libraries (treetops-app PUBLIC treetops)
+target_link_libraries (treetops-app PUBLIC treetops boost_filesystem)
 
 
 add_library (spectral SHARED src/spectral.cpp)

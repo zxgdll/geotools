@@ -62,20 +62,22 @@ namespace geotools {
 		template <class T>
 		class Grid {
 		protected:
-			T m_min = 0;
-			T m_max = 0;
-			T m_mean = 0;
-			T m_stddev = 0;
-			T m_variance = 0;
-			T m_sum = 0;
-			int32_t m_count = 0;
-			bool m_stats = false;
+			T m_min;
+			T m_max;
+			T m_mean;
+			T m_stddev;
+			T m_variance;
+			T m_sum;
+			int32_t m_count;
+			bool m_stats;
 
 			// Compute the table of Gaussian weights given the size of the table
 			// and the std. deviation.
 			void gaussianWeights(double *weights, int32_t size, double sigma);
 
 		public:
+			Grid();
+
 			// Return the number of rows in the dataset.
 			virtual int32_t rows() const =0;
 
@@ -133,7 +135,7 @@ namespace geotools {
 			virtual T nodata() const =0;
 
 			// Sets the nodata value.
-			virtual void nodata(T nodata) =0;
+			virtual void nodata(const T nodata) =0;
 
 			// Read data into Grid instance. Will attempt to read a region of the same size
 			// as the given block.
@@ -203,11 +205,11 @@ namespace geotools {
 			template <class U>
 			std::vector<int> floodFill(int32_t col, int32_t row, FillOperator<T> &op, Grid<U> &other, U fill) {
 
-				int32_t minc = cols() + 1;
-				int32_t minr = rows() + 1;
-				int32_t maxc = -1;
-				int32_t maxr = -1;
-				int32_t area = 0;
+				int minc = cols() + 1;
+				int minr = rows() + 1;
+				int maxc = -1;
+				int maxr = -1;
+				int area = 0;
 
 				std::queue<std::unique_ptr<Cell> > q;
 				q.push(std::unique_ptr<Cell>(new Cell(col, row)));
@@ -270,7 +272,13 @@ namespace geotools {
 						}
 					}
 				}
-				return {minc, minr, maxc, maxr, area};
+				std::vector<int> ret(5);
+				ret.push_back(minc);
+				ret.push_back(minr);
+				ret.push_back(maxc); 
+				ret.push_back(maxr); 
+				ret.push_back(area);
+				return ret;
 			}
 
 			// Begin flood fill at the given cell; fill cells equal to the target value.
@@ -381,7 +389,7 @@ namespace geotools {
 
 			T nodata() const;
 
-			void nodata(T nodata);
+			void nodata(const T nodata);
 
 			void readBlock(int32_t col, int32_t row, Grid<T> &block, int32_t dstCol = 0, int32_t dstRow = 0, int32_t xcols = 0, int32_t xrows = 0);
 
@@ -481,15 +489,15 @@ namespace geotools {
 		template <class T>
 		class Raster : public Grid<T> {
 		private:
-			int32_t m_cols, m_rows;			// Raster cols/rows
-			int32_t m_bandn;				// The band number
+			int32_t m_cols, m_rows;		// Raster cols/rows
+			int32_t m_bandn;			// The band number
 			bool m_writable;			// True if the raster is writable
 			GDALDataset *m_ds;			// GDAL dataset
 			GDALRasterBand *m_band;		// GDAL band
 			GDALDataType m_type;		// GDALDataType -- limits the possible template types.
 			T m_nodata;					// Nodata value.
 			double m_trans[6];			// Raster transform
-			bool m_inited = false;		// True if the instance is initialized.
+			bool m_inited;				// True if the instance is initialized.
 			std::string m_filename;		// Raster filename
 			BlockCache<T> m_cache;		// Block cache.
 
@@ -535,7 +543,7 @@ namespace geotools {
 
 			// Create a new raster for writing with a template of a different type.
 			template <class U>
-			Raster(const std::string &filename, int32_t band, const Raster<U> &tpl) : Raster() {
+			Raster(const std::string &filename, int32_t band, const Raster<U> &tpl) {
 			        std::string proj;
 			        tpl.projection(proj);
 			        init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(),
@@ -568,7 +576,7 @@ namespace geotools {
 			        std::string proj;
 			        tpl.projection(proj);
 			        init(filename, band, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(), tpl.resolutionX(),
-			                tpl.resolutionY(), tpl.nodata(), proj);
+			                tpl.resolutionY(), (double) tpl.nodata(), proj);
 			}
 
 			void init(const std::string &filename, int32_t band, const Bounds &bounds, double resolutionX, double resolutionY,
@@ -606,7 +614,7 @@ namespace geotools {
 			// Returns true if the raster is initialized.
 			bool inited() const;
 
-			void fill(T value);
+			void fill(const T value);
 
 			void readBlock(int32_t col, int32_t row, Grid<T> &grd, int32_t dstCol = 0, int32_t dstRow = 0, int32_t xcols = 0, int32_t xrows = 0);
 
@@ -667,7 +675,7 @@ namespace geotools {
 
 			T nodata() const;
 
-			void nodata(T nodata);
+			void nodata(const T nodata);
 
 			int32_t cols() const;
 
@@ -720,11 +728,11 @@ namespace geotools {
 
 			T operator[](size_t idx);
 
-			void set(int32_t col, int32_t row, T v);
+			void set(int32_t col, int32_t row, const T v);
 
-			void set(size_t idx, T v);
+			void set(size_t idx, const T v);
 
-			void set(double x, double y, T v);
+			void set(double x, double y, const T v);
 
 			bool isSquare() const;
 

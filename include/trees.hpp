@@ -18,10 +18,9 @@ namespace geotools {
                         /**
                          * Contains configuration information for performing tree top extraction.
                          */
-                        class TreeTopConfig {
+			class TreeTopConfig {
 				friend class geotools::trees::Trees;
 			public:
-                       // ..protected:
                                 /**
                                  * Set to true to perform smoothing on the input raster.
                                  * This will force a check that the smoothing params are valild.
@@ -99,7 +98,6 @@ namespace geotools {
 				 */
 				int rowCacheSize;
 
-			public:
 				/**
 				 * Build a TreeTopConfig with defaults.
 				 */
@@ -155,6 +153,10 @@ namespace geotools {
 				 */
 				void setOutputFilename(const std::string &filename) {
 					outputFilename.assign(filename);
+				}
+
+				const std::string getOutputFilename() const {
+					return outputFilename;
 				}
 
 				/**
@@ -284,7 +286,7 @@ namespace geotools {
 			 * config     - A TreeTopConfig opject containing running parameters.
 			 * tops       - If not null, this vector is populated with objects representing the tree tops.
 			 */
-			void treetops(const geotools::trees::config::TreeTopConfig &config, std::vector<std::unique_ptr<geotools::trees::util::Top> > *tops = nullptr);
+			DLL_EXPORT void treetops(const geotools::trees::config::TreeTopConfig &config, std::vector<std::unique_ptr<geotools::trees::util::Top> > *tops = nullptr);
 
 			/**
 			 * Performs tree crown delineation using a (preferrably smoothed) input raster and a
@@ -303,7 +305,7 @@ namespace geotools {
 			 * minHeight  - Heights below this value will not be considered.
 			 * d8         - Use D8 search rather than D4.
 			 */
-			void treecrowns(const std::string &inraster, const std::string &topsvect, const std::string &crownsrast, 
+			DLL_EXPORT void treecrowns(const std::string &inraster, const std::string &topsvect, const std::string &crownsrast, 
 				const std::string &crownsvect, double threshold, double radius, double minHeight, bool d8 = false);
 
 		};

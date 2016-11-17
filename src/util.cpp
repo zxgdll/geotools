@@ -8,7 +8,7 @@
 #include <string>
 #include <tuple>
 
-#include "csv.h"
+//#include "csv.h"
 #include "boost/filesystem.hpp"
 
 #include "geotools.h"
@@ -23,20 +23,23 @@ Point::Point(double x, double y, double z) :
 }
 
 Point::Point(double x, double y, double z, const std::map<std::string, std::string> &fields) :
-	Point(x, y, z) {
+	x(x), y(y), z(z) {
 	for(auto it : fields)
 		this->fields[it.first] = it.second;
 }
 
 Point::Point() : 
-	Point(0, 0, 0) {
+	x(0), y(0), z(0) {
 }
 
-Bounds::Bounds() : Bounds(G_DBL_MAX_NEG, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS) {
+Bounds::Bounds() :
+	m_minx(G_DBL_MAX_POS), m_miny(G_DBL_MAX_POS), m_minz(G_DBL_MAX_POS),
+	m_maxx(G_DBL_MAX_NEG), m_maxy(G_DBL_MAX_NEG), m_maxz(G_DBL_MAX_NEG) {
 }
 
 Bounds::Bounds(double minx, double miny, double maxx, double maxy) :
-	Bounds(minx, miny, maxx, maxy, G_DBL_MAX_NEG, G_DBL_MAX_POS) {
+	m_minx(minx), m_miny(miny), m_minz(G_DBL_MAX_NEG),
+	m_maxx(maxx), m_maxy(maxy), m_maxz(G_DBL_MAX_POS) {
 }
 
 Bounds::Bounds(double minx, double miny, double maxx, double maxy, double minz, double maxz) :
@@ -364,20 +367,24 @@ void Util::copyfile(std::string &srcfile, std::string &dstfile) {
  * Load the samples from a csv file. The file must have x, y and z headers.
  */
 void Util::loadXYZSamples(std::string &datafile, std::vector<std::tuple<double, double, double> > &samples) {
+	/*
 	io::CSVReader<3> in(datafile.c_str());
 	in.read_header(io::ignore_extra_column, "x", "y", "z");
 	double x, y, z;
 	while(in.read_row(x, y, z))
 		samples.push_back(std::make_tuple(x, y, z));
+	*/
 }
 
 void Util::loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::string, double, double, double> > &samples) {
+	/*
 	io::CSVReader<4> in(datafile.c_str());
 	in.read_header(io::ignore_extra_column, "id", "x", "y", "z");
 	std::string id;
 	double x, y, z;
 	while(in.read_row(id, x, y, z))
 		samples.push_back(std::make_tuple(id, x, y, z));
+	*/
 }
 
 void Util::status(int step, int of, const std::string &message, bool end) {
