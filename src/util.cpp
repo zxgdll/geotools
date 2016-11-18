@@ -23,20 +23,23 @@ Point::Point(double x, double y, double z) :
 }
 
 Point::Point(double x, double y, double z, const std::map<std::string, std::string> &fields) :
-	Point(x, y, z) {
+	x(x), y(y), z(z) {
 	for(auto it : fields)
 		this->fields[it.first] = it.second;
 }
 
 Point::Point() : 
-	Point(0, 0, 0) {
+	x(0), y(0), z(0) {
 }
 
-Bounds::Bounds() : Bounds(G_DBL_MAX_NEG, G_DBL_MAX_NEG, G_DBL_MAX_POS, G_DBL_MAX_POS, G_DBL_MAX_NEG, G_DBL_MAX_POS) {
+Bounds::Bounds() :
+	m_minx(G_DBL_MAX_POS), m_miny(G_DBL_MAX_POS), m_minz(G_DBL_MAX_POS),
+	m_maxx(G_DBL_MAX_NEG), m_maxy(G_DBL_MAX_NEG), m_maxz(G_DBL_MAX_NEG) {
 }
 
 Bounds::Bounds(double minx, double miny, double maxx, double maxy) :
-	Bounds(minx, miny, maxx, maxy, G_DBL_MAX_NEG, G_DBL_MAX_POS) {
+	m_minx(minx), m_miny(miny), m_minz(G_DBL_MAX_NEG),
+	m_maxx(maxx), m_maxy(maxy), m_maxz(G_DBL_MAX_POS) {
 }
 
 Bounds::Bounds(double minx, double miny, double maxx, double maxy, double minz, double maxz) :
@@ -306,7 +309,7 @@ void Util::splitString(const std::string &str, std::vector<std::string> &lst) {
 }
 
 /**
- * Split a comma-delimited string into a set of unique integers.
+// Split a comma-delimited string into a set of unique integers.
  */
 void Util::intSplit(std::set<int> &values, const char *str) {
 	std::stringstream ss(str);
@@ -324,7 +327,7 @@ void Util::intSplit(std::set<uint8_t> &values, const char *str) {
 }
 
 /**
- * Split a comma-delimited string into a set of unique integers.
+// Split a comma-delimited string into a set of unique integers.
  */
 void Util::intSplit(std::list<int> &values, const char *val) {
 	std::stringstream ss(val);
@@ -334,7 +337,7 @@ void Util::intSplit(std::list<int> &values, const char *val) {
 }
 
 /**
- * Split a comma-delimited string into a set of unique integers.
+// Split a comma-delimited string into a set of unique integers.
  */
 void Util::intSplit(std::vector<int> &values, const char *str) {
 	std::stringstream ss(str);
@@ -344,7 +347,7 @@ void Util::intSplit(std::vector<int> &values, const char *str) {
 }
 
 /**
- * Return true if the integer is in the set, or the set is empty.
+// Return true if the integer is in the set, or the set is empty.
  */
 bool Util::inList(std::set<int> &values, int value) {
 	return values.size() == 0 || values.find(value) != values.end();
@@ -360,9 +363,7 @@ void Util::copyfile(std::string &srcfile, std::string &dstfile) {
 	dst << src.rdbuf();
 }
 
-/**
- * Load the samples from a csv file. The file must have x, y and z headers.
- */
+// Load the samples from a csv file. The file must have x, y and z headers.
 void Util::loadXYZSamples(std::string &datafile, std::vector<std::tuple<double, double, double> > &samples) {
 	io::CSVReader<3> in(datafile.c_str());
 	in.read_header(io::ignore_extra_column, "x", "y", "z");

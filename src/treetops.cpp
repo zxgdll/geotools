@@ -34,8 +34,13 @@ namespace geotools {
 				double z, tz;
 				Node(uint64_t id, int c, int r, double z, int tc, int tr, double tz) :
 					id(id), 
-					c(c), r(r), tc(tc), tr(tr),
-					z(z), tz(tz) {
+					c(c), r(r), z(z), 
+					tc(tc), tr(tr), tz(tz) {
+				}
+				Node(const trees::util::Top *top) :
+					id(top->id),
+					c(top->col), r(top->row), z(top->z),
+					tc(top->col), tr(top->row), tz(top->z) {
 				}
 			};
 
@@ -113,12 +118,14 @@ using namespace geotools::trees::config;
 
 Top::Top(uint64_t id, double x, double y, double z, int col, int row) :
 	id(id),
-    x(x), y(y), z(z),
-    col(col), row(row) {
+	x(x), y(y), z(z),
+	col(col), row(row) {
 }
 
 Top::Top() :
-	Top(0, 0, 0, 0, 0, 0) {
+	id(0),
+	x(0), y(0), z(0),
+	col(0), row(0) {
 }
 
 
@@ -129,7 +136,7 @@ void Trees::smooth(const std::string &inraster, const std::string &outraster, do
 		g_argerr("Output raster must be given.");
 	Raster<float> in(inraster);
 	Raster<float> out(outraster, 1, in);
-	in.smooth(out, sigma, window);
+	in.smooth(out, sigma, (int32_t) window);
 }
 
 void Trees::treetops(const TreeTopConfig &config) {
@@ -158,12 +165,15 @@ void Trees::treetops(const TreeTopConfig &config) {
 	Util::status(0, 1, "Locating tops... [Preparing database.]");	
 
 	// Prepare database.
-	SQLite db(config.outputFilename, SQLite::POINT, config.srid, {{"id", 1}}); // TODO: Get SRID from raster.
+	std::map<std::string, int> fields;
+	fields["id"] = 1;
+	SQLite db(config.getOutputFilename(), SQLite::POINT, config.srid, fields); // TODO: Get SRID from raster.
 	db.makeFast();
 	g_debug("x");
 	db.dropGeomIndex();
 	db.setCacheSize(config.tableCacheSize);
 	db.clear(); // TODO: Faster to delete it and start over.
+
 	// This is the size of the cache used by each thread.
 	int cachedRows = g_max(100, (config.rowCacheSize / raster.rows() / sizeof(float))); // TODO: Make row cache configurable.
 	int blockHeight = config.searchWindow + cachedRows;
@@ -181,11 +191,11 @@ void Trees::treetops(const TreeTopConfig &config) {
 
 		while(true) {
 			
-			Util::status(row / 2, raster.rows(), "Locating tops...");
+			Util::status((int) (row / 2), raster.rows(), "Locating tops...");
 
 			#pragma omp critical(a)
 			{
-				curRow = row;
+				curRow = (int) row;
 				row += cachedRows;
 			}
 			
@@ -228,11 +238,14 @@ void Trees::treetops(const TreeTopConfig &config) {
 
 		std::vector<std::unique_ptr<Point> > points;
 		for(auto it = tops0.begin(); it != tops0.end(); ++it) {
-			
-			const std::unique_ptr<Top> &t = it->second;
-			
-			std::unique_ptr<Point> pt(new Point(t->x, t->y, t->z, {{"id", std::to_string(t->id)}}));
-			points.push_back(std::move(pt));
+
+			Top *t = it->second.get();
+
+			std::map<std::string, std::string> fields;
+			fields["id"] = std::to_string(t->id);
+
+			Point *pt = new Point(t->x, t->y, t->z, fields);
+			points.push_back(std::unique_ptr<Point>(pt));
 
 			if(++b % batch == 0 || b == topCount0) {	
 				#pragma omp critical(b)
@@ -244,7 +257,7 @@ void Trees::treetops(const TreeTopConfig &config) {
 					db.commit();
 				}
 				points.clear();
-				Util::status(tc, topCount, "Locating tops... [Saving to database.]");
+				Util::status((int) tc, (int) topCount, "Locating tops... [Saving to database.]");
 			}
 		}
 	}
@@ -298,9 +311,19 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 	// Build the list of offsets for D8 or D4 search.
 	std::vector<std::pair<int, int> > offsets; // pairs of col, row
 	if(d8) {
-		offsets.assign({{-1, -1}, {0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}});
+		offsets.push_back(std::make_pair(-1, -1));
+		offsets.push_back(std::make_pair(-1, 0));
+		offsets.push_back(std::make_pair(-1, 1));
+		offsets.push_back(std::make_pair(0, -1));
+		offsets.push_back(std::make_pair(0, 1));
+		offsets.push_back(std::make_pair(1, -1));
+		offsets.push_back(std::make_pair(1, 0));
+		offsets.push_back(std::make_pair(1, 1));
 	} else {
-		offsets.assign({{0, -1}, {-1, 0}, {1, 0}, {1, 1}});
+		offsets.push_back(std::make_pair(0, -1));
+		offsets.push_back(std::make_pair(-1, 0));
+		offsets.push_back(std::make_pair(1, 0));
+		offsets.push_back(std::make_pair(0, 1));
 	}
 
 	#pragma omp parallel for
@@ -346,7 +369,7 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 			std::unique_ptr<Node> n = std::move(q.front());
 			q.pop();
 
-			blk.set(n->c, n->r - row + bufRows, n->id);
+			blk.set(n->c, n->r - row + bufRows, (uint32_t) n->id);
 
 			for(const std::pair<int, int> &offset : offsets) {
 				int c = n->c + offset.first;
@@ -361,10 +384,10 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 					continue;
 
 				double v = buf.get(idx);
-				if(v != nodata 													// is not nodata
-					&& v < n->z 												// is less than the neighbouring pixel
-					&& v >= minHeight 											// is greater than the min height
-					&& (v / n->tz) >= threshold 								// is greater than the threshold height
+				if(v != nodata 																		// is not nodata
+					&& v < n->z 																	// is less than the neighbouring pixel
+					&& v >= minHeight 																// is greater than the min height
+					&& (v / n->tz) >= threshold 													// is greater than the threshold height
 					&& std::pow(n->tc - c, 2) + std::pow(n->tr - r, 2) <= std::pow(radius, 2)		// is within the radius
 				) {
 					q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));

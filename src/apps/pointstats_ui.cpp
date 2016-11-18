@@ -21,12 +21,12 @@ void WorkerThread::run() {
 		geotools::point::PointStats l;
 		
 		geotools::point::PointStatsConfig config;
-		config.dstFile = m_parent->m_destFile;
-		config.sourceFiles = m_parent->m_sourceFiles;
+		config.dstFiles.push_back(m_parent->m_destFile);
+		config.sourceFiles.assign(m_parent->m_sourceFiles.begin(), m_parent->m_sourceFiles.end());
 		config.classes = m_parent->m_classes;
 		config.hsrid = m_parent->m_hsrid;
 		config.attribute = m_parent->m_attribute;
-		config.type = m_parent->m_type;
+		config.types.push_back(m_parent->m_type);
 		config.resolution = m_parent->m_resolution;
 		config.bounds = m_bounds;
 		config.angleLimit = m_parent->m_angleLimit;

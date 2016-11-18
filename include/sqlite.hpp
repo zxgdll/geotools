@@ -54,12 +54,19 @@ namespace geotools {
 			}
 
 			SQLite(const std::string &file, int type, int srid) :
-				SQLite(file, type, srid, std::map<std::string, int>()) {
+				m_file(file),
+				m_type(type),
+				m_srid(srid),
+				m_fields(std::map<std::string, int>()) {
+				init();
 			}
 		
 			SQLite(const std::string &file) :
-				SQLite(file, -1, -1, std::map<std::string, int>()) {
-			
+				m_file(file),
+				m_type(-1),
+				m_srid(-1),
+				m_fields(std::map<std::string, int>()) {
+				init();
 			}
 	
 			void clear();
@@ -72,7 +79,7 @@ namespace geotools {
 
 				sqlite3_reset(m_stmt);
 				sqlite3_clear_bindings(m_stmt);
-				sqlite3_bind_text(m_stmt, 1, q.c_str(), q.size(), SQLITE_STATIC);
+				sqlite3_bind_text(m_stmt, 1, q.c_str(), (int) q.size(), SQLITE_STATIC);
 				int i = 1;
 				for(auto it = fields.begin(); it != fields.end(); ++it) {
 					++i;
@@ -84,7 +91,7 @@ namespace geotools {
 						sqlite3_bind_double(m_stmt, i, atof(it->second.c_str()));
 						break;
 					case SQLite::STRING:
-						sqlite3_bind_text(m_stmt, i, it->second.c_str(), it->second.size(), SQLITE_STATIC);
+						sqlite3_bind_text(m_stmt, i, it->second.c_str(), (int) it->second.size(), SQLITE_STATIC);
 						break;
 					}
 				}
@@ -395,7 +402,7 @@ namespace geotools {
 
 			q.assign(ss.str());
 			g_debug("Preparing insert query: " << q);
-			if(SQLITE_OK != sqlite3_prepare_v2(m_db, q.c_str(), q.size(), &m_stmt, NULL))
+			if(SQLITE_OK != sqlite3_prepare_v2(m_db, q.c_str(), (int) q.size(), &m_stmt, NULL))
 				handleError("Failed to prepare insert statement: ");
 
 		}

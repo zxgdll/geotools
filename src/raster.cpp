@@ -2,6 +2,7 @@
 #include <string>
 #include <fstream>
 
+#include <boost/math/special_functions/fpclassify.hpp>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/filesystem.hpp>
@@ -11,7 +12,13 @@
 
 using namespace geotools::util;
 using namespace geotools::raster;
+using namespace boost::math;
 
+#ifdef _MSC_VER
+#define isnan boost::math::isnan
+#else
+#define isnan std::isnan
+#endif
 
 // Implementations for Cell
 Cell::Cell(int32_t col, int32_t row) :
@@ -30,6 +37,9 @@ bool TargetOperator<T>::fill(T value) const {
 	return value == m_match;
 }
 
+template <class T>
+Grid<T>::Grid() : m_min(0), m_max(0), m_mean(0), m_stddev(0), 
+	m_variance(0), m_sum(0), m_count(0), m_stats(false) {}
 
 // Implementations forthe Grid class
 template <class T>
@@ -79,7 +89,7 @@ void Grid<T>::computeStats() {
 	}
 	m_mean = m_sum / m_count;
 	m_variance = s / m_count;
-	m_stddev = std::sqrt(m_variance);
+	m_stddev = (T) std::sqrt(m_variance);
 	m_stats = true;
 }
 
@@ -87,22 +97,22 @@ template <class T>
 void Grid<T>::normalize() {
 	double sum = 0.0;
 	for(size_t i = 0; i < size(); ++i) {
-		double v = get(i);
-		if(v != nodata() && !std::isnan(v))
+		double v = (double) get(i);
+		if(v != nodata() && !isnan(v))
 			sum += v;
 	}
 	double mean = sum / size();
 	sum = 0.0;
 	for(size_t i = 0; i < size(); ++i) {
-		double v = get(i);
-		if(v != nodata() && !std::isnan(v))
+		double v = (double) get(i);
+		if(v != nodata() && !isnan(v))
 			sum += std::pow(v - mean, 2.0);
 	}
 	double stdDev = std::sqrt(sum);
 	for(size_t i = 0; i < size(); ++i) {
-		double v = get(i);
-		if(v != nodata() && !std::isnan(v))
-			set(i, (v - mean) / stdDev);
+		double v = (double) get(i);
+		if(v != nodata() && !isnan(v))
+			set(i, (const T) ((v - mean) / stdDev));
 	}
 }
 
@@ -184,8 +194,8 @@ void Grid<T>::voidFillIDW(double radius, int32_t count, double exp) {
                                 double b = 0.0;
                                 int32_t cnt = 0;
 
-                                for(int32_t r0 = g_max(0, r - rad); r0 < g_min(rows(), r + rad + 1); ++r0) {
-                                        for(int32_t c0 = g_max(0, c - rad); c0 < g_min(cols(), c + rad + 1); ++c0) {
+                                for(int32_t r0 = (int32_t) g_max(0, r - rad); r0 < (int32_t) g_min(rows(), r + rad + 1); ++r0) {
+                                        for(int32_t c0 = (int32_t) g_max(0, c - rad); c0 < (int32_t) g_min(cols(), c + rad + 1); ++c0) {
                                                 double d0 = g_sq((double) c0 - c) + g_sq((double) r0 - r);
                                                 if(d0 <= d && get(c0, r0) != nodata()) {
                                                         double dp = 1.0 / std::pow(d0, exp);
@@ -197,7 +207,7 @@ void Grid<T>::voidFillIDW(double radius, int32_t count, double exp) {
                                 }
 
                                 if(cnt >= count) {
-                                        tmp.set(c, r, a / b);
+                                        tmp.set(c, r, (T) (a / b));
                                         found = true;
                                         break;
                                 }
@@ -231,7 +241,7 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
         int32_t bufRows = g_max((int) 1, g_min(rows(), (int) ((64 * 1024 * 1024) / sizeof(T) / cols())));
         g_debug(" - buffer rows: " << bufRows);
 
-        double nd = nodata();
+        double nd = (double) nodata();
         size_t completed = 0;
 
         #pragma omp parallel for
@@ -241,10 +251,10 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
                 MemRaster<T> strip(cols(), g_min(bufRows, rows() - row));
                 MemRaster<T> smooth(cols(), g_min(bufRows, rows() - row));
                 MemRaster<T> buf(size, size);
-                strip.nodata(nd);
-                strip.fill(nd);
-                smooth.nodata(nd);
-                smooth.fill(nd);
+                strip.nodata((T) nd);
+                strip.fill((const T) nd);
+                smooth.nodata((T) nd);
+                smooth.fill((T) nd);
                 #pragma omp critical(a)
                 {
                         // On the first loop, read from the first row and write to size/2 down
@@ -258,7 +268,7 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
                                 strip.readBlock(c, r, buf);
                                 for(int32_t gr = 0; !foundNodata && gr < size; ++gr) {
                                         for(int32_t gc = 0; !foundNodata && gc < size; ++gc) {
-                                                v = buf.get(gc, gr);
+                                                v = (double) buf.get(gc, gr);
                                                 if(v == nd) {
                                                         foundNodata = true;
                                                 } else {
@@ -267,11 +277,11 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
                                         }
                                 }
                                 if(!foundNodata)
-                                        smooth.set(c + size / 2, r + size / 2, t);
+                                        smooth.set(c + size / 2, r + size / 2, (T) t);
                         }
                         #pragma omp atomic
                         ++completed;
-                        Util::status(completed, rows(), "Smoothing grid...");
+                        Util::status((int) completed, (int) rows(), "Smoothing grid...");
                 }
                 #pragma omp critical(b)
                 {
@@ -302,7 +312,7 @@ MemRaster<T>::MemRaster() :
 }
 
 template <class T>
-MemRaster<T>::MemRaster(int32_t cols, int32_t rows, bool mapped) : MemRaster() {
+MemRaster<T>::MemRaster(int32_t cols, int32_t rows, bool mapped) {
 	init(cols, rows, mapped);
 }
 
@@ -358,6 +368,15 @@ void MemRaster<T>::freeMem() {
 
 template <class T>
 void MemRaster<T>::init(int32_t cols, int32_t rows, bool mapped) {
+
+	m_grid = nullptr;
+	m_cols = -1;
+	m_rows = -1;
+	m_item_dealloc = nullptr;
+	m_nodata = 0;
+	m_mmapped = false;
+	m_size = 0;
+	
 	if(cols <= 0 || rows <= 0)
 		g_argerr("Invalid row or column count.");
 	if(cols != m_cols || rows != m_rows) {
@@ -801,6 +820,8 @@ GDALDataType Raster<T>::getType() {
 
 template <class T>
 T Raster<T>::getDefaultNodata() {
+	return 0;
+	/*
 	switch(getType()) {
 	case GDT_Float32:
 	case GDT_Float64:
@@ -808,6 +829,7 @@ T Raster<T>::getDefaultNodata() {
 	default:
 		return (T) 0;
 	}
+	*/
 }
 
 template <class T>
@@ -816,41 +838,51 @@ Raster<T>::Raster() :
 	m_bandn(1),
 	m_writable(false),
 	m_ds(nullptr), m_band(nullptr),
-	m_type(getType()) {
+	m_type(getType()),
+	m_inited(false) {
 }
 
 template <class T>
-Raster<T>::Raster(const std::string &filename, int32_t band, const Raster<T> &tpl) : Raster() {
+Raster<T>::Raster(const std::string &filename, int32_t band, const Raster<T> &tpl) {
 	init(filename, band, tpl);
 }
 
 template <class T>
 Raster<T>::Raster(const std::string &filename, int32_t band, double minx, double miny, double maxx, double maxy,
-		double resolutionX, double resolutionY, double nodata, const std::string &proj) : Raster() {
+		double resolutionX, double resolutionY, double nodata, const std::string &proj) {
 	init(filename,band,  minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
 }
 
 template <class T>
-Raster<T>::Raster(const std::string &filename, int32_t band, const Bounds &bounds, double resolutionX, double resolutionY, double nodata, int32_t crs) :
-	Raster(filename, band, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(),
-	resolutionX, resolutionY, nodata, crs) {
+Raster<T>::Raster(const std::string &filename, int32_t band, const Bounds &bounds, double resolutionX, double resolutionY, double nodata, int32_t crs) {
+	std::string proj = epsg2ProjText(crs);
+	init(filename, band, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(),
+		resolutionX, resolutionY, nodata, proj);
 }
 
 template <class T>
 Raster<T>::Raster(const std::string &filename, int32_t band, double minx, double miny, double maxx, double maxy,
-		double resolutionX, double resolutionY, double nodata, int32_t crs) : Raster() {
+		double resolutionX, double resolutionY, double nodata, int32_t crs) {
 	std::string proj = epsg2ProjText(crs);
 	init(filename, band, minx, miny, maxx, maxy, resolutionX, resolutionY, nodata, proj);
 }
 
 template <class T>
-Raster<T>::Raster(const std::string &filename, int32_t band, bool writable) : Raster() {
+Raster<T>::Raster(const std::string &filename, int32_t band, bool writable) {
 	init(filename, band, writable);
 }
 
 template <class T>
 void Raster<T>::init(const std::string &filename, int32_t band, const Bounds &bounds, double resolutionX, double resolutionY,
 	double nodata, const std::string &proj) {
+	m_cols = -1;
+	m_rows = -1;
+	m_bandn = 1;
+	m_writable = false;
+	m_ds = nullptr;
+	m_band = nullptr;
+	m_type = getType();
+	m_inited = false;
 	init(filename, band, bounds.minx(), bounds.miny(), bounds.maxx(), bounds.maxy(),
 		resolutionX, resolutionY, nodata, proj);
 }
@@ -860,6 +892,15 @@ void Raster<T>::init(const std::string &filename, int32_t band, double minx, dou
 		double resolutionX, double resolutionY, double nodata, const std::string &proj) {
 
 	g_debug("Raster init: " << filename << ", " << minx << ", " << miny << ", " << maxx << ", " << maxy << ", " << resolutionX << ", " << resolutionY << ", " << nodata << ", " << proj);
+
+	m_cols = -1;
+	m_rows = -1;
+	m_bandn = 1;
+	m_writable = false;
+	m_ds = nullptr;
+	m_band = nullptr;
+	m_type = getType();
+	m_inited = false;
 
 	if(resolutionX == 0 || resolutionY == 0)
 		g_argerr("Resolution must be larger or smaller than 0.");
@@ -884,11 +925,9 @@ void Raster<T>::init(const std::string &filename, int32_t band, double minx, dou
 		g_runerr("Failed to create file.");
 
 	// Initialize geotransform.
-	auto lst = std::initializer_list<double>({
-		resolutionX < 0 ? maxx : minx, resolutionX, 0.0,
-		resolutionY < 0 ? maxy : miny, 0.0, resolutionY
-	});
-	std::copy(lst.begin(), lst.end(), m_trans);
+	double trans[6] = { resolutionX < 0 ? maxx : minx, resolutionX, 0.0, resolutionY < 0 ? maxy : miny, 0.0, resolutionY };
+	for (int i = 0; i < 6; ++i)
+		m_trans[i] = trans[i];
 	m_ds->SetGeoTransform(m_trans);
 
 	// Set projection.
@@ -903,7 +942,7 @@ void Raster<T>::init(const std::string &filename, int32_t band, double minx, dou
 		g_runerr("Failed to get band.");
 	m_bandn = band;
 	m_band->SetNoDataValue(nodata);
-	m_nodata = m_band->GetNoDataValue();
+	m_nodata =(T) m_band->GetNoDataValue();
 	m_cache.setSize(100);
 	m_cache.setRasterBand(m_band);
 	m_writable = true;
@@ -932,7 +971,7 @@ void Raster<T>::init(const std::string &filename, int32_t band, bool writable) {
 		g_runerr("Failed to get band.");
 	m_rows = m_ds->GetRasterYSize();
 	m_cols = m_ds->GetRasterXSize();
-	m_nodata = m_band->GetNoDataValue();
+	m_nodata = (T) m_band->GetNoDataValue();
 	m_cache.setSize(100);
 	m_cache.setRasterBand(m_band);
 	m_writable = writable;
@@ -1198,8 +1237,8 @@ T Raster<T>::nodata() const {
 }
 
 template <class T>
-void Raster<T>::nodata(T nodata) {
-	m_band->SetNoDataValue(nodata);
+void Raster<T>::nodata(const T nodata) {
+	m_band->SetNoDataValue((double) nodata);
 	m_nodata = nodata;
 }
 
@@ -1215,12 +1254,12 @@ int32_t Raster<T>::rows() const {
 
 template <class T>
 int32_t Raster<T>::toRow(double y) const {
-	return (y - m_trans[3]) / m_trans[5];
+	return (int32_t) ((y - m_trans[3]) / m_trans[5]);
 }
 
 template <class T>
 int32_t Raster<T>::toCol(double x) const {
-	return (x - m_trans[0]) / m_trans[1];
+	return (int32_t) ((x - m_trans[0]) / m_trans[1]);
 }
 
 template <class T>
@@ -1386,6 +1425,7 @@ template class geotools::raster::Grid<int64_t>;
 template class geotools::raster::Grid<int32_t>;
 template class geotools::raster::Grid<int16_t>;
 template class geotools::raster::Grid<int8_t>;
+template class geotools::raster::Grid<char>;
 
 template class geotools::raster::Raster<float>;
 template class geotools::raster::Raster<double>;
@@ -1397,6 +1437,7 @@ template class geotools::raster::Raster<int64_t>;
 template class geotools::raster::Raster<int32_t>;
 template class geotools::raster::Raster<int16_t>;
 template class geotools::raster::Raster<int8_t>;
+template class geotools::raster::Raster<char>;
 
 template class geotools::raster::MemRaster<float>;
 template class geotools::raster::MemRaster<double>;
@@ -1408,6 +1449,7 @@ template class geotools::raster::MemRaster<int64_t>;
 template class geotools::raster::MemRaster<int32_t>;
 template class geotools::raster::MemRaster<int16_t>;
 template class geotools::raster::MemRaster<int8_t>;
+template class geotools::raster::MemRaster<char>;
 
 template class geotools::raster::MemRaster<std::vector<double>*>;
 

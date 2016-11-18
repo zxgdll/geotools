@@ -192,6 +192,9 @@ namespace geotools {
 		} // util
 
 
+		Mosaic::Mosaic() :
+			m_callbacks(nullptr) {}
+
 		void Mosaic::setCallbacks(geotools::util::Callbacks *callbacks) {
 			m_callbacks = callbacks;
 		}
@@ -310,7 +313,7 @@ namespace geotools {
 					float inNodata = input.nodata();
 					
 					#pragma omp for nowait
-					for(unsigned int t = 0; t < tiles.size(); ++t) {
+					for(int t = 0; t < tiles.size(); ++t) {
 
 						#pragma omp atomic
 						tileStatus++;

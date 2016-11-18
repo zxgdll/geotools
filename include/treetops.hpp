@@ -15,10 +15,12 @@ namespace geotools {
 		namespace config {
 
 
+
 			// Contains configuration information for performing tree top extraction.
 			class TreeTopConfig {
 				friend class geotools::trees::Trees;
 			public:
+
 				// Set to true to perform smoothing on the input raster.
 				// This will force a check that the smoothing params are valild.
 				// A smoothed filename must be provided for output, plus a sigma
@@ -53,13 +55,12 @@ namespace geotools {
 				// Otherwise, a failure occurs.
 				std::string outputFilename;
 
-
 				// Defines the boundaries of work to be performed. Every step of the process
 				// will be confined, including smoothing and searching.
 				geotools::util::Bounds bounds;
 
 				// A spatial reference ID for the output files.
-				uint32_t srid;
+				int srid;
 
 				// If true, build the index on the tops table. Can be slow.
 				bool buildIndex;
@@ -113,6 +114,10 @@ namespace geotools {
 					outputFilename.assign(filename);
 				}
 
+				const std::string getOutputFilename() const {
+					return outputFilename;
+				}
+
 				// Set the size of the search window.
 				void setSearchWindow(int window) {
 					searchWindow = window;
@@ -131,23 +136,28 @@ namespace geotools {
 					performSmoothing = true;
 				}
 
+
 				// Set the smoothed filename.
 				void setSmoothedFilename(const std::string &filename) {
 					smoothedFilename.assign(filename);
 					performSmoothing = true;
 				}
 
+
 				// Set the smoothing std. deviation.
+
 				void setSmoothingSigma(double sigma) {
 					smoothingSigma = sigma;
 					performSmoothing = true;
 				}
+
 
 				// Set the smoothing window size.
 				void setSmoothingWindow(int window) {
 					smoothingWindow = window;
 					performSmoothing = true;
 				}
+
 
 				// Check the validity of the configuration.
 				void check() const {
@@ -179,13 +189,12 @@ namespace geotools {
 
 		} // config
 
-
 		namespace util {
 
 			// A simple class for maintaining information about a tree top.
 			class Top {
 			public:
-				uint64_t id;
+				size_t id;
 				double x;
 				double y;
 				double z;
@@ -195,13 +204,12 @@ namespace geotools {
 				Top(uint64_t id, double x, double y, double z, int col, int row);
 				
 				Top();
-
 			};
 
 		} // util
 
 
-		class Trees {
+		class DLL_EXPORT Trees {
 		private:
 
 			// A convenience method for smoothing the input raster before using it to generate crowns
@@ -211,15 +219,13 @@ namespace geotools {
 			// outraster  - The smoothed raster.
 			// sigma      - The standard deviation of the gaussian kernel. Default 0.8408964.
 			// window     - The size of the window to use for smoothing. Default 3.
-			void smooth(const std::string &inraster, const std::string &outraster, 
-				double sigma, uint32_t window);
+			void smooth(const std::string &inraster, const std::string &outraster, double sigma, uint32_t window);
 
 		public:
 
 			// Locates tree top points on a canopy height model.
 			//
 			// config     - A TreeTopConfig opject containing running parameters.
-			// tops       - If not null, this vector is populated with objects representing the tree tops.
 			void treetops(const geotools::trees::config::TreeTopConfig &config);
 
 			// Performs tree crown delineation using a (preferrably smoothed) input raster and a
@@ -233,13 +239,12 @@ namespace geotools {
 			// crownsrast - The raster to write the crowns to (required.)
 			// crownsvect - The vector to write the crowns to (sqlite; required.)
 			// threshold  - A ratio (0 < n < 1) which filters out pixels that are less than a given
-			//              proportion of the tree top's height.
+			//		        proportion of the tree top's height.
 			// radius     - The maximum radius of an idividual tree crown.
 			// minHeight  - Heights below this value will not be considered.
 			// d8         - Use D8 search rather than D4.
-			void treecrowns(const std::string &inraster, const std::string &topsvect, 
-				const std::string &crownsrast, const std::string &crownsvect, 
-				double threshold, double radius, double minHeight, bool d8 = false);
+			void treecrowns(const std::string &inraster, const std::string &topsvect, const std::string &crownsrast, 
+				const std::string &crownsvect, double threshold, double radius, double minHeight, bool d8 = false);
 
 		};
 
