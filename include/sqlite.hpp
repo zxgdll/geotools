@@ -106,11 +106,13 @@ namespace geotools {
 			}
 
 			void makeFast() {
+				g_debug("makeFast");
 				char *err;
 				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA synchronous = OFF", NULL, NULL, &err))
 					handleError("Failed to set synchronous: ", err);
 				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA journal_mode = MEMORY", NULL, NULL, &err))
 					handleError("Failed to set journal mode: ", err);
+				g_debug("done makeFast");
 			}
 
 			void makeSlow() {
@@ -122,11 +124,13 @@ namespace geotools {
 			}
 
 			void setCacheSize(size_t size) {
+				g_debug("setCacheSize " << size);
 				char *err;
 				std::stringstream ss;
 				ss << "PRAGMA cache_size = " << size;
 				if(SQLITE_OK != sqlite3_exec(m_db, ss.str().c_str(), NULL, NULL, &err))
 					handleError("Failed to set cache size: ", err);
+				g_debug("done setCacheSize " << size);
 			}
 
 			void addPoints(std::vector<std::unique_ptr<Point> > &points) {
@@ -309,7 +313,8 @@ namespace geotools {
 				if(SQLITE_OK != sqlite3_exec(m_db, "PRAGMA table_info('data')", 
 					tableInfoCallback, &m_fields, &err))
 					handleError("Failed to read table info from database. Formatted incorrectly? ", err);
-				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT SRID(geom) AS geomsrid FROM data", 
+				g_debug(" -- get srid");
+				if(SQLITE_OK != sqlite3_exec(m_db, "SELECT SRID(geom) AS geomsrid FROM data LIMIT 1", 
 					sridCallback, &m_srid, &err))
 					handleError("Failed to read table info from database. Formatted incorrectly? ", err);
 				g_debug("SRID: " << m_srid);
@@ -319,6 +324,7 @@ namespace geotools {
 					handleError("Failed to initialize DB: ", err);
 			}
 
+			g_debug("Building DDL");
 
 			std::stringstream ss;
 			std::stringstream fn;
@@ -326,7 +332,7 @@ namespace geotools {
 
 			ss << "CREATE TABLE data(gid INTEGER PRIMARY KEY,";
 			bool com = false;
-			for(auto it = m_fields.begin(); it != m_fields.end(); ++it) {
+			for(const auto &it : m_fields) {
 				if(com) {
 					ss << ",";
 					fn << ",";
@@ -335,11 +341,11 @@ namespace geotools {
 					com = true;
 				}
 
-				fn << it->first;
-				ss << it->first;
+				fn << it.first;
+				ss << it.first;
 				fp << "?";
 
-				switch(it->second) {
+				switch(it.second) {
 				case SQLite::INTEGER:
 					ss << " integer";
 					break;

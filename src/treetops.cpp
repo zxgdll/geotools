@@ -160,10 +160,10 @@ void Trees::treetops(const TreeTopConfig &config) {
 	// Prepare database.
 	SQLite db(config.outputFilename, SQLite::POINT, config.srid, {{"id", 1}}); // TODO: Get SRID from raster.
 	db.makeFast();
+	g_debug("x");
 	db.dropGeomIndex();
 	db.setCacheSize(config.tableCacheSize);
 	db.clear(); // TODO: Faster to delete it and start over.
-	
 	// This is the size of the cache used by each thread.
 	int cachedRows = g_max(100, (config.rowCacheSize / raster.rows() / sizeof(float))); // TODO: Make row cache configurable.
 	int blockHeight = config.searchWindow + cachedRows;
@@ -352,6 +352,7 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 				int c = n->c + offset.first;
 				int r = n->r + offset.second;
 				
+				//g_debug(" -- " << n->c << ", " << n->r << "; " << c << ", " << r);
 				if(r < 0 || c < 0 || r >= inrast.rows() || c >= inrast.cols()) continue;
 				if(r - row + bufRows < 0 || r - row  + bufRows >= buf.rows()) continue;
 
@@ -359,12 +360,12 @@ void Trees::treecrowns(const std::string &inraster, const std::string &topsvect,
 				if(visited[idx])
 					continue;
 
-				double v = buf.get(c, r - row + bufRows);
-				if(v != nodata 								// is not nodata
-					&& v < n->z 							// is less than the neighbouring pixel
-					&& v >= minHeight 						// is greater than the min height
-					&& (v / n->tz) >= threshold 					// is greater than the threshold height
-					&& dist(n->tc, n->tr, n->c, n->r, resolution) <= radius		// is within the radius
+				double v = buf.get(idx);
+				if(v != nodata 													// is not nodata
+					&& v < n->z 												// is less than the neighbouring pixel
+					&& v >= minHeight 											// is greater than the min height
+					&& (v / n->tz) >= threshold 								// is greater than the threshold height
+					&& std::pow(n->tc - c, 2) + std::pow(n->tr - r, 2) <= std::pow(radius, 2)		// is within the radius
 				) {
 					q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));
 					visited[idx] = true;
