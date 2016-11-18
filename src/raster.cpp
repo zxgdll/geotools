@@ -14,6 +14,12 @@ using namespace geotools::util;
 using namespace geotools::raster;
 using namespace boost::math;
 
+#ifdef _MSC_VER
+#define isnan boost::math::isnan
+#else
+#define isnan std::isnan
+#endif
+
 // Implementations for Cell
 Cell::Cell(int32_t col, int32_t row) :
 	col(col), row(row) {
@@ -1409,6 +1415,7 @@ template class geotools::raster::Grid<int64_t>;
 template class geotools::raster::Grid<int32_t>;
 template class geotools::raster::Grid<int16_t>;
 template class geotools::raster::Grid<int8_t>;
+template class geotools::raster::Grid<char>;
 
 template class geotools::raster::Raster<float>;
 template class geotools::raster::Raster<double>;
@@ -1420,6 +1427,7 @@ template class geotools::raster::Raster<int64_t>;
 template class geotools::raster::Raster<int32_t>;
 template class geotools::raster::Raster<int16_t>;
 template class geotools::raster::Raster<int8_t>;
+template class geotools::raster::Raster<char>;
 
 template class geotools::raster::MemRaster<float>;
 template class geotools::raster::MemRaster<double>;
@@ -1431,6 +1439,7 @@ template class geotools::raster::MemRaster<int64_t>;
 template class geotools::raster::MemRaster<int32_t>;
 template class geotools::raster::MemRaster<int16_t>;
 template class geotools::raster::MemRaster<int8_t>;
+template class geotools::raster::MemRaster<char>;
 
 template class geotools::raster::MemRaster<std::vector<double>*>;
 

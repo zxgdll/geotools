@@ -265,7 +265,7 @@ namespace geotools {
 		} // util
 
 
-		class Trees {
+		class DLL_EXPORT Trees {
 		private:
 			/**
 			 * A convenience method for smoothing the input raster before using it to generate crowns
@@ -286,7 +286,7 @@ namespace geotools {
 			 * config     - A TreeTopConfig opject containing running parameters.
 			 * tops       - If not null, this vector is populated with objects representing the tree tops.
 			 */
-			DLL_EXPORT void treetops(const geotools::trees::config::TreeTopConfig &config, std::vector<std::unique_ptr<geotools::trees::util::Top> > *tops = nullptr);
+			void treetops(const geotools::trees::config::TreeTopConfig &config, std::vector<std::unique_ptr<geotools::trees::util::Top> > *tops = nullptr);
 
 			/**
 			 * Performs tree crown delineation using a (preferrably smoothed) input raster and a
@@ -305,7 +305,7 @@ namespace geotools {
 			 * minHeight  - Heights below this value will not be considered.
 			 * d8         - Use D8 search rather than D4.
 			 */
-			DLL_EXPORT void treecrowns(const std::string &inraster, const std::string &topsvect, const std::string &crownsrast, 
+			void treecrowns(const std::string &inraster, const std::string &topsvect, const std::string &crownsrast, 
 				const std::string &crownsvect, double threshold, double radius, double minHeight, bool d8 = false);
 
 		};

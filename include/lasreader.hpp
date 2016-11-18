@@ -13,6 +13,7 @@ using namespace geotools::util;
 
 class LASReader {
 private:
+	const static size_t BATCH_SIZE = 1000000;
 	std::FILE *m_f;
 	std::string m_file;
 	uint16_t m_sourceId;
@@ -114,7 +115,6 @@ public:
 	}
 
 	size_t m_batchSize;
-	size_t BATCH_SIZE = 1000000;
 
 	void reset() {
 		m_curPoint = 0;

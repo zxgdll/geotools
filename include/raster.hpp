@@ -33,7 +33,7 @@ namespace geotools {
 	namespace raster {
 
 		// Simple class to represent a single grid cell.
-		class Cell {
+		class DLL_EXPORT Cell {
 		public:
 			int32_t col;
 			int32_t row;
@@ -43,13 +43,13 @@ namespace geotools {
 		// Used by Grid::floodFill to determine whether
 		// a pixel should be filled.
 		template <class T>
-		class FillOperator {
+		class DLL_EXPORT FillOperator {
 		public:
 			virtual bool fill(T value) const =0;
 		};
 
 		template <class T>
-		class TargetOperator : public FillOperator<T> {
+		class DLL_EXPORT TargetOperator : public FillOperator<T> {
 		private:
 			T m_match;
 		public:
@@ -60,7 +60,7 @@ namespace geotools {
 
 		// Abstract class for grids (rasters).
 		template <class T>
-		class Grid {
+		class DLL_EXPORT Grid {
 		protected:
 			T m_min;
 			T m_max;
@@ -301,7 +301,7 @@ namespace geotools {
 		// A convenience class for managing a grid of values.
 		// Handles allocation and deallocation of memory.
 		template <class T>
-		class MemRaster : public Grid<T> {
+		class DLL_EXPORT MemRaster : public Grid<T> {
 		private:
 			T *m_grid;
 			int32_t m_cols;
@@ -487,7 +487,7 @@ namespace geotools {
 		};
 
 		template <class T>
-		class Raster : public Grid<T> {
+		class DLL_EXPORT Raster : public Grid<T> {
 		private:
 			int32_t m_cols, m_rows;		// Raster cols/rows
 			int32_t m_bandn;			// The band number

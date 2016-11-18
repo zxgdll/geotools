@@ -4,7 +4,7 @@
 #include <set>
 #include <vector>
 #include <string>
-#include <cmath>
+#include <math.h>
 
 #include <QtWidgets/QWidget>
 #include <QDir>
@@ -14,6 +14,12 @@
 #include "mosaic.hpp"
 #include "util.hpp"
 #include "ui_mosaic.h"
+
+#ifdef _MSC_VER
+namespace std {
+	inline double round(double value) { return value < 0 ? -std::floor(0.5 - value) : std::floor(0.5 + value); }
+}
+#endif
 
 namespace geotools {
 

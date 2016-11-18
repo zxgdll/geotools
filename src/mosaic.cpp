@@ -192,6 +192,9 @@ namespace geotools {
 		} // util
 
 
+		Mosaic::Mosaic() :
+			m_callbacks(nullptr) {}
+
 		void Mosaic::setCallbacks(geotools::util::Callbacks *callbacks) {
 			m_callbacks = callbacks;
 		}
