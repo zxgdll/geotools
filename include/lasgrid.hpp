@@ -28,48 +28,48 @@
 #define ATT_INTENSITY 2
 
 namespace geotools {
-	
-	namespace las {
 
-		namespace lasgrid_config {
+    namespace las {
 
-			extern double defaultResolution;
-			extern double defaultRadius;
-			extern bool defaultSnapToGrid;
-			extern int defaultType;
-			extern unsigned char defaultAngleLimit;
-			extern std::set<int> defaultClasses;
-			extern std::map<std::string, int> types;
-			extern std::map<std::string, int> attributes;
-			extern int defaultAttribute;
+        namespace lasgrid_config {
 
-		}
+            extern double defaultResolution;
+            extern double defaultRadius;
+            extern bool defaultSnapToGrid;
+            extern int defaultType;
+            extern unsigned char defaultAngleLimit;
+            extern std::set<int> defaultClasses;
+            extern std::map<std::string, int> types;
+            extern std::map<std::string, int> attributes;
+            extern int defaultAttribute;
 
-		namespace lasgrid_util {
+        }
 
-			int parseAtt(char *attStr);
+        namespace lasgrid_util {
 
-			/**
-			 * Interpret the output type and return the constant int value.
-			 */
-			int parseType(char *typeStr);
+            int parseAtt(char *attStr);
 
-		}
+            /**
+             * Interpret the output type and return the constant int value.
+             */
+            int parseType(char *typeStr);
 
-		class LasGrid {
-		private:
-			geotools::util::Callbacks *m_callbacks;
-			
-		public:
-			void setCallbacks(geotools::util::Callbacks *callbacks);
+        }
 
-			void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
-				int crs, int attribute, int type, double radius,
-				double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill, bool snap = true);
-		};
+        class LasGrid {
+        private:
+            geotools::util::Callbacks *m_callbacks;
 
-	} // las
-	
+        public:
+            void setCallbacks(geotools::util::Callbacks *callbacks);
+
+            void lasgrid(std::string &dstFile, std::vector<std::string> &files, std::set<int> &classes,
+                    int crs, int attribute, int type, double radius,
+                    double resolution, geotools::util::Bounds &bounds, unsigned char angleLimit, bool fill, bool snap = true);
+        };
+
+    } // las
+
 } // geotools
 
 #endif

@@ -1,10 +1,10 @@
 /********************************************************************************
-** Form generated from reading UI file 'KrigePlot.ui'
-**
-** Created by: Qt User Interface Compiler version 4.8.6
-**
-** WARNING! All changes made in this file will be lost when recompiling UI file!
-********************************************************************************/
+ ** Form generated from reading UI file 'KrigePlot.ui'
+ **
+ ** Created by: Qt User Interface Compiler version 4.8.6
+ **
+ ** WARNING! All changes made in this file will be lost when recompiling UI file!
+ ********************************************************************************/
 
 #ifndef UI_KRIGEPLOT_H
 #define UI_KRIGEPLOT_H
@@ -27,8 +27,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class Ui_KrigePlot
-{
+class Ui_KrigePlot {
 public:
     QVBoxLayout *verticalLayout;
     QwtPlot *vPlot;
@@ -47,8 +46,7 @@ public:
     QComboBox *vModelComboBox;
     QDialogButtonBox *okCancelGroup;
 
-    void setupUi(QDialog *KrigePlot)
-    {
+    void setupUi(QDialog *KrigePlot) {
         if (KrigePlot->objectName().isEmpty())
             KrigePlot->setObjectName(QString::fromUtf8("KrigePlot"));
         KrigePlot->resize(739, 587);
@@ -138,7 +136,7 @@ public:
 
         okCancelGroup = new QDialogButtonBox(KrigePlot);
         okCancelGroup->setObjectName(QString::fromUtf8("okCancelGroup"));
-        okCancelGroup->setStandardButtons(QDialogButtonBox::Cancel|QDialogButtonBox::Ok);
+        okCancelGroup->setStandardButtons(QDialogButtonBox::Cancel | QDialogButtonBox::Ok);
 
         verticalLayout->addWidget(okCancelGroup);
 
@@ -148,8 +146,7 @@ public:
         QMetaObject::connectSlotsByName(KrigePlot);
     } // setupUi
 
-    void retranslateUi(QDialog *KrigePlot)
-    {
+    void retranslateUi(QDialog *KrigePlot) {
         KrigePlot->setWindowTitle(QApplication::translate("KrigePlot", "Semivariogram Plot", 0, QApplication::UnicodeUTF8));
         nuggetLabel->setText(QApplication::translate("KrigePlot", "Nugget", 0, QApplication::UnicodeUTF8));
         vModelLabel->setText(QApplication::translate("KrigePlot", "Variogram Model", 0, QApplication::UnicodeUTF8));
@@ -157,16 +154,18 @@ public:
         rangeLabel->setText(QApplication::translate("KrigePlot", "Range", 0, QApplication::UnicodeUTF8));
         vModelComboBox->clear();
         vModelComboBox->insertItems(0, QStringList()
-         << QApplication::translate("KrigePlot", "Spherical", 0, QApplication::UnicodeUTF8)
-         << QApplication::translate("KrigePlot", "Gaussian", 0, QApplication::UnicodeUTF8)
-         << QApplication::translate("KrigePlot", "Linear", 0, QApplication::UnicodeUTF8)
-        );
+                << QApplication::translate("KrigePlot", "Spherical", 0, QApplication::UnicodeUTF8)
+                << QApplication::translate("KrigePlot", "Gaussian", 0, QApplication::UnicodeUTF8)
+                << QApplication::translate("KrigePlot", "Linear", 0, QApplication::UnicodeUTF8)
+                );
     } // retranslateUi
 
 };
 
 namespace Ui {
-    class KrigePlot: public Ui_KrigePlot {};
+
+    class KrigePlot : public Ui_KrigePlot {
+    };
 } // namespace Ui
 
 QT_END_NAMESPACE

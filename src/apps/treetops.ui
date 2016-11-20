@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>642</width>
-    <height>532</height>
+    <width>641</width>
+    <height>627</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -19,7 +19,7 @@
      <x>10</x>
      <y>10</y>
      <width>621</width>
-     <height>536</height>
+     <height>606</height>
     </rect>
    </property>
    <layout class="QVBoxLayout" name="verticalLayout">
@@ -62,9 +62,9 @@
          <height>64</height>
         </rect>
        </property>
-       <layout class="QHBoxLayout" name="horizontalLayout">
+       <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,1">
         <item>
-         <layout class="QGridLayout" name="gridLayout_3">
+         <layout class="QGridLayout" name="gridLayout_3" columnstretch="0,0,0">
           <item row="0" column="0">
            <widget class="QLabel" name="label">
             <property name="text">
@@ -73,7 +73,7 @@
            </widget>
           </item>
           <item row="1" column="2">
-           <widget class="QToolButton" name="btnSmoothInputFile">
+           <widget class="QToolButton" name="btnSmoothOriginalCHM">
             <property name="text">
              <string>...</string>
             </property>
@@ -82,14 +82,14 @@
           <item row="1" column="0">
            <widget class="QLabel" name="label_11">
             <property name="text">
-             <string>Input File</string>
+             <string>Original CHM</string>
             </property>
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QLineEdit" name="txtSmoothInputFile"/>
+           <widget class="QLineEdit" name="txtSmoothOriginalCHM"/>
           </item>
-          <item row="0" column="1">
+          <item row="0" column="1" colspan="2">
            <widget class="QSpinBox" name="spnSmoothWindow">
             <property name="minimum">
              <number>3</number>
@@ -101,19 +101,19 @@
         <item>
          <layout class="QGridLayout" name="gridLayout_4">
           <item row="1" column="2">
-           <widget class="QToolButton" name="btnSmoothOutputFile">
+           <widget class="QToolButton" name="btnSmoothSmoothedCHM">
             <property name="text">
              <string>...</string>
             </property>
            </widget>
           </item>
           <item row="1" column="1">
-           <widget class="QLineEdit" name="txtSmoothOutputFile"/>
+           <widget class="QLineEdit" name="txtSmoothSmoothedCHM"/>
           </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_12">
             <property name="text">
-             <string>Output File</string>
+             <string>Smoothed CHM</string>
             </property>
            </widget>
           </item>
@@ -124,7 +124,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="0" column="1" colspan="2">
            <widget class="QDoubleSpinBox" name="spnSmoothStdDev">
             <property name="minimum">
              <double>0.000000000000000</double>
@@ -151,7 +151,7 @@
       <property name="minimumSize">
        <size>
         <width>0</width>
-        <height>110</height>
+        <height>145</height>
        </size>
       </property>
       <property name="title">
@@ -176,29 +176,12 @@
          <x>0</x>
          <y>40</y>
          <width>606</width>
-         <height>64</height>
+         <height>97</height>
         </rect>
        </property>
-       <layout class="QHBoxLayout" name="horizontalLayout_8">
+       <layout class="QHBoxLayout" name="horizontalLayout_8" stretch="1,1">
         <item>
          <layout class="QGridLayout" name="gridLayout">
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="txtTopsInputFile"/>
-          </item>
-          <item row="1" column="2">
-           <widget class="QToolButton" name="btnTopsInputFile">
-            <property name="text">
-             <string>...</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="label_5">
-            <property name="text">
-             <string>Input File</string>
-            </property>
-           </widget>
-          </item>
           <item row="0" column="0">
            <widget class="QLabel" name="label_4">
             <property name="text">
@@ -206,7 +189,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="0" column="1" colspan="2">
            <widget class="QDoubleSpinBox" name="spnTopsMinHeight">
             <property name="maximum">
              <double>300.000000000000000</double>
@@ -216,28 +199,52 @@
             </property>
            </widget>
           </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QGridLayout" name="gridLayout_2">
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="txtTopsOutputFile"/>
-          </item>
           <item row="1" column="0">
-           <widget class="QLabel" name="label_6">
+           <widget class="QLabel" name="label_5">
             <property name="text">
-             <string>Output File</string>
+             <string>Original CHM</string>
             </property>
            </widget>
           </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="txtTopsOriginalCHM"/>
+          </item>
           <item row="1" column="2">
-           <widget class="QToolButton" name="btnTopsOutputFile">
+           <widget class="QToolButton" name="btnTopsOriginalCHM">
             <property name="text">
              <string>...</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_6">
+            <property name="text">
+             <string>Treetops Database</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="txtTopsTreetopsDatabase"/>
+          </item>
+          <item row="2" column="2">
+           <widget class="QToolButton" name="btnTopsTreetopsDatabase">
+            <property name="text">
+             <string>...</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QGridLayout" name="gridLayout_2">
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_3">
+            <property name="text">
+             <string>Window Size</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1" colspan="2">
            <widget class="QSpinBox" name="spnTopsWindowSize">
             <property name="minimum">
              <number>3</number>
@@ -247,12 +254,35 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="0">
-           <widget class="QLabel" name="label_3">
+          <item row="1" column="2">
+           <widget class="QToolButton" name="btnTopsSmoothedCHM">
             <property name="text">
-             <string>Window Size</string>
+             <string>...</string>
             </property>
            </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QLineEdit" name="txtTopsSmoothedCHM"/>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="label_16">
+            <property name="text">
+             <string>Smoothed CHM</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <spacer name="verticalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Vertical</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>20</width>
+              <height>40</height>
+             </size>
+            </property>
+           </spacer>
           </item>
          </layout>
         </item>
@@ -271,7 +301,7 @@
       <property name="minimumSize">
        <size>
         <width>0</width>
-        <height>205</height>
+        <height>185</height>
        </size>
       </property>
       <property name="title">
@@ -299,7 +329,7 @@
          <height>131</height>
         </rect>
        </property>
-       <layout class="QHBoxLayout" name="horizontalLayout_2">
+       <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="1,1">
         <item>
          <layout class="QGridLayout" name="gridLayout_5">
           <item row="0" column="0">
@@ -309,21 +339,24 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="2">
-           <widget class="QToolButton" name="btnCrownsTreetopsFile">
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="txtCrownsCrownsRaster"/>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_10">
+            <property name="text">
+             <string>Crowns Raster</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QToolButton" name="btnCrownsCrownsRaster">
             <property name="text">
              <string>...</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_15">
-            <property name="text">
-             <string>Treetops File</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
+          <item row="0" column="1" colspan="2">
            <widget class="QDoubleSpinBox" name="spnCrownsHeightFraction">
             <property name="maximum">
              <double>1.000000000000000</double>
@@ -337,46 +370,22 @@
            </widget>
           </item>
           <item row="2" column="1">
-           <widget class="QLineEdit" name="txtCrownsTreetopsFile"/>
+           <widget class="QLineEdit" name="txtCrownsSmoothedCHM"/>
           </item>
-          <item row="1" column="1">
-           <widget class="QLineEdit" name="txtCrownsInputFile"/>
-          </item>
-          <item row="1" column="0">
+          <item row="2" column="0">
            <widget class="QLabel" name="label_13">
             <property name="text">
-             <string>Input File</string>
+             <string>Smoothed CHM</string>
             </property>
            </widget>
           </item>
-          <item row="1" column="2">
-           <widget class="QToolButton" name="btnCrownsInputFile">
+          <item row="2" column="2">
+           <widget class="QToolButton" name="btnCrownsSmoothedCHM">
             <property name="text">
              <string>...</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
-           <widget class="QLineEdit" name="txtCrownsOutputRaster"/>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="label_10">
-            <property name="text">
-             <string>Output Raster</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="2">
-           <widget class="QToolButton" name="btnCrownsOutputRaster">
-            <property name="text">
-             <string>...</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QGridLayout" name="gridLayout_6">
           <item row="1" column="0">
            <widget class="QLabel" name="label_8">
             <property name="text">
@@ -384,17 +393,7 @@
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
-           <widget class="QDoubleSpinBox" name="spnCrownsRadius">
-            <property name="minimum">
-             <double>1.000000000000000</double>
-            </property>
-            <property name="value">
-             <double>10.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
+          <item row="1" column="1" colspan="2">
            <widget class="QDoubleSpinBox" name="spnCrownsMinHeight">
             <property name="maximum">
              <double>300.000000000000000</double>
@@ -404,6 +403,10 @@
             </property>
            </widget>
           </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QGridLayout" name="gridLayout_6">
           <item row="0" column="0">
            <widget class="QLabel" name="label_9">
             <property name="text">
@@ -411,24 +414,51 @@
             </property>
            </widget>
           </item>
-          <item row="2" column="1">
-           <widget class="QLineEdit" name="txtCrownsOutputVector"/>
+          <item row="0" column="1" colspan="2">
+           <widget class="QDoubleSpinBox" name="spnCrownsRadius">
+            <property name="minimum">
+             <double>1.000000000000000</double>
+            </property>
+            <property name="value">
+             <double>10.000000000000000</double>
+            </property>
+           </widget>
           </item>
-          <item row="2" column="2">
-           <widget class="QToolButton" name="btnCrownsOutputVector">
+          <item row="3" column="0">
+           <widget class="QLabel" name="label_14">
+            <property name="text">
+             <string>Crowns Database</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QLineEdit" name="txtCrownsCrownsDatabase"/>
+          </item>
+          <item row="3" column="2">
+           <widget class="QToolButton" name="btnCrownsCrownsDatabase">
             <property name="text">
              <string>...</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="label_14">
+          <item row="2" column="2">
+           <widget class="QToolButton" name="btnCrownsTreetopsDatabase">
             <property name="text">
-             <string>Output Vector</string>
+             <string>...</string>
             </property>
            </widget>
           </item>
-          <item row="3" column="1">
+          <item row="2" column="1">
+           <widget class="QLineEdit" name="txtCrownsTreetopsDatabase"/>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_15">
+            <property name="text">
+             <string>Treetops Database</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
            <spacer name="verticalSpacer">
             <property name="orientation">
              <enum>Qt::Vertical</enum>

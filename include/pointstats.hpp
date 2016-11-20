@@ -38,145 +38,145 @@
 #define ATT_INTENSITY 2
 
 namespace geotools {
-	
-	namespace point {
 
-		namespace pointstats_config {
+    namespace point {
 
-			extern double defaultResolution;
-			extern bool defaultSnapToGrid;
-			extern bool defaultNormalize;
-			extern uint8_t defaultType;
-			extern uint8_t defaultAngleLimit;
-			extern uint8_t defaultAttribute;
-			extern uint8_t defaultGapFraction;
-			extern uint32_t defaultQuantile;
-			extern uint32_t defaultQuantiles;
-			extern uint32_t defaultFilterQuantiles;
-			extern uint32_t defaultFilterQuantileFrom;
-			extern uint32_t defaultFilterQuantileTo;
-			extern uint32_t defaultThreads;
+        namespace pointstats_config {
 
-			extern std::set<uint8_t> defaultClasses;
-			extern std::map<std::string, uint8_t> types;
-			extern std::map<std::string, uint8_t> attributes;
-			extern std::map<std::string, uint8_t> gapFractionTypes;
+            extern double defaultResolution;
+            extern bool defaultSnapToGrid;
+            extern bool defaultNormalize;
+            extern uint8_t defaultType;
+            extern uint8_t defaultAngleLimit;
+            extern uint8_t defaultAttribute;
+            extern uint8_t defaultGapFraction;
+            extern uint32_t defaultQuantile;
+            extern uint32_t defaultQuantiles;
+            extern uint32_t defaultFilterQuantiles;
+            extern uint32_t defaultFilterQuantileFrom;
+            extern uint32_t defaultFilterQuantileTo;
+            extern uint32_t defaultThreads;
 
-		}
+            extern std::set<uint8_t> defaultClasses;
+            extern std::map<std::string, uint8_t> types;
+            extern std::map<std::string, uint8_t> attributes;
+            extern std::map<std::string, uint8_t> gapFractionTypes;
 
-		/**
-		 * Contains configuration values for running the lasgrid process.
-		 */
-		class PointStatsConfig {
-		public:
-			std::vector<std::string> dstFiles;
-			std::vector<std::string> sourceFiles;
-			std::vector<uint8_t> types;
-			std::set<uint8_t> classes;
-			geotools::util::Bounds bounds;
-			bool fill;
-			bool snap;
-			bool rebuild;
-			bool normalize;
-			double resolution;
-			uint32_t threads;
-			uint16_t hsrid;
-			uint16_t vsrid;
-			uint8_t attribute;
-			uint8_t angleLimit;
-			uint8_t quantile;
-			uint8_t quantiles;
-			uint8_t gapFractionType;
-			uint32_t quantileFilter;
-			uint32_t quantileFilterFrom;
-			uint32_t quantileFilterTo;
+        }
 
-			/**
-			 * Interpret the attribute and  return the constant int value.
-			 */
-			uint8_t parseAtt(const std::string &attStr);
+        /**
+         * Contains configuration values for running the lasgrid process.
+         */
+        class PointStatsConfig {
+        public:
+            std::vector<std::string> dstFiles;
+            std::vector<std::string> sourceFiles;
+            std::vector<uint8_t> types;
+            std::set<uint8_t> classes;
+            geotools::util::Bounds bounds;
+            bool fill;
+            bool snap;
+            bool rebuild;
+            bool normalize;
+            double resolution;
+            uint32_t threads;
+            uint16_t hsrid;
+            uint16_t vsrid;
+            uint8_t attribute;
+            uint8_t angleLimit;
+            uint8_t quantile;
+            uint8_t quantiles;
+            uint8_t gapFractionType;
+            uint32_t quantileFilter;
+            uint32_t quantileFilterFrom;
+            uint32_t quantileFilterTo;
 
-			/**
-			 * Interpret the output type and return the constant int value.
-			 */
-			std::vector<uint8_t> parseTypes(const std::vector<std::string> &typeStrs);
+            /**
+             * Interpret the attribute and  return the constant int value.
+             */
+            uint8_t parseAtt(const std::string &attStr);
 
-			uint8_t parseGap(const std::string &typeStr);
+            /**
+             * Interpret the output type and return the constant int value.
+             */
+            std::vector<uint8_t> parseTypes(const std::vector<std::string> &typeStrs);
 
-			/**
-			 * Returns true if the classes set contains the class.
-			 */
-			bool hasClass(uint8_t cls) const {
-				return classes.find(cls) != classes.end();
-			}
+            uint8_t parseGap(const std::string &typeStr);
 
-			bool hasClasses() const {
-				return classes.size() > 0;
-			}
+            /**
+             * Returns true if the classes set contains the class.
+             */
+            bool hasClass(uint8_t cls) const {
+                return classes.find(cls) != classes.end();
+            }
 
-			/**
-			 * Returns true if the quantile filter does not pass all points.
-			 */
-			bool hasQuantileFilter() const {
-				return quantileFilterFrom == 0 && quantileFilterTo == quantileFilter - 1;
-			}
+            bool hasClasses() const {
+                return classes.size() > 0;
+            }
 
-		};
+            /**
+             * Returns true if the quantile filter does not pass all points.
+             */
+            bool hasQuantileFilter() const {
+                return quantileFilterFrom == 0 && quantileFilterTo == quantileFilter - 1;
+            }
 
-		class PointStats {
-		private:
-			std::mutex m_cmtx;
-			std::mutex m_qmtx;
-			std::condition_variable m_cdn;
+        };
 
-			bool m_running;
-			std::unordered_map<size_t, std::list<geotools::las::LASPoint*> > m_cache;
-			std::queue<size_t> m_idxq;
-			std::vector<std::unique_ptr<geotools::point::stats::CellStats> > m_computers;
-			std::vector<std::unique_ptr<geotools::raster::MemRaster<float> > > m_mem;
-			std::vector<std::unique_ptr<std::mutex> > m_mtx;
-			std::unique_ptr<geotools::las::FinalizedPointStream> m_ps;
-			std::queue<size_t> m_bq;
+        class PointStats {
+        private:
+            std::mutex m_cmtx;
+            std::mutex m_qmtx;
+            std::condition_variable m_cdn;
 
-			/**
-			 * Check the configuration for validity. 
-			 * Throw an exception if it's invalid or absent.
-			 */
-			void checkConfig(const PointStatsConfig &config);
+            bool m_running;
+            std::unordered_map<size_t, std::list<geotools::las::LASPoint*> > m_cache;
+            std::queue<size_t> m_idxq;
+            std::vector<std::unique_ptr<geotools::point::stats::CellStats> > m_computers;
+            std::vector<std::unique_ptr<geotools::raster::MemRaster<float> > > m_mem;
+            std::vector<std::unique_ptr<std::mutex> > m_mtx;
+            std::unique_ptr<geotools::las::FinalizedPointStream> m_ps;
+            std::queue<size_t> m_bq;
 
-			geotools::point::stats::CellStats* getComputer(const uint8_t &type, const PointStatsConfig &config);
+            /**
+             * Check the configuration for validity. 
+             * Throw an exception if it's invalid or absent.
+             */
+            void checkConfig(const PointStatsConfig &config);
 
-			/**
-			 * Compute the working bounds and the selection of files
-			 * to include in the working set.
-			 */
-			void computeWorkBounds(const std::vector<std::string> &files, const Bounds &bounds, 
-				std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount);
+            geotools::point::stats::CellStats* getComputer(const uint8_t &type, const PointStatsConfig &config);
 
-		public:
+            /**
+             * Compute the working bounds and the selection of files
+             * to include in the working set.
+             */
+            void computeWorkBounds(const std::vector<std::string> &files, const Bounds &bounds,
+                    std::set<std::string> &selectedFiles, Bounds &workBounds, unsigned long *pointCount);
 
-			PointStats();
+        public:
 
-			~PointStats();
+            PointStats();
 
-			/**
-			 * Runs the compute loop. Inteded to be used by a thread.
-			 */
-			void runner();
+            ~PointStats();
 
-			/**
-			 * Runs the read loop. Inteded to be used by a thread.
-			 */
-			void reader();
+            /**
+             * Runs the compute loop. Inteded to be used by a thread.
+             */
+            void runner();
 
-			/**
-			 * Execute the gridding process.
-			 */
-			void pointstats(const PointStatsConfig &config, const Callbacks *callbacks = nullptr);
-		};
+            /**
+             * Runs the read loop. Inteded to be used by a thread.
+             */
+            void reader();
 
-	} // las
-	
+            /**
+             * Execute the gridding process.
+             */
+            void pointstats(const PointStatsConfig &config, const Callbacks *callbacks = nullptr);
+        };
+
+    } // las
+
 } // geotools
 
 #endif

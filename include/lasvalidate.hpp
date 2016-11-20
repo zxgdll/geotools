@@ -8,14 +8,14 @@
 #include "geotools.h"
 
 namespace geotools {
-	
-	namespace las {
 
-		void validate(std::string &outfile, std::string &pointfile, std::string &datafile, std::vector<std::string> &lasfiles, 
-			std::set<int> &classes, double distance);
+    namespace las {
+
+        void validate(std::string &outfile, std::string &pointfile, std::string &datafile, std::vector<std::string> &lasfiles,
+                std::set<int> &classes, double distance);
 
 
-	} // las
+    } // las
 
 } // las
 #endif

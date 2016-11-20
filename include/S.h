@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <math.h>
 
-#define Calloc(n,t)	(t *)calloc((unsigned)(n),sizeof(t))
-#define Free(p)		free((char *)(p))
+#define Calloc(n,t) (t *)calloc((unsigned)(n),sizeof(t))
+#define Free(p)  free((char *)(p))
 
 /* the mapping from f77 to C intermediate code -- may be machine dependent
  * the first definition satisfies lint's narrowminded preprocessing & should

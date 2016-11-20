@@ -7,17 +7,18 @@
 
 namespace interp {
 
-	class Interpolator {
-	public:
+    class Interpolator {
+    public:
 
-		/**
-		 * Interpolates the samples into the given raster.
-		 */
-		virtual void interpolate(Raster<float> &out, std::list<InterpPoint> &samples) = 0;
+        /**
+         * Interpolates the samples into the given raster.
+         */
+        virtual void interpolate(Raster<float> &out, std::list<InterpPoint> &samples) = 0;
 
-		virtual ~Interpolator() {}
+        virtual ~Interpolator() {
+        }
 
-	};
+    };
 
 }
 

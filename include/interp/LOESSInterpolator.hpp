@@ -5,24 +5,24 @@
 
 namespace interp {
 
-	namespace loess {
+    namespace loess {
 
-		class LOESSInterpolator : public interp::Interpolator {
-		private:
-			double m_bandwidth;
-			unsigned int m_degree;
-		public:
+        class LOESSInterpolator : public interp::Interpolator {
+        private:
+            double m_bandwidth;
+            unsigned int m_degree;
+        public:
 
-			LOESSInterpolator(unsigned int degree, double bandwidth) {
-				m_degree = degree;
-				m_bandwidth = bandwidth;
-			}
+            LOESSInterpolator(unsigned int degree, double bandwidth) {
+                m_degree = degree;
+                m_bandwidth = bandwidth;
+            }
 
-			void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
+            void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
 
-		};
+        };
 
-	}
+    }
 }
 
 #endif

@@ -14,112 +14,126 @@ using namespace geotools::treetops::config;
 
 namespace geotools {
 
-	namespace trees {
+    namespace trees {
 
+        class TreetopsCallbacks : public QObject, public geotools::util::Callbacks {
 
-		class TreetopsCallbacks : public QObject, public geotools::util::Callbacks {
-			Q_OBJECT
-		public:
-			void fileCallback(float status) {
-				emit fileProgress((int) std::round(status * 100));
-			}
+            Q_OBJECT
+        public:
+            void fileCallback(float status) {
+                emit fileProgress((int) std::round(status * 100));
+            }
 
-			void overallCallback(float status) {
-				emit overallProgress((int) std::round(status * 100));
-			}
+            void overallCallback(float status) {
+                emit overallProgress((int) std::round(status * 100));
+            }
 
-		signals:
-			void fileProgress(int);
-			void overallProgress(int);
-		};
+        signals:
+            void fileProgress(int);
+            void overallProgress(int);
+        };
 
-	}
+    }
 
-	namespace ui {
+    namespace ui {
 
-		class WorkerThread;
+        class WorkerThread;
 
-		class TreetopsForm : public QWidget, public Ui::TreetopsForm {
-		friend class WorkerThread;
-			Q_OBJECT
-		private:
-			QWidget *m_form;
-			QDir m_last;
-			TreetopsConfig m_config;
-			geotools::util::Callbacks *m_callbacks;
-			WorkerThread *m_workerThread;
+        class TreetopsForm : public QWidget, public Ui::TreetopsForm {
+            friend class WorkerThread;
+            Q_OBJECT
+        private:
+            QWidget *m_form;
+            QDir m_last;
+            TreetopsConfig m_config;
+            geotools::util::Callbacks *m_callbacks;
+            WorkerThread *m_workerThread;
 
-			void checkRun();
+            void checkRun();
+            void updateView();
 
-		public:
-			TreetopsForm(QWidget *p = Q_NULLPTR);
-			void setupUi(QWidget *Form);
-			~TreetopsForm();
+        public:
+            TreetopsForm(QWidget *p = Q_NULLPTR);
+            void setupUi(QWidget *Form);
+            ~TreetopsForm();
 
-		public slots:
-			void doSmoothChanged(bool);
-			void doTopsChanged(bool);
-			void doCrownsChanged(bool);
+        public slots:
+            void doSmoothChanged(bool);
+            void doTopsChanged(bool);
+            void doCrownsChanged(bool);
 
-			void smoothWindowSizeChanged(int);
-			void smoothStdDevChanged(double);
-			void smoothInputFileChanged(QString);
-			void smoothOutputFileChanged(QString);
+            void smoothWindowSizeChanged(int);
+            void smoothStdDevChanged(double);
+            void smoothOriginalCHMChanged(QString);
+            void smoothSmoothedCHMChanged(QString);
 
-			void topsMinHeightChanged(double);
-			void topsWindowSizeChanged(int);
-			void topsInputFileChanged(QString);
-			void topsOutputFileChanged(QString);
+            void topsMinHeightChanged(double);
+            void topsWindowSizeChanged(int);
+            void topsOriginalCHMChanged(QString);
+            void topsSmoothedCHMChanged(QString);
+            void topsTreetopsDatabaseChanged(QString);
 
-			void crownsRadiusChanged(double);
-			void crownsHeightFractionChanged(double);
-			void crownsMinHeightChanged(double);
-			void crownsTreetopsFileChanged(QString);
-			void crownsInputFileChanged(QString);
-			void crownsOutputRasterChanged(QString);
-			void crownsOutputVectorChanged(QString);
+            void crownsRadiusChanged(double);
+            void crownsHeightFractionChanged(double);
+            void crownsMinHeightChanged(double);
+            void crownsTreetopsDatabaseChanged(QString);
+            void crownsSmoothedCHMChanged(QString);
+            void crownsCrownsRasterChanged(QString);
+            void crownsCrownsDatabaseChanged(QString);
 
-			void exitClicked();
-			void runClicked();
-			void cancelClicked();
+            void exitClicked();
+            void runClicked();
+            void cancelClicked();
 
-			void smoothInputFileClicked();
-			void smoothOutputFileClicked();
+            void smoothOriginalCHMClicked();
+            void smoothSmoothedCHMClicked();
 
-			void topsInputFileClicked();
-			void topsOutputFileClicked();
-			
-			void crownsOutputVectorClicked();
-			void crownsOutputRasterClicked();
-			void crownsTreetopsFileClicked();
-			void crownsInputFileClicked();
+            void topsOriginalCHMClicked();
+            void topsSmoothedCHMClicked();
+            void topsTreetopsDatabaseClicked();
 
-			void done();
-		};
+            void crownsCrownsDatabaseClicked();
+            void crownsCrownsRasterClicked();
+            void crownsTreetopsDatabaseClicked();
+            void crownsSmoothedCHMClicked();
 
+            void done();
+        };
 
-		class WorkerThread : public QThread {
-		private:
-			TreetopsForm *m_parent;
-			void run() {
-				geotools::treetops::Treetops t;
-				t.setCallbacks(m_parent->m_callbacks);
-				try {
+        class WorkerThread : public QThread {
+        private:
+            TreetopsForm *m_parent;
 
-				} catch(const std::exception &e) {
-					QMessageBox err((QWidget *) m_parent);
-					err.setText("Error");
-					err.setInformativeText(QString(e.what()));
-					err.exec();
-				}
-			}
-		public:
-			void init(TreetopsForm *parent) {
-				m_parent = parent;
-			}
-		};
+            void run() {
+                geotools::treetops::Treetops t;
+                t.setCallbacks(m_parent->m_callbacks);
+                try {
+                    geotools::treetops::config::TreetopsConfig &config = m_parent->m_config;
+                    
+                    if(config.doSmoothing)
+                        t.smooth(config);
+                    
+                    if(config.doTops)
+                        t.treetops(config);
+                    
+                    if(config.doCrowns)
+                        t.treecrowns(config);
+                    
+                } catch (const std::exception &e) {
+                    QMessageBox err((QWidget *) m_parent);
+                    err.setText("Error");
+                    err.setInformativeText(QString(e.what()));
+                    err.exec();
+                }
+            }
+        public:
 
-	}
+            void init(TreetopsForm *parent) {
+                m_parent = parent;
+            }
+        };
+
+    }
 
 }
 

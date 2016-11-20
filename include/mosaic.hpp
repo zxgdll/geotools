@@ -8,20 +8,20 @@
 #include "util.hpp"
 
 namespace geotools {
-	
-	namespace raster {
 
-		class DLL_EXPORT Mosaic {
-		private:
-			geotools::util::Callbacks *m_callbacks;
+    namespace raster {
 
-		public:
-			Mosaic();
-			void setCallbacks(geotools::util::Callbacks *callbacks);
-			void mosaic(const std::vector<std::string> &files, const std::string &outfile, float distance, int tileSize, int threads = 1);
-		};
+        class DLL_EXPORT Mosaic {
+        private:
+            geotools::util::Callbacks *m_callbacks;
 
-	} // raster
+        public:
+            Mosaic();
+            void setCallbacks(geotools::util::Callbacks *callbacks);
+            void mosaic(const std::vector<std::string> &files, const std::string &outfile, float distance, int tileSize, int threads = 1);
+        };
+
+    } // raster
 
 } // geotools
 

@@ -17,246 +17,254 @@
 
 namespace geotools {
 
-	namespace util {
+    namespace util {
 
-		template <class T>
-		class blocking_queue {
-		private:
-			std::queue<T> m_q;
-			std::condition_variable m_c;
-			std::mutex m_m;
-		public:
-			bool pop(T *idx) {
-				bool ret = false;
-				{
-					std::unique_lock<std::mutex> lk(m_m);
-					m_c.wait(lk);
-					if(!m_q.empty()) {
-						*idx = m_q.front();
-						m_q.pop();
-						ret = true;
-					}
-				}
-				return ret;
-			}
-			void push(T idx) {
-				{
-					std::lock_guard<std::mutex> lk(m_m);
-					m_q.push(idx);
-				}
-				m_c.notify_one();
-			}
-			size_t size() {
-				std::lock_guard<std::mutex> lk(m_m);
-				return m_q.size();
-			}
-			bool empty() {
-				std::lock_guard<std::mutex> lk(m_m);
-				return m_q.empty();
-			}
-			void flush() {
-				while(!empty())
-					m_c.notify_one();
-			}
-			void finish() {
-				m_c.notify_all();
-			}
-		};
-		
-		// Provides access to an allocated buffer
-		// which will be safely disposed of.
-		class Buffer {
-		public:
-			void *buf;
-			Buffer(uint64_t size) {
-				buf = std::calloc(size, 1);
-			}
-			~Buffer() {
-				std::free(buf);
-			}
-		};
+        template <class T>
+        class blocking_queue {
+        private:
+            std::queue<T> m_q;
+            std::condition_variable m_c;
+            std::mutex m_m;
+        public:
 
-		class Callbacks {
-		public:
-			virtual ~Callbacks()=0;
-			virtual void fileCallback(float status) const =0;
-			virtual void overallCallback(float status) const =0;
-		};
+            bool pop(T *idx) {
+                bool ret = false;
+                {
+                    std::unique_lock<std::mutex> lk(m_m);
+                    m_c.wait(lk);
+                    if (!m_q.empty()) {
+                        *idx = m_q.front();
+                        m_q.pop();
+                        ret = true;
+                    }
+                }
+                return ret;
+            }
 
-		class Point {
-		public:
-			double x, y, z;
-			std::map<std::string, std::string> fields;
-			Point();
-			Point(double x, double y, double z = 0);
-			Point(double x, double y, double z, const std::map<std::string, std::string> &fields);
-		};
+            void push(T idx) {
+                {
+                    std::lock_guard<std::mutex> lk(m_m);
+                    m_q.push(idx);
+                }
+                m_c.notify_one();
+            }
 
-		class Bounds {
-		private:
-			double m_minx, m_miny, m_minz;
-			double m_maxx, m_maxy, m_maxz;
-		public:
-			Bounds();
+            size_t size() {
+                std::lock_guard<std::mutex> lk(m_m);
+                return m_q.size();
+            }
 
-			Bounds(double minx, double miny, double maxx, double maxy);
+            bool empty() {
+                std::lock_guard<std::mutex> lk(m_m);
+                return m_q.empty();
+            }
 
-			Bounds(double minx, double miny, double maxx, double maxy, double minz, double maxz);
+            void flush() {
+                while (!empty())
+                    m_c.notify_one();
+            }
 
-			bool contains(double x, double y) const;
+            void finish() {
+                m_c.notify_all();
+            }
+        };
 
-			bool contains(double x, double y, double z) const;
+        // Provides access to an allocated buffer
+        // which will be safely disposed of.
 
-			bool contains(const geotools::util::Bounds &b) const;
+        class Buffer {
+        public:
+            void *buf;
 
-			bool intersects(const geotools::util::Bounds &b, int dims = 2) const;
+            Buffer(uint64_t size) {
+                buf = std::calloc(size, 1);
+            }
 
-			Bounds intersection(const Bounds &other) const;
+            ~Buffer() {
+                std::free(buf);
+            }
+        };
 
-			double minx() const;
+        class Callbacks {
+        public:
+            virtual ~Callbacks() = 0;
+            virtual void fileCallback(float status) const = 0;
+            virtual void overallCallback(float status) const = 0;
+        };
 
-			void minx(double minx);
+        class Point {
+        public:
+            double x, y, z;
+            std::map<std::string, std::string> fields;
+            Point();
+            Point(double x, double y, double z = 0);
+            Point(double x, double y, double z, const std::map<std::string, std::string> &fields);
+        };
 
-			double miny() const;
+        class Bounds {
+        private:
+            double m_minx, m_miny, m_minz;
+            double m_maxx, m_maxy, m_maxz;
+        public:
+            Bounds();
 
-			void miny(double miny);
+            Bounds(double minx, double miny, double maxx, double maxy);
 
-			double minz() const;
+            Bounds(double minx, double miny, double maxx, double maxy, double minz, double maxz);
 
-			void minz(double minz);
+            bool contains(double x, double y) const;
 
-			double maxx() const;
+            bool contains(double x, double y, double z) const;
 
-			void maxx(double maxx);
+            bool contains(const geotools::util::Bounds &b) const;
 
-			double maxy() const;
+            bool intersects(const geotools::util::Bounds &b, int dims = 2) const;
 
-			void maxy(double maxy);
+            Bounds intersection(const Bounds &other) const;
 
-			double maxz() const;
+            double minx() const;
 
-			void maxz(double maxz);
+            void minx(double minx);
 
-			double width() const;
+            double miny() const;
 
-			double height() const;
+            void miny(double miny);
 
-			double depth() const;
+            double minz() const;
 
-			int cols(double resolution) const;
+            void minz(double minz);
 
-			int rows(double resolution) const;
+            double maxx() const;
 
-			void extend(const geotools::util::Bounds &b);
+            void maxx(double maxx);
 
-			void extendX(double x);
-			
-			void extendY(double y);
-			
-			void extendZ(double z);
-			
-			void extend(double x, double y);
-			
-			void extend(double x, double y, double z);
+            double maxy() const;
 
-			void collapse(int dims = 2);
+            void maxy(double maxy);
 
-			double operator[](size_t pos) const;
+            double maxz() const;
 
-			void snap(double resolution);
-	
-			std::string print() const;
+            void maxz(double maxz);
 
-			void print(std::ostream &str) const;
-		
-		};
+            double width() const;
 
-		class Util;
+            double height() const;
 
-		/**
-		 * Maintains a memory-mapped file, and gives access to the mapped data.
-		 */
-		class MappedFile {
-			friend class Util;
-		private:
-			std::string m_filename;
-			uint64_t m_size;
-			boost::interprocess::file_mapping *m_mapping;
-			boost::interprocess::mapped_region *m_region;
-			bool m_remove;
-		protected:
-			MappedFile(const std::string &filename, uint64_t size, bool remove);
-		public:
-			void* data();
-			uint64_t size();
-			~MappedFile();
-		};
+            double depth() const;
 
+            int cols(double resolution) const;
 
-		/**
-		 * Provides utility methods for working with LiDAR data.
-		 */
-		class Util {
-		public:
-			
-			static void parseRanges(std::set<double> &values, const char *str, double step = 1.0);
+            int rows(double resolution) const;
 
-			static void parseRanges(std::set<int> &values, const char *str);
+            void extend(const geotools::util::Bounds &b);
 
-			/**
-			 * Split a comma-delimited string into a set of unique integers.
-			 */
-			static void intSplit(std::set<int> &values, const char *str);
+            void extendX(double x);
 
-			/**
-			 * Split a comma-delimited string into a set of unique integers.
-			 */
-			static void intSplit(std::list<int> &values, const char *val);
+            void extendY(double y);
 
-			/**
-			 * Split a comma-delimited string into a set of unique integers.
-			 */
-			static void intSplit(std::vector<int> &values, const char *str);
+            void extendZ(double z);
 
-			static void intSplit(std::set<uint8_t> &values, const char *str);
-			/**
-			 * Return true if the integer is in the set, or the set is empty.
-			 */
-			static bool inList(std::set<int> &values, int value);
+            void extend(double x, double y);
 
-			static bool inList(std::vector<int> &values, int value);
+            void extend(double x, double y, double z);
 
-			static void splitString(const std::string &str, std::list<std::string> &lst);
-			// TODO: Use back inserter.
-			static void splitString(const std::string &str, std::vector<std::string> &lst);
-			
-			/**
-			 * Prints out a status message; a percentage representing current
-			 * of total steps.
-			 */
-			static void status(int current, int total);
+            void collapse(int dims = 2);
 
-			static void copyfile(std::string &srcfile, std::string &dstfile);
+            double operator[](size_t pos) const;
 
-			/**
-			 * Load the samples from a csv file. The file must have x, y and z headers.
-			 */
-			static void loadXYZSamples(std::string &datafile, std::vector<std::tuple<double, double, double> > &samples);
+            void snap(double resolution);
 
-			static void loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::string, double, double, double> > &samples);
+            std::string print() const;
 
-			static void status(int step, int of, const std::string &message = "", bool end = false);
+            void print(std::ostream &str) const;
 
-			static const std::string tmpFile(const std::string &root);
-			static const std::string tmpFile();
-			static bool rm(const std::string &name);
-			static bool mkdir(const std::string &dir);
+        };
 
-			static std::unique_ptr<MappedFile> mapFile(const std::string &filename, uint64_t size, bool remove = true);
+        class Util;
 
-		};
+        /**
+         * Maintains a memory-mapped file, and gives access to the mapped data.
+         */
+        class MappedFile {
+            friend class Util;
+        private:
+            std::string m_filename;
+            uint64_t m_size;
+            boost::interprocess::file_mapping *m_mapping;
+            boost::interprocess::mapped_region *m_region;
+            bool m_remove;
+        protected:
+            MappedFile(const std::string &filename, uint64_t size, bool remove);
+        public:
+            void* data();
+            uint64_t size();
+            ~MappedFile();
+        };
 
-	} // util
+        /**
+         * Provides utility methods for working with LiDAR data.
+         */
+        class Util {
+        public:
+
+            static void parseRanges(std::set<double> &values, const char *str, double step = 1.0);
+
+            static void parseRanges(std::set<int> &values, const char *str);
+
+            /**
+             * Split a comma-delimited string into a set of unique integers.
+             */
+            static void intSplit(std::set<int> &values, const char *str);
+
+            /**
+             * Split a comma-delimited string into a set of unique integers.
+             */
+            static void intSplit(std::list<int> &values, const char *val);
+
+            /**
+             * Split a comma-delimited string into a set of unique integers.
+             */
+            static void intSplit(std::vector<int> &values, const char *str);
+
+            static void intSplit(std::set<uint8_t> &values, const char *str);
+            /**
+             * Return true if the integer is in the set, or the set is empty.
+             */
+            static bool inList(std::set<int> &values, int value);
+
+            static bool inList(std::vector<int> &values, int value);
+
+            static void splitString(const std::string &str, std::list<std::string> &lst);
+            // TODO: Use back inserter.
+            static void splitString(const std::string &str, std::vector<std::string> &lst);
+
+            /**
+             * Prints out a status message; a percentage representing current
+             * of total steps.
+             */
+            static void status(int current, int total);
+
+            static void copyfile(std::string &srcfile, std::string &dstfile);
+
+            /**
+             * Load the samples from a csv file. The file must have x, y and z headers.
+             */
+            static void loadXYZSamples(std::string &datafile, std::vector<std::tuple<double, double, double> > &samples);
+
+            static void loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::string, double, double, double> > &samples);
+
+            static void status(int step, int of, const std::string &message = "", bool end = false);
+
+            static const std::string tmpFile(const std::string &root);
+            static const std::string tmpFile();
+            static bool rm(const std::string &name);
+            static bool mkdir(const std::string &dir);
+
+            static std::unique_ptr<MappedFile> mapFile(const std::string &filename, uint64_t size, bool remove = true);
+
+        };
+
+    } // util
 
 } // geotools
 

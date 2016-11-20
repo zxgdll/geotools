@@ -5,16 +5,16 @@
 
 namespace interp {
 
-	namespace naturalneighbour {
+    namespace naturalneighbour {
 
-		class NaturalNeighbourInterpolator : public interp::Interpolator {
-		public:
+        class NaturalNeighbourInterpolator : public interp::Interpolator {
+        public:
 
-			void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
+            void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
 
-		};
+        };
 
-	}
+    }
 }
 
 #endif

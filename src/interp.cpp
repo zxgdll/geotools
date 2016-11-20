@@ -25,18 +25,18 @@
 #include "interp/SimpleKrigingInterpolator.hpp"
 
 double _random() {
-	return ((double) std::rand()) / RAND_MAX;
+    return ((double) std::rand()) / RAND_MAX;
 }
 
 /**
  * Load the samples from a csv file. The file must have x, y and z headers.
  */
 void loadSamples(std::string &datafile, std::list<interp::InterpPoint> &samples) {
-	io::CSVReader<3> in(datafile.c_str());
-	in.read_header(io::ignore_extra_column, "x", "y", "z");
-	double x, y, z;
-	while(in.read_row(x, y, z))
-		samples.push_back(interp::InterpPoint(x, y, z));
+    io::CSVReader<3> in(datafile.c_str());
+    in.read_header(io::ignore_extra_column, "x", "y", "z");
+    double x, y, z;
+    while (in.read_row(x, y, z))
+        samples.push_back(interp::InterpPoint(x, y, z));
 }
 
 /**
@@ -45,134 +45,135 @@ void loadSamples(std::string &datafile, std::list<interp::InterpPoint> &samples)
  * resolution overrides the template's resolution.
  */
 void interpolate(std::string &datafile, std::string &templatefile, std::string &outfile,
-		interp::Interpolator &inter,
-		double resolution, bool print) {
+        interp::Interpolator &inter,
+        double resolution, bool print) {
 
-	if(templatefile == outfile)
-		throw "The output file must not be the same as the template file.";
+    if (templatefile == outfile)
+        throw "The output file must not be the same as the template file.";
 
-	if(resolution <= 0.0)
-		throw "Invalid resolution.";
+    if (resolution <= 0.0)
+        throw "Invalid resolution.";
 
-	// Initializes source, destination rasters.
-	Raster<float> tpl(templatefile, 1, false);
-	std::string proj;
-	tpl.projection(proj);
-	Raster<float> out(outfile, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(),
-			resolution, tpl.nodata(), proj);
+    // Initializes source, destination rasters.
+    Raster<float> tpl(templatefile, 1, false);
+    std::string proj;
+    tpl.projection(proj);
+    Raster<float> out(outfile, tpl.minx(), tpl.miny(), tpl.maxx(), tpl.maxy(),
+            resolution, tpl.nodata(), proj);
 
-	std::list<interp::InterpPoint> samples;
-	loadSamples(datafile, samples);
+    std::list<interp::InterpPoint> samples;
+    loadSamples(datafile, samples);
 
-	if(samples.size() == 0)
-		throw "No samples loaded.";
+    if (samples.size() == 0)
+        throw "No samples loaded.";
 
-	// for(auto it = samples.begin(); it != samples.end(); ++it)
-	//	std::cerr << "sample " << it->x << ", " << it->y << std::endl;
+    // for(auto it = samples.begin(); it != samples.end(); ++it)
+    //	std::cerr << "sample " << it->x << ", " << it->y << std::endl;
 
-	std::cerr << "Interpolating..." << std::endl;
-	inter.interpolate(out, samples);
+    std::cerr << "Interpolating..." << std::endl;
+    inter.interpolate(out, samples);
 
-	if(print) {
-		std::cerr << "You asked for it." << std::endl;
-	}
+    if (print) {
+        std::cerr << "You asked for it." << std::endl;
+    }
 }
+
 void usage() {
-	std::cerr << "Usage: interp [options]" << std::endl
-			<< " -t  -- type            The type of adjustment. " << std::endl
-			<< "                         nn  - natural neighbours." << std::endl
-			<< "                         pl  - plane fit. " << std::endl
-			<< "                         avg - shift vertically by the average difference. " << std::endl
-			<< "                         idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
-			<< "                         sk  - Simple Kriging." << std::endl
-			<< "                         lo  - LOESS Smoothing." << std::endl
-			<< " -r  -- resolution      The pixel size of the output." << std::endl
-			<< " -i  -- template file   A template file to produce the output file." << std::endl
-			<< " -o  -- output file     The output file." << std::endl
-			<< " -d  -- data file       A CSV file with data." << std::endl
-			<< " -ie -- idw exponent    The IDW decay value." << std::endl
-			<< " -ip -- idw neighbours  Number of neighbours to consider. Leave out to consider all." << std::endl
-			<< " -an -- avg neighbours  Number of neighbours for averaging. Default all." << std::endl;
+    std::cerr << "Usage: interp [options]" << std::endl
+            << " -t  -- type            The type of adjustment. " << std::endl
+            << "                         nn  - natural neighbours." << std::endl
+            << "                         pl  - plane fit. " << std::endl
+            << "                         avg - shift vertically by the average difference. " << std::endl
+            << "                         idw - inverse distance weighting (use -e switch for exponent; default 1). " << std::endl
+            << "                         sk  - Simple Kriging." << std::endl
+            << "                         lo  - LOESS Smoothing." << std::endl
+            << " -r  -- resolution      The pixel size of the output." << std::endl
+            << " -i  -- template file   A template file to produce the output file." << std::endl
+            << " -o  -- output file     The output file." << std::endl
+            << " -d  -- data file       A CSV file with data." << std::endl
+            << " -ie -- idw exponent    The IDW decay value." << std::endl
+            << " -ip -- idw neighbours  Number of neighbours to consider. Leave out to consider all." << std::endl
+            << " -an -- avg neighbours  Number of neighbours for averaging. Default all." << std::endl;
 }
 
 int main(int argc, char **argv) {
 
- 	try {
+    try {
 
- 		std::string templatefile;
-  		std::string outfile;
-  		std::string datafile;
-  		std::string type;
- 		double resolution = 0.0;
- 		bool print = false;
- 		double idwExp = 1.0;
- 		int idwNeigh = 0;
- 		unsigned int avgNeigh = 0;
+        std::string templatefile;
+        std::string outfile;
+        std::string datafile;
+        std::string type;
+        double resolution = 0.0;
+        bool print = false;
+        double idwExp = 1.0;
+        int idwNeigh = 0;
+        unsigned int avgNeigh = 0;
 
- 		for(int i = 0; i < argc; ++i) {
- 			std::string p(argv[i]);
- 			if(p == "-t") {
- 				type = argv[++i];
- 			} else if(p == "-o") {
- 				outfile = argv[++i];
- 			} else if(p == "-i") {
- 				templatefile = argv[++i];
- 			} else if(p == "-r") {
- 				resolution = atof(argv[++i]);
- 			} else if(p == "-p") {
- 				print = true;
- 			} else if(p == "-ie") {
- 				idwExp = atof(argv[++i]);
- 			} else if(p == "-ip") {
- 				idwNeigh = atoi(argv[++i]);
- 			} else if(p == "-d") {
- 				datafile = argv[++i];
- 			} else if(p == "-an") {
- 				avgNeigh = atoi(argv[++i]);
- 			}
- 		}
+        for (int i = 0; i < argc; ++i) {
+            std::string p(argv[i]);
+            if (p == "-t") {
+                type = argv[++i];
+            } else if (p == "-o") {
+                outfile = argv[++i];
+            } else if (p == "-i") {
+                templatefile = argv[++i];
+            } else if (p == "-r") {
+                resolution = atof(argv[++i]);
+            } else if (p == "-p") {
+                print = true;
+            } else if (p == "-ie") {
+                idwExp = atof(argv[++i]);
+            } else if (p == "-ip") {
+                idwNeigh = atoi(argv[++i]);
+            } else if (p == "-d") {
+                datafile = argv[++i];
+            } else if (p == "-an") {
+                avgNeigh = atoi(argv[++i]);
+            }
+        }
 
- 		if(type == "idw" && idwNeigh < 0)
- 			throw "IDW neighbour count must be >= 0.";
- 		if(resolution <= 0)
- 			throw "Invalid resolution.";
- 		if(outfile.empty())
- 			throw "An output file is required.";
- 		if(templatefile.empty())
- 			throw "A template file is required.";
- 		if(datafile.empty())
- 			throw "A data file is required.";
+        if (type == "idw" && idwNeigh < 0)
+            throw "IDW neighbour count must be >= 0.";
+        if (resolution <= 0)
+            throw "Invalid resolution.";
+        if (outfile.empty())
+            throw "An output file is required.";
+        if (templatefile.empty())
+            throw "A template file is required.";
+        if (datafile.empty())
+            throw "A data file is required.";
 
- 		interp::Interpolator *inter;
+        interp::Interpolator *inter;
 
- 		if(type == "nn") {
- 			inter = new interp::naturalneighbour::NaturalNeighbourInterpolator();
- 		} else if(type == "pl") {
- 			inter = new interp::planar::PlanarInterpolator();
- 		} else if(type == "avg") {
- 			inter = new interp::avg::AvgInterpolator(avgNeigh);
- 		} else if(type == "idw") {
- 			inter = new interp::idw::IDWInterpolator(idwExp, idwNeigh);
- 		} else if(type == "sk") {
- 			inter = new interp::kriging::SimpleKrigingInterpolator(argc, argv);
- 		} else {
- 			throw "Unknown interpolator type.";
- 		}
+        if (type == "nn") {
+            inter = new interp::naturalneighbour::NaturalNeighbourInterpolator();
+        } else if (type == "pl") {
+            inter = new interp::planar::PlanarInterpolator();
+        } else if (type == "avg") {
+            inter = new interp::avg::AvgInterpolator(avgNeigh);
+        } else if (type == "idw") {
+            inter = new interp::idw::IDWInterpolator(idwExp, idwNeigh);
+        } else if (type == "sk") {
+            inter = new interp::kriging::SimpleKrigingInterpolator(argc, argv);
+        } else {
+            throw "Unknown interpolator type.";
+        }
 
-		interpolate(datafile, templatefile, outfile, *inter, resolution, print);
+        interpolate(datafile, templatefile, outfile, *inter, resolution, print);
 
-		delete inter;
+        delete inter;
 
- 		std::cerr << "Done." << std::endl;
+        std::cerr << "Done." << std::endl;
 
- 	} catch(const char *e) {
- 		std::cerr << e << std::endl;
- 		usage();
- 		return 1;
- 	}
+    } catch (const char *e) {
+        std::cerr << e << std::endl;
+        usage();
+        return 1;
+    }
 
- 	return 0;
- }
+    return 0;
+}
 
 
 

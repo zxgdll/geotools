@@ -5,16 +5,16 @@
 
 namespace interp {
 
-	namespace planar {
+    namespace planar {
 
-		class PlanarInterpolator : public interp::Interpolator {
-		public:
+        class PlanarInterpolator : public interp::Interpolator {
+        public:
 
-			void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
+            void interpolate(Raster<float> &out, std::list<InterpPoint> &samples);
 
-		};
+        };
 
-	}
+    }
 }
 
 #endif

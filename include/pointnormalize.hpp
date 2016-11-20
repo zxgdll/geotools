@@ -7,23 +7,23 @@
 #include "util.hpp"
 
 namespace geotools {
-	
-	namespace point {
 
-		class PointNormalizeConfig {
-		public:
-			std::string terrainFile;
-			std::string pointOutputDir;
-			std::list<std::string> pointFiles;
-			unsigned int threads;
-		};
+    namespace point {
 
-		class PointNormalize {
-		public:
-			void normalize(const PointNormalizeConfig &config, const geotools::util::Callbacks *callbacks = nullptr);
-		};
+        class PointNormalizeConfig {
+        public:
+            std::string terrainFile;
+            std::string pointOutputDir;
+            std::list<std::string> pointFiles;
+            unsigned int threads;
+        };
 
-	} // point
+        class PointNormalize {
+        public:
+            void normalize(const PointNormalizeConfig &config, const geotools::util::Callbacks *callbacks = nullptr);
+        };
+
+    } // point
 
 } // geotools
 
