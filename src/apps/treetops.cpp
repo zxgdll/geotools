@@ -7,124 +7,142 @@
 #include "geotools.h"
 #include "treetops.hpp"
 
+#ifdef WITH_GUI
+#include "treetops_ui.hpp"
+#endif
+
 void usage() {
 	std::cerr << "Usage: treecrowns <options>\n"
 			<< "This program finds tree tops by locating the maximum value in a \n"
 			<< "window as it moves across a raster. The tops are just the maxima at \n"
 			<< "the center of the window.\n"
-			<< " -i  <filename>     The input raster; a LiDAR-derived canopy height model.\n"
-			<< " -t  <filename>     The treetop vector file. An sqlite file.\n"
-			<< " -w  <int>          Window size. Will be bumped up to the next odd value if \n"
-			<< "                    even given. Min 3.\n"
-			<< " -sf <filename>     If the CHM is to be smoothed, enter the filename of the\n"
-			<< "                    smoothed raster.\n"
-			<< " -ss <float>        The std. deviation value for gaussian smoothing (if -sf is\n"
-			<< " -sw <int>          The smoothing window size. 3 or greater; odd.\n"
-			<< "                    provided). Default 0.8408964\n"
-			<< " -cr <filename>     The crowns raster. If this is not provided, crowns are not\n" 
-			<< "                    produced.\n"
-			<< " -cv <filename>     The crowns vector. A vectorized version of the crown \n"
-			<< "                    raster. Optional.\n"
-			<< " -cm <float>        The minimum height of pixels to consider for inclusion \n"
-			<< "                    in a crown. Default 4.\n"
-			<< " -ct <float>        The minimum height of pixels, as a proportion of the \n"
-			<< "                    treetop height\n"
-			<< "                    to consider for inclusion in a crown. 0 < n < 1; default 0.65.\n"
-			<< " -cd <float>        The radius beyond which pixels will not be considered for \n"
-			<< "                    inclusion in\n"
-			<< "                    in a crown. This value is also used for spatially partitioning \n"
-			<< "                    the delineation work, so a reasonable value should be selected. \n"
-			<< "                    Default 5; max 100m.\n"
+			<< " -si <filename>     The input raster to be smoothed.\n"
+			<< " -ss <int>          The standard deviation for Gaussian smoothing.\n"
+			<< " -sw <int>          The window size for Gaussian smoothing. Will be \n"
+			<< "                    bumped up to the next odd value if even given. Minimum 3.\n"
+			<< " -so <filename>     The smoothed output raster.\n\n"
+
+			<< " -ti <filename>     The input raster for treetop detection; a (smoothed)\n"
+			<< "                    LiDAR-derived canopy height model.\n"
 			<< " -tm <float>        The minimum height of pixels to consider for selection as a \n"
 			<< "                    tree top. Default 4.\n"
-			<< " -d8                Use D8 search for delineating crowns, rather than D4, which \n"
-			<< "                    is the default.\n"
-			<< " -threads           The number of threads to used for processing. Default 1.\n"
-			<< " -s                 The SRID of the treetops output dataset.\n";
-			
+			<< " -tw <int>          Window size. Will be bumped up to the next odd value if \n"
+			<< "                    even given. Minimum 3.\n\n"
+			<< " -to <filename>     The treetop vector file. An sqlite file.\n\n"
+
+			<< " -ci <filename>     The input raster for crown delineation; a (smoothed)\n"
+			<< "                    LiDAR-derived canopy height model.\n"
+			<< " -ct <filename>     The treetop vector file. An sqlite file.\n\n"
+			<< " -cm <float>        The minimum height of pixels to consider for inclusion \n"
+			<< "                    in a crown. Default 4.\n"
+			<< " -cf <float>        The minimum height of pixels, as a proportion of the \n"
+			<< "                    treetop height to consider for inclusion in a crown.\n"
+			<< "                    0 < n < 1; default 0.65.\n"
+			<< " -cd <float>        The radius beyond which pixels will not be considered for \n"
+			<< "                    inclusion in a crown.\n"
+			<< " -cr <filename>     The crowns raster. Each crown is represented with pixels\n"
+			<< "                    having a unique ID.\n"
+			<< " -cv <filename>     The crowns vector. A vectorized version of the crown \n"
+			<< "                    raster. Optional.\n\n"
+
+			<< " -threads           The number of threads to used for processing. Default 1.\n"			
+			<< " -v                 Print debug messages.\n";
+}
+
+int runWithGui(int argc, char **argv) {
+#ifdef WITH_GUI
+	QApplication q(argc, argv);
+	QWidget *w = new QWidget();
+	geotools::ui::TreetopsForm f;
+	f.setupUi(w);
+	w->show();
+	return q.exec();
+#else
+	std::cerr << "GUI not enabled." << std::endl;
+	return 1;
+#endif
 }
 
 int main(int argc, char **argv) {
 
-	using namespace geotools::trees;
-	using namespace geotools::trees::util;
-	using namespace geotools::trees::config;
+	using namespace geotools::treetops;
+	using namespace geotools::treetops::util;
+	using namespace geotools::treetops::config;
 
 	try {
 
-		TreeTopConfig ttConfig;
-		std::string inraster;  // Input raster.
-		std::string topsvect;  // Treetops output.
-		std::string crownrast;
-		std::string crownvect;
-		std::string smoothed;
-		double threshold = 0.65;
-		double radius = 5;
-		double cminHeight = 4;
-		bool d8 = false;
-		int threads = 1;
+		TreetopsConfig config;
 
 		int i = 1;
 		for(; i < argc; ++i) {
 			std::string arg = argv[i];
-			if(arg == "-i") {
-				ttConfig.setInputFilename(argv[++i]);
-			} else if(arg == "-t") {
-				ttConfig.setOutputFilename(argv[++i]);
-			} else if(arg == "-s") {
-				ttConfig.setSRID(atoi(argv[++i]));
-			} else if(arg == "-cr") {
-				crownrast = argv[++i];
-			} else if(arg == "-cv") {
-				crownvect = argv[++i];
-			} else if(arg == "-cm") {
-				cminHeight = atof(argv[++i]);
-			} else if(arg == "-ct") {
-				threshold = atof(argv[++i]);
-			} else if(arg == "-cd") {
-				radius = atof(argv[++i]);
-			} else if(arg == "-tm") {
-				ttConfig.setMinHeight(atof(argv[++i]));
-			} else if(arg == "-w") {
-				ttConfig.setSearchWindow(atoi(argv[++i]));
-			} else if(arg == "-v") {
-				g_loglevel(G_LOG_TRACE);
-			} else if(arg == "-sf") {
-				ttConfig.setSmoothedFilename(argv[++i]);
+
+			if(arg == "-si") {
+				config.smoothInputFile = argv[++i];
+				config.doSmoothing = true;
 			} else if(arg == "-ss") {
-				ttConfig.setSmoothingSigma(atof(argv[++i]));
-			} else if(arg == "-sw") {
-				ttConfig.setSmoothingWindow(atoi(argv[++i]));
-			} else if(arg == "-d8") {
-				d8 = true;
+				config.smoothStdDev = atof(argv[++i]);
+				config.doSmoothing = true;
+			} else if(arg == "-so") {
+				config.smoothOutputFile = argv[++i];
+				config.doSmoothing = true;
+
+			} else if(arg == "-ti") {
+				config.topsInputFile = argv[++i];
+				config.doTops = true;
+			} else if(arg == "-tm") {
+				config.topsMinHeight = atof(argv[++i]);
+				config.doTops = true;
+			} else if(arg == "-tw") {
+				config.topsWindowSize = atoi(argv[++i]);
+				config.doTops = true;
+			} else if(arg == "-to") {
+				config.topsOutputFile = argv[++i];
+				config.doTops = true;
+
+			} else if(arg == "-ci") {
+				config.crownsInputFile = argv[++i];
+				config.doCrowns = true;
+			} else if(arg == "-ct") {
+				config.crownsTreetopsFile = argv[++i];
+				config.doCrowns = true;
+			} else if(arg == "-cm") {
+				config.crownsMinHeight = atof(argv[++i]);
+				config.doCrowns = true;
+			} else if(arg == "-cf") {
+				config.crownsHeightFraction = atof(argv[++i]);
+				config.doCrowns = true;
+			} else if(arg == "-cd") {
+				config.crownsRadius = atof(argv[++i]);
+				config.doCrowns = true;
+			} else if(arg == "-cr") {
+				config.crownsOutputRaster = argv[++i];
+				config.doCrowns = true;
+			} else if(arg == "-cv") {
+				config.crownsOutputVector = argv[++i];
+				config.doCrowns = true;
 			} else if(arg == "-threads") {
-				threads = atoi(argv[++i]);
+				config.threads = atoi(argv[++i]);
+				config.doCrowns = true;
 			}
 		}
 
-		if(threads <= 0)
-			g_argerr("Invalid number of threads: " << threads);
-		omp_set_dynamic(0);
-		omp_set_num_threads(threads);
-
-		bool crowns = true;
-		if(crownrast.empty()) {
-			g_warn("A crown raster file is required for producing crowns. Crowns will not be computed.");
-			crowns = false;
-		}
-
-		Trees tu;
+		Treetops tu;
 
 		// Create tree tops.
-		tu.treetops(ttConfig);
+		if(config.doSmoothing)
+			tu.smooth(config);
 
-		// Substitute the input raster for the smoothed raster (because there isn't one)
-		if(ttConfig.smoothedFilename.empty())
-			ttConfig.setSmoothedFilename(ttConfig.inputFilename);
+		// Create treetops.
+		if(config.doTops)
+			tu.treetops(config);
 
-		// Create crowns if desired.
-		if(crowns)
-			tu.treecrowns(ttConfig.smoothedFilename, ttConfig.outputFilename, crownrast, crownvect, threshold, radius, cminHeight, d8);
+		// Create crowns.
+		if(config.doCrowns)
+			tu.treecrowns(config);
+
+		if(!config.doTops && !config.doSmoothing && !config.doCrowns)
+			return runWithGui(argc, argv);
 
 	} catch(const std::exception &e) {
 		std::cerr << e.what() << std::endl;

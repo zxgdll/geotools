@@ -6,9 +6,10 @@
 #include <vector>
 
 #include <sqlite3.h>
-#include <spatialite/gaiageo.h>
+//#include <spatialite/gaiageo.h>
 #include <spatialite.h>
 
+#include "geotools.h"
 #include "util.hpp"
 
 namespace geotools {
@@ -54,17 +55,17 @@ namespace geotools {
 			}
 
 			SQLite(const std::string &file, int type, int srid) :
-				m_file(file),
 				m_type(type),
 				m_srid(srid),
+				m_file(file),
 				m_fields(std::map<std::string, int>()) {
 				init();
 			}
 		
 			SQLite(const std::string &file) :
-				m_file(file),
 				m_type(-1),
 				m_srid(-1),
+				m_file(file),
 				m_fields(std::map<std::string, int>()) {
 				init();
 			}
@@ -140,8 +141,8 @@ namespace geotools {
 				g_debug("done setCacheSize " << size);
 			}
 
-			void addPoints(std::vector<std::unique_ptr<Point> > &points) {
-				for(const std::unique_ptr<Point> &pt : points)
+			void addPoints(std::vector<std::unique_ptr<geotools::util::Point> > &points) {
+				for(const std::unique_ptr<geotools::util::Point> &pt : points)
 					addPoint(pt->x, pt->y, pt->z, pt->fields);
 			}
 				
