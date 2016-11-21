@@ -229,9 +229,12 @@ void Grid<T>::voidFillIDW(double radius, int32_t count, double exp) {
 }
 
 template <class T>
-void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
+void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size, Callbacks *status) {
+    
     g_debug("Smoothing grid...");
-    Util::status(0, 1, "Smoothing grid...");
+    if(status)
+        status->stepCallback(0.0);
+    
     if (sigma <= 0)
         g_argerr("Sigma must be > 0.");
     if (size < 3)
@@ -248,7 +251,7 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
     double nd = (double) nodata();
     size_t completed = 0;
 
-#pragma omp parallel for
+    #pragma omp parallel for
     for (int32_t row = 0; row < rows(); row += bufRows - size) {
         MemRaster<double> weights(size, size);
         gaussianWeights(weights.grid(), size, sigma);
@@ -259,7 +262,7 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
         strip.fill((const T) nd);
         smooth.nodata((T) nd);
         smooth.fill((T) nd);
-#pragma omp critical(a)
+        #pragma omp critical(a)
         {
             // On the first loop, read from the first row and write to size/2 down
             // On the other loops, read from row-size/2, and write to 0 down.
@@ -283,23 +286,24 @@ void Grid<T>::smooth(Grid<T> &smoothed, double sigma, int32_t size) {
                 if (!foundNodata)
                     smooth.set(c + size / 2, r + size / 2, (T) t);
             }
-#pragma omp atomic
+            #pragma omp atomic
             ++completed;
-            Util::status((int) completed, (int) rows(), "Smoothing grid...");
+        if(status)
+            status->stepCallback((float) completed / rows());
         }
-#pragma omp critical(b)
+        #pragma omp critical(b)
         {
             // The blur buffer is always written size/2 down, so read from there.
             smoothed.writeBlock(0, row, smooth, 0, size / 2);
         }
     }
-    Util::status(1, 1, "Smoothing grid... Done.", true);
+
+    if(status)
+        status->stepCallback(1.0);
 
 }
 
-
 // Implementations for MemRaster
-
 template <class T>
 void MemRaster<T>::checkInit() const {
     if (m_grid == nullptr)

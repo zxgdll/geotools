@@ -14,23 +14,24 @@ using namespace geotools::treetops::config;
 
 namespace geotools {
 
-    namespace trees {
+    namespace treetops {
 
         class TreetopsCallbacks : public QObject, public geotools::util::Callbacks {
-
             Q_OBJECT
         public:
-            void fileCallback(float status) {
-                emit fileProgress((int) std::round(status * 100));
+            TreetopsCallbacks() : geotools::util::Callbacks() {
+            }
+            void stepCallback(float status) const {
+                emit stepProgress((int) std::round(status * 100));
             }
 
-            void overallCallback(float status) {
+            void overallCallback(float status) const {
                 emit overallProgress((int) std::round(status * 100));
             }
 
         signals:
-            void fileProgress(int);
-            void overallProgress(int);
+            void stepProgress(int) const;
+            void overallProgress(int) const;
         };
 
     }
@@ -72,6 +73,8 @@ namespace geotools {
             void topsOriginalCHMChanged(QString);
             void topsSmoothedCHMChanged(QString);
             void topsTreetopsDatabaseChanged(QString);
+            void topsTreetopsSRIDClicked();
+            void topsTreetopsSRIDChanged(int);
 
             void crownsRadiusChanged(double);
             void crownsHeightFractionChanged(double);
@@ -105,19 +108,38 @@ namespace geotools {
             TreetopsForm *m_parent;
 
             void run() {
-                geotools::treetops::Treetops t;
-                t.setCallbacks(m_parent->m_callbacks);
+                
+                using namespace geotools::treetops;
+                using namespace geotools::treetops::config;
+                
                 try {
-                    geotools::treetops::config::TreetopsConfig &config = m_parent->m_config;
+                    Treetops t;
+                    t.setCallbacks(m_parent->m_callbacks);
+                    const TreetopsConfig &config = m_parent->m_config;
+                    const TreetopsCallbacks *cb = (TreetopsCallbacks *) m_parent->m_callbacks;
                     
-                    if(config.doSmoothing)
+                    int steps = ((int) config.doSmoothing) + ((int) config.doTops) + ((int) config.doCrowns);
+                    int step = 0;
+                    
+                    if(cb)
+                        cb->overallCallback(0.01);
+                    
+                    if(config.doSmoothing) {
                         t.smooth(config);
+                        cb->overallCallback((float) ++step / steps);
+                    }
                     
-                    if(config.doTops)
+                    if(config.doTops) {
                         t.treetops(config);
+                        cb->overallCallback((float) ++step / steps);
+                    }
                     
-                    if(config.doCrowns)
+                    if(config.doCrowns) {
                         t.treecrowns(config);
+                        cb->overallCallback((float) ++step / steps);
+                    }
+                    
+                    cb->overallCallback(1.0);
                     
                 } catch (const std::exception &e) {
                     QMessageBox err((QWidget *) m_parent);

@@ -6,9 +6,10 @@
 #include "geotools.h"
 #include "treetops.hpp"
 #include "treetops_ui.hpp"
+#include "crs_selector_ui.hpp"
 
 using namespace geotools::ui;
-using namespace geotools::trees;
+using namespace geotools::treetops;
 
 TreetopsForm::TreetopsForm(QWidget *p) :
     QWidget(p),
@@ -27,11 +28,13 @@ void TreetopsForm::setupUi(QWidget *form) {
 
     Ui::TreetopsForm::setupUi(form);
 
-    m_workerThread = new WorkerThread();
-    m_workerThread->init(this);
-
     g_loglevel(G_LOG_DEBUG);
 
+    m_callbacks = new TreetopsCallbacks();
+
+    m_workerThread = new WorkerThread();
+    m_workerThread->init(this);
+    
     m_form = form;
     m_last = QDir::home();
 
@@ -48,6 +51,7 @@ void TreetopsForm::setupUi(QWidget *form) {
 
     connect(spnTopsMinHeight, SIGNAL(valueChanged(double)), SLOT(topsMinHeightChanged(double)));
     connect(spnTopsWindowSize, SIGNAL(valueChanged(int)), SLOT(topsWindowSizeChanged(int)));
+    connect(spnTopsTreetopsSRID, SIGNAL(valueChanged(int)), SLOT(topsTreetopsSRIDChanged(int)));
     connect(txtTopsOriginalCHM, SIGNAL(textChanged(QString)), SLOT(topsOriginalCHMChanged(QString)));
     connect(txtTopsSmoothedCHM, SIGNAL(textChanged(QString)), SLOT(topsSmoothedCHMChanged(QString)));
     connect(txtTopsTreetopsDatabase, SIGNAL(textChanged(QString)), SLOT(topsTreetopsDatabaseChanged(QString)));
@@ -66,13 +70,14 @@ void TreetopsForm::setupUi(QWidget *form) {
     connect(btnCrownsTreetopsDatabase, SIGNAL(clicked()), SLOT(crownsTreetopsDatabaseClicked()));
     connect(btnCrownsCrownsRaster, SIGNAL(clicked()), SLOT(crownsCrownsRasterClicked()));
     connect(btnCrownsCrownsDatabase, SIGNAL(clicked()), SLOT(crownsCrownsDatabaseClicked()));
+    connect(btnTopsTreetopsSRID, SIGNAL(clicked()), SLOT(topsTreetopsSRIDClicked()));
 
     connect(btnExit, SIGNAL(clicked()), SLOT(exitClicked()));
     connect(btnRun, SIGNAL(clicked()), SLOT(runClicked()));
     connect(btnCancel, SIGNAL(clicked()), SLOT(cancelClicked()));
 
     if (m_callbacks) {
-        connect((TreetopsCallbacks *) m_callbacks, SIGNAL(fileProgress(int)), prgStep, SLOT(setValue(int)));
+        connect((TreetopsCallbacks *) m_callbacks, SIGNAL(stepProgress(int)), prgStep, SLOT(setValue(int)));
         connect((TreetopsCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
     }
     connect(m_workerThread, SIGNAL(finished()), this, SLOT(done()));
@@ -81,6 +86,19 @@ void TreetopsForm::setupUi(QWidget *form) {
 
 QString _str(const std::string &str) {
     return QString(str.c_str());
+}
+
+void TreetopsForm::topsTreetopsSRIDChanged(int srid) {
+    m_config.srid = spnTopsTreetopsSRID->value();
+    checkRun();
+}
+
+void TreetopsForm::topsTreetopsSRIDClicked() {
+    CRSSelector cs(m_form);
+    cs.enableVertical(false);
+    cs.setHorizontalSRID(m_config.srid);
+    if (cs.exec())
+        spnTopsTreetopsSRID->setValue(cs.getHorizontalSRID());
 }
 
 void TreetopsForm::updateView() {
@@ -139,7 +157,7 @@ void TreetopsForm::topsSmoothedCHMClicked() {
     txtTopsSmoothedCHM->setText(_str(m_config.topsSmoothedCHM));
     checkRun();
     if (m_config.crownsSmoothedCHM.empty()) {
-        m_config.crownsSmoothedCHM = m_config.smoothSmoothedCHM;
+        m_config.crownsSmoothedCHM = m_config.topsSmoothedCHM;
         txtCrownsSmoothedCHM->setText(_str(m_config.crownsSmoothedCHM));
     }
     updateView();
@@ -165,11 +183,13 @@ void TreetopsForm::topsTreetopsDatabaseClicked() {
 
 void TreetopsForm::crownsSmoothedCHMClicked() {
     m_config.crownsSmoothedCHM = _getInputFile(this, "Smoothed CHM for Crown Delineation", m_last, "GeoTiff (*.tif *.tiff)");
+    txtCrownsSmoothedCHM->setText(_str(m_config.crownsSmoothedCHM));
     checkRun();
 }
 
 void TreetopsForm::crownsTreetopsDatabaseClicked() {
     m_config.crownsTreetopsDatabase = _getInputFile(this, "Treetops Database", m_last, "SQLite (*.sqlite)");
+    txtCrownsTreetopsDatabase->setText(_str(m_config.crownsTreetopsDatabase));
     checkRun();
 }
 

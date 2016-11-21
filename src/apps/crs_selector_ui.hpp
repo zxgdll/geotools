@@ -31,6 +31,8 @@ namespace geotools {
             void updateFields();
         public:
             CRSSelector(QWidget *parent = Q_NULLPTR, Qt::WindowFlags f = Qt::WindowFlags());
+            void enableVertical(bool);
+            void enableHorizontal(bool);
             int getHorizontalSRID();
             int getVerticalSRID();
             void setHorizontalSRID(int);

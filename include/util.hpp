@@ -85,10 +85,11 @@ namespace geotools {
             }
         };
 
+        // Provides methods for handling status callbacks.
         class Callbacks {
         public:
             virtual ~Callbacks() = 0;
-            virtual void fileCallback(float status) const = 0;
+            virtual void stepCallback(float status) const = 0;
             virtual void overallCallback(float status) const = 0;
         };
 

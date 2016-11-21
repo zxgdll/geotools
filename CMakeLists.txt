@@ -83,7 +83,6 @@ include (CPack)
 
 project (geotools)
 
-message(STATUS ${Qt5Gui_INCLUDE_DIRS})
 if(${WIN32})
 	link_directories(C:/Qt/5.7/msvc2013_64 C:/CGAL-4.9/makefiles/lib C:/OSGeo4W64/lib ${Boost_LIBRARY_DIR})
 	include_directories(include C:/Qt/5.7/msvc2013_64/include C:/CGAL-4.9/makefiles/include C:/OSGeo4W64/include ${Boost_INCLUDE_DIR})
@@ -136,7 +135,7 @@ else()
 endif()
 
 if(${WITH_GUI})
-	add_executable (treetops-app src/apps/treetops.cpp src/apps/treetops_ui.cpp)
+	add_executable (treetops-app src/apps/treetops.cpp src/apps/treetops_ui.cpp src/apps/crs_selector_ui.cpp)
 	target_link_libraries (treetops-app PUBLIC treetops Qt5::Gui Qt5::Core Qt5::Widgets)
 else()
 	add_executable (treetops-app src/apps/treetops.cpp src/apps/treetops_ui.hpp)

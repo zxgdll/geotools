@@ -31,6 +31,14 @@ void CRSSelector::loadCrs(std::map<int, std::string> &target, const std::string 
         target[code] = name;
 }
 
+void CRSSelector::enableVertical(bool e) {
+    txtVerticalDatum->setEnabled(e);
+}
+
+void CRSSelector::enableHorizontal(bool e) {
+    txtHorizontalCRS->setEnabled(e);
+}
+
 void CRSSelector::initUi() {
     Ui::CRSSelector::setupUi((QDialog *) this);
 

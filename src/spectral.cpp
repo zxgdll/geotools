@@ -5,10 +5,10 @@
 #include <iostream>
 #include <iomanip>
 
+#include "sqlite.hpp"
 #include "geotools.h"
 #include "raster.hpp"
 #include "spectral.hpp"
-#include "sqlite.hpp"
 
 using namespace geotools::spectral;
 using namespace geotools::spectral::config;
@@ -54,7 +54,7 @@ public:
     }
 
     /**
-     * Returns true if the pixek should be abandoned because it contains nodata.
+     * Returns true if the pixel should be abandoned because it contains nodata.
      */
     bool isNoData(unsigned int nodata) {
         // TODO: Consult on the best way to determine whether a pixel is

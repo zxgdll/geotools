@@ -102,11 +102,13 @@ namespace geotools {
             virtual bool hasGrid() const = 0;
 
             // Return a reference to the value held at the given index in the grid.
-            // Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
+            // Not const because the get operation might imply (e.g.) a buffering 
+            // operation in the subclass.
             virtual T get(size_t idx) = 0;
 
             // Return a reference to the value held at the given column and row.
-            // Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
+            // Not const because the get operation might imply (e.g.) a buffering 
+            // operation in the subclass.
             virtual T get(int32_t col, int32_t row) = 0;
 
             // Set the value held at  the given index in the grid.
@@ -116,7 +118,8 @@ namespace geotools {
             virtual void set(int32_t col, int32_t row, const T value) = 0;
 
             // Get or set the value held at the given index in the grid.
-            // Not const because the get operation might imply (e.g.) a buffering operation in the subclass.
+            // Not const because the get operation might imply (e.g.) a buffering 
+            // operation in the subclass.
             virtual T operator[](size_t idx) = 0;
 
             // Return true if the dataset contains the given element.
@@ -140,8 +143,8 @@ namespace geotools {
             // Sets the nodata value.
             virtual void nodata(const T nodata) = 0;
 
-            // Read data into Grid instance. Will attempt to read a region of the same size
-            // as the given block.
+            // Read data into Grid instance. Will attempt to read a region of 
+            // the same size as the given block.
             // col    - The column in the data source to read from.
             // row    - The row in the data source to read from.
             // block  - The block to read into.
@@ -149,7 +152,9 @@ namespace geotools {
             // dstRow - The row in the destination block to write to. 
             // xcols  - The max number of cols to write.
             // xrows  - The max number of rows to write.
-            virtual void readBlock(int32_t col, int32_t row, Grid<T> &block, int32_t dstCol = 0, int32_t dstRow = 0, int32_t xcols = 0, int32_t xrows = 0) = 0;
+            virtual void readBlock(int32_t col, int32_t row, Grid<T> &block, 
+                int32_t dstCol = 0, int32_t dstRow = 0, int32_t xcols = 0, 
+                int32_t xrows = 0) = 0;
 
             // Read data into Grid instance. Will attempt to read a region of the same size
             // as the given block.
@@ -164,10 +169,12 @@ namespace geotools {
             // srcRow - The row in the source block to read from. 
             // xcols  - The max number of cols to write.
             // xrows  - The max number of rows to write.
-            virtual void writeBlock(int32_t col, int32_t row, Grid<T> &block, int32_t dstCol = 0, int32_t dstRow = 0, int32_t xcols = 0, int32_t xrows = 0) = 0;
+            virtual void writeBlock(int32_t col, int32_t row, Grid<T> &block, 
+                int32_t dstCol = 0, int32_t dstRow = 0, int32_t xcols = 0, 
+                int32_t xrows = 0) = 0;
 
-            // Write data from Grid instance. Will attempt to write a region of the same size
-            // as the given block.
+            // Write data from Grid instance. Will attempt to write a region of 
+            // the same size as the given block.
             virtual void writeBlock(Grid<T> &block) = 0;
 
 
@@ -194,7 +201,6 @@ namespace geotools {
             T variance();
 
             // Convert a Grid to some other type.
-
             template <class U>
             void convert(Grid<U> &g) {
                 for (size_t i = 0; i < size(); ++i)
@@ -206,9 +212,9 @@ namespace geotools {
             // and the present grid is unchanged *unless* the present grid is passed
             // as other.
             // TODO: Moved here to allow compilation of different type combinations.
-
             template <class U>
-            std::vector<int> floodFill(int32_t col, int32_t row, FillOperator<T> &op, Grid<U> &other, U fill) {
+            std::vector<int> floodFill(int32_t col, int32_t row, 
+                FillOperator<T> &op, Grid<U> &other, U fill) {
 
                 int minc = cols() + 1;
                 int minr = rows() + 1;
@@ -293,7 +299,9 @@ namespace geotools {
             std::vector<int> floodFill(int32_t col, int32_t row, FillOperator<T> &op, T fill);
 
             // Smooth the raster and write the smoothed version to the output raster.
-            void smooth(Grid<T> &smoothed, double sigma, int32_t size);
+            // Callback is an optional function reference with a single float
+            // between 0 and 1, for status tracking.
+            void smooth(Grid<T> &smoothed, double sigma, int32_t size, geotools::util::Callbacks *status = nullptr);
 
             // The radius is given with cells as the unit, but
             // can be rational. When determining which cells to

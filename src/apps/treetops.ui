@@ -176,7 +176,7 @@
          <x>0</x>
          <y>40</y>
          <width>606</width>
-         <height>97</height>
+         <height>101</height>
         </rect>
        </property>
        <layout class="QHBoxLayout" name="horizontalLayout_8" stretch="1,1">
@@ -271,18 +271,26 @@
             </property>
            </widget>
           </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="label_17">
+            <property name="text">
+             <string>Treetops SRID</string>
+            </property>
+           </widget>
+          </item>
           <item row="2" column="1">
-           <spacer name="verticalSpacer_2">
-            <property name="orientation">
-             <enum>Qt::Vertical</enum>
+           <widget class="QSpinBox" name="spnTopsTreetopsSRID">
+            <property name="maximum">
+             <number>999999</number>
             </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>20</width>
-              <height>40</height>
-             </size>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QToolButton" name="btnTopsTreetopsSRID">
+            <property name="text">
+             <string>...</string>
             </property>
-           </spacer>
+           </widget>
           </item>
          </layout>
         </item>
