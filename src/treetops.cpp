@@ -23,6 +23,8 @@
 
 #include <queue>
 #include <iostream>
+#include <atomic>
+
 #include <omp.h>
 
 #include "sqlite.hpp"
@@ -44,7 +46,8 @@ namespace geotools {
 
         namespace util {
 
-            // Represents a grid cell, and maintains some properties of the seed that originated it.
+            // Represents a grid cell, and maintains some properties of the 
+            // seed that originated it.
             class Node {
             public:
                 uint64_t id;
@@ -63,12 +66,6 @@ namespace geotools {
                     z(top.z), tz(top.z) {
                 }
             };
-
-            // Returns the distance between the given column/row pair in 
-            // squared cells.
-            double dist(int tc, int tr, int c, int r) {
-                return g_sq((double) (tc - c)) + g_sq((double) (tr - r));
-            }
 
             // Returns true if the pixel at the center of the given raster is 
             // the maximum value in the raster.
@@ -144,19 +141,14 @@ void Treetops::setCallbacks(Callbacks *callbacks) {
 }
 
 void Treetops::smooth(const TreetopsConfig &config) {
-    
     config.checkSmoothing();
-    
     Raster<float> in(config.smoothOriginalCHM);
     Raster<float> out(config.smoothSmoothedCHM, 1, in);
     in.smooth(out, config.smoothStdDev, config.smoothWindowSize, m_callbacks);
-    
 }
 
 void Treetops::treetops(const TreetopsConfig &config) {
-
     config.checkTops();
-
     if(m_callbacks)
         m_callbacks->stepCallback(0.01);
 
@@ -173,15 +165,14 @@ void Treetops::treetops(const TreetopsConfig &config) {
     db.makeFast();
     db.dropGeomIndex();
     db.setCacheSize(config.tableCacheSize);
-    db.clear(); // TODO: Faster to delete it and start over.
 
     if(m_callbacks)
         m_callbacks->stepCallback(0.02);
 
-    int bufSize = 256;
-    int curRow = 0;
-    uint64_t topId = 0;
-    uint64_t topCount = 0;
+    int32_t bufSize = 256;             // The number of rows each thread works on at a time.
+    std::atomic<uint64_t> topCount(0);
+    std::atomic<int32_t> curRow(0);     // Used for status indicator.
+    std::atomic<uint64_t> topId(0);
 
     #pragma omp parallel
     {
@@ -191,10 +182,10 @@ void Treetops::treetops(const TreetopsConfig &config) {
         blk.fill(blk.nodata());
 
         std::map<uint64_t, std::unique_ptr<Top> > tops0;
-        int bufSize0;
+        int32_t bufSize0;
 
         #pragma omp for
-        for (int brow = 0; brow < original.rows(); brow += bufSize) {
+        for (int32_t brow = 0; brow < original.rows(); brow += bufSize) {
 
             bufSize0 = g_min(bufSize, original.rows() - brow - config.topsWindowSize);
             if(bufSize0 < bufSize)
@@ -205,11 +196,11 @@ void Treetops::treetops(const TreetopsConfig &config) {
             #pragma omp critical(__c)
             smoothed.readBlock(0, brow, blk);
 
-            for (int row = 0; row < bufSize0; ++row) {
-                for (int col = 0; col < original.cols() - config.topsWindowSize; ++col) {
+            for (int32_t row = 0; row < bufSize0; ++row) {
+                for (int32_t col = 0; col < original.cols() - config.topsWindowSize; ++col) {
         
-                    int r = row + config.topsWindowSize / 2;
-                    int c = col + config.topsWindowSize / 2;            
+                    int32_t r = row + config.topsWindowSize / 2;
+                    int32_t c = col + config.topsWindowSize / 2;            
                     double max;
 
                     if (blk.get(c, r) >= config.topsMinHeight &&
@@ -220,11 +211,8 @@ void Treetops::treetops(const TreetopsConfig &config) {
                         // Get the original height from the unsmoothed raster.
                         double umax = original.get(c, r + brow);
 
-                        #pragma omp atomic
-                        ++topId;
-
-                        std::unique_ptr<Top> t(new Top(
-                                topId,
+                        std::unique_ptr<Top> pt(new Top(
+                                ++topId,
                                 original.toCentroidX(c), // center of pixel
                                 original.toCentroidY(r + brow),
                                 max,
@@ -232,38 +220,31 @@ void Treetops::treetops(const TreetopsConfig &config) {
                                 c,
                                 r + brow
                         ));
-
-                        tops0[id] = std::move(t);
+                        tops0[id] = std::move(pt);
                     }
                 }
             }
 
             if(m_callbacks) {
-                #pragma omp atomic
                 curRow += bufSize0;
                 m_callbacks->stepCallback(0.02 + (float) curRow / original.rows() * 0.48);
-            }
-            
+            }   
         }
 
         uint64_t topCount0 = tops0.size();
-
-        #pragma omp atomic
-        topCount += topCount0;
-
         uint64_t b = 0;
         uint64_t batch = db.maxAddPointCount();
 
+        topCount += topCount0;
+
         std::vector<std::unique_ptr<Point> > points;
-        for (auto it = tops0.begin(); it != tops0.end(); ++it) {
-
-            Top *t = it->second.get();
-
+        for (const auto &it : tops0) {
+            const uint64_t &id = it.first;
+            const std::unique_ptr<Top> &t = it.second;
             std::map<std::string, std::string> fields;
-            fields["id"] = std::to_string(t->id);
-
-            Point *pt = new Point(t->x, t->y, t->uz, fields);
-            points.push_back(std::unique_ptr<Point>(pt));
+            fields["id"] = std::to_string(id);
+            std::unique_ptr<Point> pt(new Point(t->x, t->y, t->uz, fields));
+            points.push_back(std::move(pt));
 
             if (++b % batch == 0 || b >= topCount0) {
                 g_debug("inserting " << points.size() << " points");
@@ -296,14 +277,12 @@ void Treetops::treetops(const TreetopsConfig &config) {
 }
 
 void Treetops::treecrowns(const TreetopsConfig &config) {
-    
     config.checkCrowns();
-
     if(m_callbacks)
         m_callbacks->stepCallback(0.01);
 
     g_debug(" -- crowns: delineating crowns...");
-    int batchSize = 100000;
+    uint32_t batchSize = 10000;
 
     // Initialize the rasters.
     g_debug(" -- crowns: preparing rasters");
@@ -319,23 +298,14 @@ void Treetops::treecrowns(const TreetopsConfig &config) {
     
     // Initialize the database, get the treetop count and estimate the buffer size.
     g_debug(" -- crowns: preparing database")
-    SQLite db(config.crownsTreetopsDatabase);
     uint64_t geomCount;
+    SQLite db(config.crownsTreetopsDatabase);
     db.getGeomCount(&geomCount);
     g_debug(" -- crowns: processing " << geomCount << " tree tops");
 
     if(m_callbacks)
         m_callbacks->stepCallback(0.03);
     
-    // The number of extra rows above and below the buffer.
-    int bufRows = (int) std::ceil(g_abs(config.crownsRadius / inrast.resolutionY()));
-    // The height of the row, not including disposable buffer. Use bufRows as lower bound to
-    // avoid read error later (keeps min row index to >=0)
-    int rowStep = g_max(bufRows, (int) g_abs(std::ceil((double) batchSize / geomCount * inrast.rows()) / inrast.resolutionY()));
-    // The total height of the buffer
-    int rowHeight = rowStep + bufRows * 2;
-    int rowCompleted = 0;
-
     // Build the list of offsets for D8 or D4 search.
     std::vector<std::pair<int, int> > offsets; // pairs of col, row
     offsets.push_back(std::make_pair(-1, -1));
@@ -346,18 +316,18 @@ void Treetops::treecrowns(const TreetopsConfig &config) {
     offsets.push_back(std::make_pair(1, -1));
     offsets.push_back(std::make_pair(1, 0));
     offsets.push_back(std::make_pair(1, 1));
-
-    int curRow = 0;
     
-    #pragma omp parallel for
-    for (int row = 0; row < inrast.rows(); row += rowStep) {
+    // The number of extra rows above and below the buffer.
+    int32_t bufRows = (int) std::ceil(g_abs(config.crownsRadius / inrast.resolutionY()));
+    // The height of the row, not including disposable buffer. Use bufRows as lower bound to
+    // avoid read error later (keeps min row index to >=0)
+    int32_t rowStep = g_max(bufRows, (int) g_abs(std::ceil((double) batchSize / geomCount * inrast.rows()) / inrast.resolutionY()));
+    // The total height of the buffer
+    int32_t rowHeight = rowStep + bufRows * 2;
+    std::atomic<uint32_t> curRow(0);
 
-        #pragma omp atomic
-        curRow += rowStep;
-        
-        g_debug("Processing " << batchSize << " of " << geomCount << " points.");
-        g_debug(" - row " << row << " of " << inrast.rows() << "; step: " << rowStep);
-
+    #pragma omp parallel
+    {
         // To keep track of visited cells.
         std::vector<bool> visited((uint64_t) inrast.cols() * rowHeight);
         MemRaster<float> buf(inrast.cols(), rowHeight);
@@ -365,74 +335,73 @@ void Treetops::treecrowns(const TreetopsConfig &config) {
         buf.fill(inrast.nodata());
         blk.fill(0);
 
-        // Load the tree tops for the strip.
-        Bounds bounds(inrast.toX(0), inrast.toY(row - bufRows), inrast.toX(inrast.cols()), inrast.toY(row + rowStep + bufRows));
-        std::vector<std::unique_ptr<Point> > tops;
-        #pragma omp critical(__crowns_getpoints)
-        {
+        #pragma omp for
+        for (int32_t row = 0; row < inrast.rows(); row += rowStep) {
+            curRow += rowStep;
+
+            // Load the tree tops for the strip.
+            Bounds bounds(inrast.toX(0), inrast.toY(row - bufRows), inrast.toX(inrast.cols()), inrast.toY(row + rowStep + bufRows));
+            std::vector<std::unique_ptr<Point> > tops;
+            
+            #pragma omp critical(__crowns_getpoints)
             db.getPoints(tops, bounds);
-        }
-        g_debug(" - reading from source: " << 0 << ", " << (row == 0 ? row : row - bufRows) << ", [buf], " << 0 << ", " << (row == 0 ? bufRows : 0));
-        #pragma omp critical(__crowns_readbuf) 
-        {
+
+            #pragma omp critical(__crowns_readbuf) 
             inrast.readBlock(0, row == 0 ? row : row - bufRows, buf, 0, row == 0 ? bufRows : 0);
-        }
 
-        // Convert the Tops to Nodes.
-        std::queue<std::unique_ptr<Node> > q;
-        for (const std::unique_ptr<Point> &t : tops) {
-            int col = inrast.toCol(t->x);
-            int row = inrast.toRow(t->y);
-            int id = atoi(t->fields["id"].c_str());
-            q.push(std::unique_ptr<Node>(new Node(id, col, row, t->z, col, row, t->z)));
-        }
+            // Convert the Tops to Nodes.
+            std::queue<std::unique_ptr<Node> > q;
+            for (const std::unique_ptr<Point> &t : tops) {
+                int col = inrast.toCol(t->x);
+                int row = inrast.toRow(t->y);
+                int id = atoi(t->fields["id"].c_str());
+                std::unique_ptr<Node> nd(new Node(id, col, row, t->z, col, row, t->z));
+                q.push(std::move(nd));
+            }
 
-        // Run through the queue.
-        while (q.size()) {
+            // Run through the queue.
+            while (q.size()) {
+                std::unique_ptr<Node> n = std::move(q.front());
+                q.pop();
 
-            std::unique_ptr<Node> n = std::move(q.front());
-            q.pop();
+                blk.set(n->c, n->r - row + bufRows, (uint32_t) n->id);
 
-            blk.set(n->c, n->r - row + bufRows, (uint32_t) n->id);
+                for (const std::pair<int, int> &offset : offsets) {
+                    int c = n->c + offset.first;
+                    int r = n->r + offset.second;
 
-            for (const std::pair<int, int> &offset : offsets) {
-                int c = n->c + offset.first;
-                int r = n->r + offset.second;
+                    if (r < 0 || c < 0 || r >= inrast.rows() || c >= inrast.cols()) continue;
+                    if (r - row + bufRows < 0 || r - row + bufRows >= buf.rows()) continue;
 
-                //g_debug(" -- " << n->c << ", " << n->r << "; " << c << ", " << r);
-                if (r < 0 || c < 0 || r >= inrast.rows() || c >= inrast.cols()) continue;
-                if (r - row + bufRows < 0 || r - row + bufRows >= buf.rows()) continue;
+                    uint64_t idx = (uint64_t) (r - row + bufRows) * inrast.cols() + c;
+                    if (visited[idx])
+                        continue;
 
-                uint64_t idx = (uint64_t) (r - row + bufRows) * inrast.cols() + c;
-                if (visited[idx])
-                    continue;
-
-                double v = buf.get(idx);
-                if (v != nodata // is not nodata
-                        && v < n->z // is less than the neighbouring pixel
-                        && v >= config.crownsMinHeight // is greater than the min height
-                        && (v / n->tz) >= config.crownsHeightFraction // is greater than the threshold height
-                        && std::pow(n->tc - c, 2) + std::pow(n->tr - r, 2) <= std::pow(config.crownsRadius, 2) // is within the radius
-                ) {
-                    q.push(std::unique_ptr<Node>(new Node(n->id, c, r, v, n->tc, n->tr, n->tz)));
-                    visited[idx] = true;
+                    double v = buf.get(idx);
+                    if (v != nodata                                                             // is not nodata
+                            && v < n->z                                                         // is less than the neighbouring pixel
+                            && v >= config.crownsMinHeight                                      // is greater than the min height
+                            && (v / n->tz) >= config.crownsHeightFraction                       // is greater than the threshold height
+                            && g_sq(n->tc - c) + g_sq(n->tr - r) <= g_sq(config.crownsRadius)   // is within the radius
+                    ) {
+                        std::unique_ptr<Node> nd(new Node(n->id, c, r, v, n->tc, n->tr, n->tz));
+                        q.push(std::move(nd));
+                        visited[idx] = true;
+                    }
                 }
             }
-        }
 
-        if(m_callbacks)
-            m_callbacks->stepCallback(0.03 + ((float) curRow / inrast.rows()) * 0.97);
+            if(m_callbacks)
+                m_callbacks->stepCallback(0.03 + ((float) curRow / inrast.rows()) * 0.97);
 
-        g_debug(" - tmp block: cols: " << blk.cols() << ", rows: " << (row == 0 ? rowStep + bufRows : rowStep));
-        if (row > 0 && (row + bufRows) >= inrast.rows())
-            continue;
-        #pragma omp critical(__b)
-        {
+            if (row > 0 && (row + bufRows) >= inrast.rows())
+                continue;
+
+            #pragma omp critical(__b)
             outrast.writeBlock(0, row, blk, 0, bufRows);
-            rowCompleted += rowStep;
         }
     }
-
+    
     if(m_callbacks)
         m_callbacks->stepCallback(1.0);
 
