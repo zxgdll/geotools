@@ -9,10 +9,12 @@
 
 #include "geotools.h"
 #include "util.hpp"
+#include "csv.hpp"
 #include "crs_selector_ui.hpp"
 
 using namespace geotools::ui;
 using namespace geotools::util;
+using namespace geotools::csv;
 
 CRSSelector::CRSSelector(QWidget *parent, Qt::WindowFlags f) :
         QDialog(parent, f),
@@ -22,18 +24,14 @@ CRSSelector::CRSSelector(QWidget *parent, Qt::WindowFlags f) :
 
 void CRSSelector::loadCrs(std::map<int, std::string> &target, const std::string &filename) {
     g_debug(" -- loadCRS");
-    const char *path = CPLFindFile("gdal", filename.c_str());
-    if (path == NULL)
-        g_argerr("The path to " << filename << " could not be determined. Please set GDAL_DATA.");
+    std::string path(CPLFindFile("gdal", filename.c_str()));
+    CSVReader csv(path);
     std::unordered_map<std::string, std::string> row;
-    CSVReader csv(filename);
     while(csv.next(row)) {
         if(row.find("COORD_REF_SYS_CODE") == row.end() || row.find("COORD_REF_SYS_NAME") == row.end())
             g_runerr("Missing fields from CRS database.");
         int srid = atoi(row["COORD_REF_SYS_CODE"].c_str());
-        std::string name = row["COORD_REF_SYS_NAME"];
-        g_debug(" -- crs " << srid << ", " << name);
-        target[srid] = name;
+        target[srid] = row["COORD_REF_SYS_NAME"];
     }
 }
 

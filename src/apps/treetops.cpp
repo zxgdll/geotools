@@ -53,7 +53,20 @@ void usage() {
 
 int runWithGui(int argc, char **argv) {
 #ifdef WITH_GUI
-    QApplication q(argc, argv);
+    class TTApplication : public QApplication {
+    public:
+        TTApplication(int argc, char **argv) : QApplication(argc, argv) {}
+        bool notify(QObject *receiver, QEvent *e) {
+            try {
+                return receiver->event(e);
+            } catch(const std::exception &ex) {
+                // TODO: User error feedback.
+                g_error("Error: " << ex.what());
+                return false;
+            }
+        }
+    };
+    TTApplication q(argc, argv);
     QWidget *w = new QWidget();
     geotools::ui::TreetopsForm f;
     f.setupUi(w);
