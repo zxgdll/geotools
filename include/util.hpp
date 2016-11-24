@@ -11,6 +11,8 @@
 #include <mutex>
 #include <queue>
 #include <cmath>
+#include <unordered_map>
+#include <sstream>
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
@@ -86,7 +88,6 @@ namespace geotools {
 
         // Provides access to an allocated buffer
         // which will be safely disposed of.
-
         class Buffer {
         public:
             void *buf;
@@ -100,6 +101,73 @@ namespace geotools {
             }
         };
 
+        class CSVReader {
+        private:
+            std::string m_filename;
+            std::unique_ptr<std::ifstream> m_str;
+            std::vector<std::string> m_header;
+            char *m_buf;
+            uint32_t m_buflen;
+            
+            void parseBuf(std::vector<std::string> &out) {
+                bool esc = false;
+                bool quote = false;
+                char *buf = m_buf;
+                std::stringstream ss;
+                while(*(buf++) != '\0') {
+                    switch(*buf) {
+                        case '\\':
+                            if(!esc) {
+                                esc = true;
+                            } else {
+                                ss << *buf;
+                                esc = false;
+                            }
+                            break;
+                        case '"':
+                            if(!esc) {
+                                quote = !quote;
+                            } else {
+                                ss << *buf;
+                                esc = false;
+                            }
+                            break;
+                        case ',':
+                            out.push_back(ss.str());
+                            ss.clear();
+                            break;
+                        default:
+                            ss << *buf;
+                            break;
+                    }
+                }
+            }
+        public:
+            CSVReader(const std::string &filename, uint32_t buflen = 2048) : 
+                m_filename(filename),
+                m_buflen(buflen) {
+            }
+                bool next(std::unordered_map<std::string, std::string> &row) {
+                    if(!m_str.get()) {
+                        m_buf = (char *) std::malloc(m_buflen);
+                        m_str.reset(new std::ifstream(m_filename));
+                        m_str->getline(m_buf, m_buflen);
+                        if(m_str->failbit)
+                            return false;
+                        parseBuf(m_header);
+                    }
+                    m_str->getline(m_buf, m_buflen);
+                    if(m_str->failbit)
+                        return false;
+                    std::vector<std::string> values;
+                    parseBuf(values);
+                    if(values.size() < m_header.size())
+                        return false;
+                    for(uint32_t i = 0; i < m_header.size(); ++i)
+                        row[m_header[i]] = values[i];
+                    return true;
+                }
+        };
         // Provides methods for handling status callbacks.
         class Callbacks {
         public:
@@ -268,7 +336,7 @@ namespace geotools {
             static void loadXYZSamples(std::string &datafile, std::vector<std::tuple<double, double, double> > &samples);
 
             static void loadIDXYZSamples(std::string &datafile, std::vector<std::tuple<std::string, double, double, double> > &samples);
-
+            
             static void status(int step, int of, const std::string &message = "", bool end = false);
 
             static const std::string tmpFile(const std::string &root);

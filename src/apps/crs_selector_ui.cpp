@@ -1,4 +1,5 @@
 #include <iterator>
+#include <cstdlib>
 
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QFileDialog>
@@ -6,29 +7,34 @@
 
 #include "cpl_conv.h"
 
-#include "csv.h"
-
 #include "geotools.h"
+#include "util.hpp"
 #include "crs_selector_ui.hpp"
 
 using namespace geotools::ui;
+using namespace geotools::util;
 
 CRSSelector::CRSSelector(QWidget *parent, Qt::WindowFlags f) :
-QDialog(parent, f),
-m_vsrid(0), m_hsrid(0) {
+        QDialog(parent, f),
+        m_vsrid(0), m_hsrid(0) {
     initUi();
 }
 
 void CRSSelector::loadCrs(std::map<int, std::string> &target, const std::string &filename) {
+    g_debug(" -- loadCRS");
     const char *path = CPLFindFile("gdal", filename.c_str());
     if (path == NULL)
         g_argerr("The path to " << filename << " could not be determined. Please set GDAL_DATA.");
-    io::CSVReader<2, io::trim_chars<' ', '\t'>, io::double_quote_escape<',', '"'>, io::throw_on_overflow, io::single_line_comment<'#'> > in(path);
-    in.read_header(io::ignore_extra_column, "COORD_REF_SYS_CODE", "COORD_REF_SYS_NAME");
-    int code;
-    std::string name;
-    while (in.read_row(code, name))
-        target[code] = name;
+    std::unordered_map<std::string, std::string> row;
+    CSVReader csv(filename);
+    while(csv.next(row)) {
+        if(row.find("COORD_REF_SYS_CODE") == row.end() || row.find("COORD_REF_SYS_NAME") == row.end())
+            g_runerr("Missing fields from CRS database.");
+        int srid = atoi(row["COORD_REF_SYS_CODE"].c_str());
+        std::string name = row["COORD_REF_SYS_NAME"];
+        g_debug(" -- crs " << srid << ", " << name);
+        target[srid] = name;
+    }
 }
 
 void CRSSelector::enableVertical(bool e) {

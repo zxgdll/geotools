@@ -11,8 +11,6 @@
 #include <map>
 #include <algorithm>
 
-#include "csv.h"
-
 #include "geotools.h"
 #include "util.hpp"
 #include "Raster.hpp"
@@ -32,11 +30,7 @@ double _random() {
  * Load the samples from a csv file. The file must have x, y and z headers.
  */
 void loadSamples(std::string &datafile, std::list<interp::InterpPoint> &samples) {
-    io::CSVReader<3> in(datafile.c_str());
-    in.read_header(io::ignore_extra_column, "x", "y", "z");
-    double x, y, z;
-    while (in.read_row(x, y, z))
-        samples.push_back(interp::InterpPoint(x, y, z));
+    g_runerr("CSV read not implemented.")
 }
 
 /**

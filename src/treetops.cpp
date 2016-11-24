@@ -169,7 +169,7 @@ void Treetops::treetops(const TreetopsConfig &config) {
     if(m_callbacks)
         m_callbacks->stepCallback(0.02);
 
-    int32_t bufSize = 256;             // The number of rows each thread works on at a time.
+    int32_t bufSize = 256;              // The number of rows each thread works on at a time.
     std::atomic<uint64_t> topCount(0);
     std::atomic<int32_t> curRow(0);     // Used for status indicator.
     std::atomic<uint64_t> topId(0);

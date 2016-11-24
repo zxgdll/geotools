@@ -6,7 +6,6 @@
 #include <vector>
 
 #include <sqlite3.h>
-//#include <spatialite/gaiageo.h>
 #include <spatialite.h>
 
 #include "geotools.h"

@@ -31,7 +31,6 @@ namespace geotools {
         namespace util {
 
             // Reads a line from a CSV stream into a vector of values.
-
             bool readline(std::istream &st, std::vector<std::string> &row) {
                 row.clear();
                 std::string line;
@@ -47,7 +46,6 @@ namespace geotools {
             }
 
             // Represents a bounding box with columns and rows.
-
             class Box {
             private:
                 int m_c0, m_c1, m_r0, m_r1;
@@ -65,7 +63,6 @@ namespace geotools {
             static unsigned int __cell_id = 0;
 
             // Represents a grid cell.
-
             class Cell {
             private:
                 int m_col;
@@ -129,7 +126,6 @@ namespace geotools {
             };
 
             // Represents a basin, with bounds and area and the ID of the seed that spawned it.
-
             class Basin {
             private:
                 int mg_minc;
