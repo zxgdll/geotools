@@ -2,6 +2,7 @@
 #include <QtWidgets/QFileDialog>
 #include <QMessageBox>
 #include <QDir>
+//#include <QHelpEngine>
 
 #include "geotools.h"
 #include "treetops.hpp"
@@ -75,7 +76,8 @@ void TreetopsForm::setupUi(QWidget *form) {
     connect(btnExit, SIGNAL(clicked()), SLOT(exitClicked()));
     connect(btnRun, SIGNAL(clicked()), SLOT(runClicked()));
     connect(btnCancel, SIGNAL(clicked()), SLOT(cancelClicked()));
-
+    connect(btnHelp, SIGNAL(clicked()), SLOT(helpClicked()));
+    
     if (m_callbacks) {
         connect((TreetopsCallbacks *) m_callbacks, SIGNAL(stepProgress(int)), prgStep, SLOT(setValue(int)));
         connect((TreetopsCallbacks *) m_callbacks, SIGNAL(overallProgress(int)), prgOverall, SLOT(setValue(int)));
@@ -346,6 +348,11 @@ void TreetopsForm::exitClicked() {
 
 void TreetopsForm::cancelClicked() {
     g_trace("cancel");
+}
+
+void TreetopsForm::helpClicked() {
+    //QHelpEngine qh("help.qhc", this);
+    g_trace("help");
 }
 
 void TreetopsForm::checkRun() {

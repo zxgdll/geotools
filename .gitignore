@@ -3,6 +3,8 @@
 **/*.swp
 **/*.swo
 **/*.tif.xml
+**/*.qhc
+**/*.qch
 data/*
 makefiles
 tests/output

@@ -87,7 +87,8 @@ namespace geotools {
             void exitClicked();
             void runClicked();
             void cancelClicked();
-
+            void helpClicked();
+            
             void smoothOriginalCHMClicked();
             void smoothSmoothedCHMClicked();
 

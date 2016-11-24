@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<!--
+To change this license header, choose License Headers in Project Properties.
+To change this template file, choose Tools | Templates
+and open the template in the editor.
+-->
+<html>
+    <head>
+        <title>GeoTools | Treetops</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body>
+        <h1>Treetops</h1>
+        <p>This tool provides the ability to detect tree tops and tree crowns 
+            in a <a href="glossary.html">canopy height model</a>. Tree crown
+            polygons are often used for further stand analysis, such as 
+            <a href="spectral.html">spectral extraction</a>.</p>
+        <p>The general steps for generating tree crowns are:</p>
+        <ul>
+            <li>Smooth the original CHM raster.</li>
+            <li>Detect treetops from smoothed raster.</li>
+            <li>Delineate tree crowns using the treetops as seeds.</li>
+        </ul>
+    </body>
+</html>
