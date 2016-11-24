@@ -8,5 +8,6 @@
 data/*
 makefiles
 tests/output
+nbproject
 
 
