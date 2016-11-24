@@ -32,8 +32,8 @@ namespace geotools {
 
             Q_OBJECT
         public:
-            void fileCallback(float status) const {
-                emit fileProgress((int) std::round(status * 100));
+            void stepCallback(float status) const {
+                emit stepProgress((int) std::round(status * 100));
             }
 
             void overallCallback(float status) const {
@@ -41,7 +41,7 @@ namespace geotools {
             }
 
         signals:
-            void fileProgress(int) const;
+            void stepProgress(int) const;
             void overallProgress(int) const;
         };
 
