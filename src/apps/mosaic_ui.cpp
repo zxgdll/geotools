@@ -11,11 +11,11 @@ using namespace geotools::ui;
 using namespace geotools::raster;
 
 MosaicForm::MosaicForm(QWidget *p) :
-QWidget(p),
-m_tileSize(2048),
-m_distance(100.0),
-m_threads(1),
-m_callbacks(new MosaicCallbacks()) {
+    QWidget(p),
+    m_tileSize(2048),
+    m_distance(100.0),
+    m_threads(1),
+    m_callbacks(new MosaicCallbacks()) {
 }
 
 MosaicForm::~MosaicForm() {

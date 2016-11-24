@@ -215,7 +215,7 @@ namespace geotools {
             using namespace geotools::raster::util;
 
             if (m_callbacks) {
-                m_callbacks->fileCallback(0.0f);
+                m_callbacks->stepCallback(0.0f);
                 m_callbacks->overallCallback(0.0f);
             }
 
@@ -320,7 +320,7 @@ namespace geotools {
                         tileStatus++;
 
                         if (m_callbacks)
-                            m_callbacks->fileCallback((tileStatus - 0.5) / tiles.size());
+                            m_callbacks->stepCallback((tileStatus - 0.5) / tiles.size());
 
                         std::unique_ptr<Tile> tile = std::move(tiles[t]);
 
@@ -350,14 +350,14 @@ namespace geotools {
                         tile->writeOutput(outGrid, output);
 
                         if (m_callbacks)
-                            m_callbacks->fileCallback((float) tileStatus / tiles.size());
+                            m_callbacks->stepCallback((float) tileStatus / tiles.size());
 
                     }
 
                 } // parallel
 
                 if (m_callbacks) {
-                    m_callbacks->fileCallback(1.0);
+                    m_callbacks->stepCallback(1.0);
                     m_callbacks->overallCallback((float) i / (files.size() - 1));
                 }
             }
