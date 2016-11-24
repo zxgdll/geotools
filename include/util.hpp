@@ -10,10 +10,25 @@
 #include <condition_variable>
 #include <mutex>
 #include <queue>
+#include <cmath>
 
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/filesystem.hpp>
+
+#ifdef _MSC_VER
+#include <float.h>
+namespace std {
+
+    inline bool isnan(double value) {
+        return _isnan(value);
+    }
+    
+    inline double round(double value) {
+        return value < 0 ? -std::floor(0.5 - value) : std::floor(0.5 + value);
+    }
+}
+#endif
 
 namespace geotools {
 
@@ -261,7 +276,14 @@ namespace geotools {
             static bool rm(const std::string &name);
             static bool mkdir(const std::string &dir);
 
-            static std::unique_ptr<MappedFile> mapFile(const std::string &filename, uint64_t size, bool remove = true);
+            // Populates the vector with the files contained in dir. If ext is specified, filters
+            // the files by that extension (case-insensitive). If dir is a file, it is added to the list.
+            // Returns the number of files found.
+            static int dirlist(const std::string &dir, std::vector<std::string> &files, 
+                const std::string &ext = std::string());
+
+            static std::unique_ptr<MappedFile> mapFile(const std::string &filename, 
+                uint64_t size, bool remove = true);
 
         };
 

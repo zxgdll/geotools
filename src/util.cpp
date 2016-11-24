@@ -8,8 +8,11 @@
 #include <string>
 #include <tuple>
 
+#include <boost/filesystem.hpp>
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string/case_conv.hpp>
+
 #include "csv.h"
-#include "boost/filesystem.hpp"
 
 #include "geotools.h"
 #include "util.hpp"
@@ -20,33 +23,32 @@ Callbacks::~Callbacks() {
 }
 
 Point::Point(double x, double y, double z) :
-x(x), y(y), z(z) {
+    x(x), y(y), z(z) {
 }
 
 Point::Point(double x, double y, double z, const std::map<std::string, std::string> &fields) :
-x(x), y(y), z(z) {
+    x(x), y(y), z(z) {
     for (auto it : fields)
         this->fields[it.first] = it.second;
 }
 
 Point::Point() :
-x(0), y(0), z(0) {
+    x(0), y(0), z(0) {
 }
 
 Bounds::Bounds() :
-m_minx(G_DBL_MAX_POS), m_miny(G_DBL_MAX_POS), m_minz(G_DBL_MAX_POS),
-m_maxx(G_DBL_MAX_NEG), m_maxy(G_DBL_MAX_NEG), m_maxz(G_DBL_MAX_NEG) {
+    m_minx(G_DBL_MAX_POS), m_miny(G_DBL_MAX_POS), m_minz(G_DBL_MAX_POS),
+    m_maxx(G_DBL_MAX_NEG), m_maxy(G_DBL_MAX_NEG), m_maxz(G_DBL_MAX_NEG) {
 }
 
 Bounds::Bounds(double minx, double miny, double maxx, double maxy) :
-m_minx(minx), m_miny(miny), m_minz(G_DBL_MAX_NEG),
-m_maxx(maxx), m_maxy(maxy), m_maxz(G_DBL_MAX_POS) {
+    m_minx(minx), m_miny(miny), m_minz(G_DBL_MAX_NEG),
+    m_maxx(maxx), m_maxy(maxy), m_maxz(G_DBL_MAX_POS) {
 }
 
 Bounds::Bounds(double minx, double miny, double maxx, double maxy, double minz, double maxz) :
-m_minx(minx), m_miny(miny), m_minz(minz),
-m_maxx(maxx), m_maxy(maxy), m_maxz(maxz) {
-
+    m_minx(minx), m_miny(miny), m_minz(minz),
+    m_maxx(maxx), m_maxy(maxy), m_maxz(maxz) {
 }
 
 bool Bounds::contains(double x, double y) const {
@@ -414,6 +416,28 @@ bool Util::mkdir(const std::string &dir) {
     if (!exists(bdir))
         return create_directory(bdir);
     return true;
+}
+
+int Util::dirlist(const std::string &dir, std::vector<std::string> &files, const std::string &ext) {
+    using namespace boost::filesystem;
+    using namespace boost::algorithm;
+    if (is_regular_file(dir)) {
+        files.push_back(dir);
+    } else {
+        directory_iterator end;
+        directory_iterator di(dir);
+        for (; di != end; ++di) {
+            if (!ext.empty()) {
+                std::string p(di->path().string());
+                to_lower(p);
+                if (ends_with(p, ext))
+                    files.push_back(p);
+            } else {
+                files.push_back(di->path().string());
+            }
+        }
+    }
+    return files.size();
 }
 
 const std::string Util::tmpFile() {

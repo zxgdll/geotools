@@ -2,7 +2,6 @@
 #include <string>
 #include <fstream>
 
-#include <boost/math/special_functions/fpclassify.hpp>
 #include <boost/interprocess/file_mapping.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/filesystem.hpp>
@@ -12,18 +11,11 @@
 
 using namespace geotools::util;
 using namespace geotools::raster;
-using namespace boost::math;
-
-#ifdef _MSC_VER
-#define isnan boost::math::isnan
-#else
-#define isnan std::isnan
-#endif
 
 // Implementations for Cell
 
 Cell::Cell(int32_t col, int32_t row) :
-col(col), row(row) {
+    col(col), row(row) {
 }
 
 
@@ -31,7 +23,7 @@ col(col), row(row) {
 
 template <class T>
 TargetOperator<T>::TargetOperator(T match) :
-m_match(match) {
+    m_match(match) {
 }
 
 template <class T>
@@ -41,7 +33,7 @@ bool TargetOperator<T>::fill(T value) const {
 
 template <class T>
 Grid<T>::Grid() : m_min(0), m_max(0), m_mean(0), m_stddev(0),
-m_variance(0), m_sum(0), m_count(0), m_stats(false) {
+    m_variance(0), m_sum(0), m_count(0), m_stats(false) {
 }
 
 // Implementations forthe Grid class
@@ -102,20 +94,20 @@ void Grid<T>::normalize() {
     double sum = 0.0;
     for (size_t i = 0; i < size(); ++i) {
         double v = (double) get(i);
-        if (v != nodata() && !isnan(v))
+        if (v != nodata() && !std::isnan(v))
             sum += v;
     }
     double mean = sum / size();
     sum = 0.0;
     for (size_t i = 0; i < size(); ++i) {
         double v = (double) get(i);
-        if (v != nodata() && !isnan(v))
+        if (v != nodata() && !std::isnan(v))
             sum += std::pow(v - mean, 2.0);
     }
     double stdDev = std::sqrt(sum);
     for (size_t i = 0; i < size(); ++i) {
         double v = (double) get(i);
-        if (v != nodata() && !isnan(v))
+        if (v != nodata() && !std::isnan(v))
             set(i, (const T) ((v - mean) / stdDev));
     }
 }
