@@ -53,6 +53,7 @@ void CRSSelector::initUi() {
 
     m_vcomp = new QCompleter(m_vlst, this);
     m_vcomp->setCaseSensitivity(Qt::CaseInsensitive);
+    m_vcomp->setCompletionMode(QCompleter::InlineCompletion);
     m_vcomp->setFilterMode(Qt::MatchContains);
     txtVerticalDatum->setCompleter(m_vcomp);
 
@@ -63,6 +64,7 @@ void CRSSelector::initUi() {
 
     m_hcomp = new QCompleter(m_hlst, this);
     m_hcomp->setCaseSensitivity(Qt::CaseInsensitive);
+    m_hcomp->setCompletionMode(QCompleter::InlineCompletion);
     m_hcomp->setFilterMode(Qt::MatchContains);
     txtHorizontalCRS->setCompleter(m_hcomp);
 
@@ -90,7 +92,16 @@ void CRSSelector::updateFields() {
 }
 
 void CRSSelector::textUpdate() {
-    btnSelect->setEnabled(m_hcomp->currentIndex().isValid());
+    bool activate = m_hcomp->currentIndex().isValid();
+    btnSelect->setEnabled(activate);
+    /*
+    // TODO: Takes focus away from text field.
+    if(activate) {
+        btnSelect->setFocus(Qt::FocusReason::OtherFocusReason);
+    } else {
+        btnCancel->setFocus(Qt::FocusReason::OtherFocusReason);
+    }
+     */
 }
 
 void CRSSelector::cancelClicked() {
