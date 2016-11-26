@@ -250,17 +250,7 @@ namespace geotools {
             g_debug(" -- exit thread");
         }
 
-        void PointStats::pointstats(const PointStatsConfig &config, const Callbacks *callbacks) {
-
-            checkConfig(config);
-
-            if (config.threads > 0) {
-                g_debug(" -- pointstats running with " << g_max(1, config.threads - 1) << " threads");
-            } else {
-                g_argerr("Run with >=1 threads.");
-            }
-
-            class FileSorter {
+        class FileSorter {
             private:
                 double m_colSize;
                 double m_rowSize;
@@ -280,6 +270,16 @@ namespace geotools {
                     return idxa < idxb;
                 }
             };
+            
+        void PointStats::pointstats(const PointStatsConfig &config, const Callbacks *callbacks) {
+
+            checkConfig(config);
+
+            if (config.threads > 0) {
+                g_debug(" -- pointstats running with " << g_max(1, config.threads - 1) << " threads");
+            } else {
+                g_argerr("Run with >=1 threads.");
+            }
 
             // Initialize and spatially sort the file list.
             FileSorter fileSorter(config.resolution, -config.resolution);

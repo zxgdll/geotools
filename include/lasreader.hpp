@@ -4,12 +4,15 @@
 #include <cstdio>
 #include <vector>
 #include <memory>
+#include <string>
 
 #include "util.hpp"
 #include "laspoint.hpp"
+#include "raster.hpp"
 
 using namespace geotools::las;
 using namespace geotools::util;
+using namespace geotools::raster;
 
 class LASReader {
 private:
@@ -103,8 +106,8 @@ private:
 public:
 
     LASReader(const std::string &file) :
-    m_f(nullptr),
-    m_file(file) {
+        m_f(nullptr),
+        m_file(file) {
         load();
     }
 
@@ -156,4 +159,74 @@ public:
 
 };
 
+class LASMultiReader {
+private:
+    std::vector<std::string> m_files;
+    std::vector<std::unique_ptr<LASReader> > m_readers;
+    LASReader *m_reader;
+    uint32_t m_idx;
+    std::unique_ptr<MemRaster<uint32_t> > m_finalizer;
+    double m_resolution;
+    Bounds m_bounds;
+    
+    void load(const std::vector<std::string> &files) {
+        m_bounds.collapse();
+        for(const std::string &file : files) {
+            std::unique_ptr<LASReader> r(new LASReader(file));
+            m_files.push_back(file);
+            m_readers.push_back(std::move(r));
+            m_bounds.extend(r->bounds());
+        }
+        buildFinalizer();
+    }
+
+    void buildFinalizer() {
+        if(m_finalizer.get())
+            delete m_finalizer.release();
+        m_finalizer.reset(new MemRaster<uint32_t>((int) g_abs(m_bounds.width() / m_resolution), 
+                (int) g_abs(m_bounds.height() / m_resolution), true));
+        m_finalizer->fill(0);
+        LASPoint pt;
+        bool final;
+        while(next(pt, &final)) {
+            int col = (int) ((pt.x - m_bounds.minx()) / m_resolution);
+            int row = (int) ((pt.y - m_bounds.miny()) / m_resolution);
+            m_finalizer->set(col, row, m_finalizer->get(col, row) + 1);
+        }
+        reset();
+    }
+    
+public:
+    LASMultiReader(const std::vector<std::string> &files, double resolution = 10.0) :
+        m_reader(nullptr),
+        m_idx(0),
+        m_resolution(resolution) {
+        load(files);
+    }
+        
+    void reset() {
+        m_idx = 0;
+        m_reader = nullptr;
+        for(const auto &r : m_readers)
+            r->reset();
+    }
+    
+    bool next(LASPoint &pt, bool *final) {
+        if(!m_reader || !m_reader->next(pt)) {
+            if(m_idx >= m_readers.size())
+                return false;
+            if(!m_reader)
+                m_reader = m_readers[m_idx++].get();
+            if(!m_reader->next(pt))
+                return false;
+        }
+        int col = (int) ((pt.x - m_bounds.minx()) / m_resolution);
+        int row = (int) ((pt.y - m_bounds.miny()) / m_resolution);
+        uint32_t count = m_finalizer->get(col, row);
+        *final = count == 1;
+        m_finalizer->set(col, row, count - 1);
+        return true;
+    }
+
+};
 #endif

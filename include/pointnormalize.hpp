@@ -15,7 +15,12 @@ namespace geotools {
             std::string terrainFile;
             std::string pointOutputDir;
             std::list<std::string> pointFiles;
-            unsigned int threads;
+            uint32_t threads;
+            bool dropNegative;
+            PointNormalizeConfig() :
+                dropNegative(true) {
+                
+            }
         };
 
         class PointNormalize {
